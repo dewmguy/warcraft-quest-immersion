@@ -14,6 +14,11 @@
     </header>
 
     <main>
+      {% if not status.authentication_enabled %}
+      <aside class="access-note">
+        Application login is off. Enable authentication on the reverse proxy before treating this workspace as private.
+      </aside>
+      {% endif %}
       <section class="status-grid" aria-label="Project status">
         <article class="status-card">
           <span class="label">Dialogue rows</span>

@@ -5,7 +5,7 @@ Warcraft Quest Immersion is a maintainable local workspace around the VoiceOver 
 - the in-game `AI_VoiceOver` addon;
 - the `AI_VoiceOverData_Vanilla` data module;
 - a Python CLI for dialogue extraction, lookup generation, and ElevenLabs audio generation;
-- an authenticated web control panel for CSV validation and lookup generation;
+- a web control panel for CSV validation and lookup generation, with optional Basic Auth;
 - a single-container default deployment, with MySQL available as an optional profile for full vMaNGOS data rebuilds.
 
 The addon began with the open-source [WoW VoiceOver project](https://github.com/mrthinger/wow-voiceover). See [LICENSE](LICENSE) for licensing details.
@@ -27,7 +27,7 @@ The normal CSV workflow uses only `warcraft-quest-immersion`. Do not publish the
    Copy-Item .env.example .env
    ```
 
-2. Replace both `CHANGE_ME` values in `.env` with long unique passwords. `ELEVENLABS_API_KEY` can remain blank until audio generation is needed.
+2. Replace the MySQL `CHANGE_ME` values in `.env` with a long unique password. `ELEVENLABS_API_KEY` can remain blank until audio generation is needed. Leave `WQI_ADMIN_PASSWORD` blank when Pangolin SSO protects the route, or set it to enable application-level Basic Auth.
 
 3. Build and start the single application container.
 
@@ -35,7 +35,7 @@ The normal CSV workflow uses only `warcraft-quest-immersion`. Do not publish the
    docker compose up -d --build warcraft-quest-immersion
    ```
 
-4. Open `http://localhost:8090` and sign in with `WQI_ADMIN_USER` and `WQI_ADMIN_PASSWORD`.
+4. Open `http://localhost:8090`. If `WQI_ADMIN_PASSWORD` is set, sign in with `WQI_ADMIN_USER` and that password.
 
 The first start copies a four-row sample dialogue file into `data/dialogue.csv`. That sample is sufficient to validate the complete CSV-to-Lua lookup workflow without MySQL or an ElevenLabs account.
 
@@ -54,6 +54,8 @@ The control panel supports two deliberately bounded operations:
 2. Generate and download the addon's Lua lookup tables.
 
 Database initialization and ElevenLabs audio generation remain CLI-only. This prevents a public web route from starting a long database import or a paid audio job.
+
+For a public hostname, enable Pangolin SSO or set `WQI_ADMIN_PASSWORD`. When both are disabled, the control panel is intentionally open.
 
 The expected CSV columns are:
 

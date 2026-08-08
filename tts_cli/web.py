@@ -65,10 +65,7 @@ def require_auth(
     expected_user = os.getenv("WQI_ADMIN_USER", "admin")
     expected_password = os.getenv("WQI_ADMIN_PASSWORD", "")
     if not expected_password or expected_password == "CHANGE_ME":
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="WQI_ADMIN_PASSWORD is not configured.",
-        )
+        return "reverse-proxy"
     valid = (
         credentials is not None
         and secrets.compare_digest(
@@ -145,6 +142,9 @@ def _status_payload() -> dict:
         "job": job_payload,
         "elevenlabs_configured": bool(
             settings.elevenlabs_api_key and settings.elevenlabs_api_key != "API_KEY_HERE"
+        ),
+        "authentication_enabled": bool(
+            os.getenv("WQI_ADMIN_PASSWORD") and os.getenv("WQI_ADMIN_PASSWORD") != "CHANGE_ME"
         ),
     }
 

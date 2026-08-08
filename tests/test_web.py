@@ -11,6 +11,15 @@ def test_health_is_public():
     assert response.json() == {"status": "ok"}
 
 
+def test_dashboard_is_open_when_authentication_is_delegated(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Application login is off" in response.text
+
+
 def test_dashboard_requires_authentication(monkeypatch):
     monkeypatch.setenv("WQI_ADMIN_PASSWORD", "test-password")
     with TestClient(web.app) as client:
