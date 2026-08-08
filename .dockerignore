@@ -9,3 +9,7 @@ data
 AI_VoiceOverData_Vanilla/generated
 RELEASE
 *.pyc
+imports/source-archives
+imports/staging
+voice_profiles/source-library/clips
+voice_profiles/generated-audio

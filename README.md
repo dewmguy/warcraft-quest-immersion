@@ -10,6 +10,67 @@ Warcraft Quest Immersion is a maintainable local workspace around the VoiceOver 
 
 The addon began with the open-source [WoW VoiceOver project](https://github.com/mrthinger/wow-voiceover). See [LICENSE](LICENSE) for licensing details.
 
+Development follows the explicitly approved gates in
+[`docs/PHASES.md`](docs/PHASES.md). Work does not advance to the next production
+phase until the current phase has been reviewed and approved.
+
+The owner's noncommercial, transformative-use position and the project's
+provenance requirements are recorded in
+[`docs/CONTENT-POLICY.md`](docs/CONTENT-POLICY.md).
+
+## Legacy audio and Git policy
+
+Imported and newly generated dialogue audio is not stored in Git. Git contains
+the application, addon source, provenance manifests, lookup metadata,
+pronunciation dictionary, tests, and deployment tooling. Audio remains in
+ignored persistent storage and is reattached by a verified import step.
+
+User-supplied archives belong in `imports/source-archives/`. The archive files
+are ignored; their names, sizes, SHA-256 hashes, and inventory facts are tracked
+in `imports/source-archives/manifest.json`.
+
+Verify, inventory, import, and validate a supplied legacy pack:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\analyze_legacy_pack.py --verify-crc
+.\.venv\Scripts\python.exe scripts\import_legacy_pack.py --verify-only
+.\.venv\Scripts\python.exe scripts\import_legacy_pack.py
+.\.venv\Scripts\python.exe scripts\validate_imported_audio.py
+```
+
+The default local import target is
+`data/imported/mrthinger-vanilla-v1.0.0`, which is available inside the
+application container through the existing `/app/data` volume.
+
+## Pronunciation dictionary
+
+The owner-reviewed source is `pronunciation/warcraft-en-US.csv`. Build the
+ElevenLabs IPA and alias dictionaries with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_pronunciation_dictionary.py
+```
+
+All retained entries passed the first owner review. The generated JSON still
+separates phoneme and alias forms so the correct form can be selected for the
+chosen ElevenLabs model.
+
+## Voice baseline registry
+
+Phase 2 artifacts live in `voice_profiles/`. The registry contains 46 complete
+legacy race/gender profiles, five controlled delivery presets, locked comparison
+scripts, and a 230-row placeholder preview matrix. Rebuild and validate the
+generated CSV and manifest artifacts with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_baseline_voice_profiles.py
+```
+
+Open `/voices` in the web application to review the profiles. This page is
+read-only and cannot make ElevenLabs calls. Reference clips belong under
+`voice_profiles/source-library/clips/` and generated audio under
+`voice_profiles/generated-audio/`; both are excluded from Git.
+
 ## Container layout
 
 | Container | Purpose | Published port | Required |
@@ -48,10 +109,12 @@ Invoke-RestMethod http://localhost:8090/health
 
 ## Web workflow
 
-The control panel supports two deliberately bounded operations:
+The control panel supports two deliberately bounded data operations and one
+read-only voice-review workspace:
 
 1. Upload and validate a dialogue CSV.
 2. Generate and download the addon's Lua lookup tables.
+3. Review Phase 2 race/gender baselines, delivery presets, and preview status.
 
 Database initialization and ElevenLabs audio generation remain CLI-only. This prevents a public web route from starting a long database import or a paid audio job.
 

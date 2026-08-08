@@ -17,3 +17,8 @@ data/*
 .DS_Store
 AI_VoiceOver/AI_VoiceOver.toc
 RELEASE
+imports/staging/
+imports/source-archives/*.zip
+voice_profiles/source-library/clips/*
+!voice_profiles/source-library/clips/.gitkeep
+voice_profiles/generated-audio/

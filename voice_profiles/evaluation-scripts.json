@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "scripts": [
+    {
+      "id": "neutral",
+      "preset_id": "neutral",
+      "purpose": "Locked cross-profile identity comparison",
+      "text": "The quick brown fox jumps over the lazy dog. Beyond the old road, a traveler waits beside the quiet fire.",
+      "target_seconds": 9,
+      "review_for": [
+        "identity",
+        "clarity",
+        "pacing",
+        "naturalness"
+      ]
+    },
+    {
+      "id": "angry",
+      "preset_id": "angry",
+      "purpose": "Locked delivery comparison",
+      "text": "You were warned. Leave this place, and do not return.",
+      "target_seconds": 5,
+      "review_for": [
+        "controlled intensity",
+        "clarity",
+        "identity retention"
+      ]
+    },
+    {
+      "id": "sorrowful",
+      "preset_id": "sorrowful",
+      "purpose": "Locked delivery comparison",
+      "text": "We kept the lantern burning, but no one came home.",
+      "target_seconds": 5,
+      "review_for": [
+        "restraint",
+        "audibility",
+        "identity retention"
+      ]
+    },
+    {
+      "id": "joyful",
+      "preset_id": "joyful",
+      "purpose": "Locked delivery comparison",
+      "text": "You found it! Tonight, every light in the village will shine.",
+      "target_seconds": 5,
+      "review_for": [
+        "warmth",
+        "energy",
+        "identity retention"
+      ]
+    },
+    {
+      "id": "proclaiming",
+      "preset_id": "proclaiming",
+      "purpose": "Locked delivery comparison",
+      "text": "Stand together! At dawn, we reclaim the pass.",
+      "target_seconds": 5,
+      "review_for": [
+        "projection",
+        "authority",
+        "identity retention"
+      ]
+    }
+  ]
+}

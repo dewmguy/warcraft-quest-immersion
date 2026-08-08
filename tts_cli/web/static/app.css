@@ -59,6 +59,9 @@ h1 { margin: 10px 0 12px; max-width: 800px; font-size: clamp(2.5rem, 7vw, 5.2rem
 h2 { margin: 6px 0 0; font-size: clamp(1.45rem, 3vw, 2rem); }
 p { color: var(--muted); line-height: 1.65; }
 .hero p { max-width: 650px; font-size: 1.08rem; }
+.page-nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.page-nav a { border: 1px solid var(--panel-border); padding: 10px 14px; color: var(--muted); text-decoration: none; background: rgba(255,255,255,.025); }
+.page-nav a:hover, .page-nav a.active { color: var(--gold-bright); border-color: var(--gold); }
 
 .status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .status-card, .workspace, .note {
@@ -96,10 +99,42 @@ button:hover, .secondary:hover { filter: brightness(1.08); }
 .job-failed { border-color: var(--danger); color: var(--danger); }
 .note { margin: 18px 0 70px; padding: 24px 28px; border-left: 3px solid var(--ember); }
 .note p { margin-bottom: 0; }
+.safe-state { border-color: rgba(115, 187, 136, .5); color: var(--success); background: rgba(115, 187, 136, .08); }
+.voice-hero h1 { max-width: 920px; }
+.voice-summary { margin-bottom: 18px; }
+.delivery-workspace { margin-top: 0; }
+.preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
+.preset-card, .profile-card { border: 1px solid rgba(224, 181, 90, .18); padding: 20px; background: rgba(255,255,255,.02); }
+.preset-card.preset-primary { grid-column: 1 / -1; border-color: rgba(115, 187, 136, .42); background: rgba(115, 187, 136, .055); }
+.preset-title, .profile-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.preset-title { flex-direction: row-reverse; }
+.preset-title h3, .profile-card h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.25rem; }
+.preset-card blockquote { margin: 18px 0; border-left: 2px solid var(--gold); padding-left: 14px; color: var(--ink); line-height: 1.55; }
+dl { margin: 18px 0 0; }
+dl div + div { margin-top: 12px; }
+dt { color: var(--gold); font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+dd { margin: 4px 0 0; color: var(--muted); line-height: 1.5; }
+.status-pill { display: inline-flex; flex: none; border: 1px solid currentColor; padding: 5px 8px; font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.status-draft { color: var(--gold); }
+.status-observed { color: var(--success); }
+.status-fallback { color: #d8a36a; }
+.status-system { color: #91b8de; }
+.profile-controls { display: grid; grid-template-columns: minmax(220px, 2fr) 1fr 1fr; gap: 12px; margin-top: 24px; }
+.profile-controls label { display: flex; flex-direction: column; gap: 8px; color: var(--muted); font-size: .78rem; }
+.profile-controls input, .profile-controls select { width: 100%; border: 1px solid var(--panel-border); border-radius: 0; padding: 12px; color: var(--ink); background: #17151a; font: inherit; }
+.result-count { margin: 18px 0 10px; font-size: .82rem; }
+.profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.profile-card[hidden] { display: none; }
+.profile-id { display: block; margin-bottom: 5px; color: var(--muted); font: 700 .7rem ui-monospace, SFMono-Regular, Consolas, monospace; }
+.profile-card > p { min-height: 3.2em; }
+.profile-card footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; border-top: 1px solid rgba(224, 181, 90, .12); padding-top: 14px; color: var(--muted); font-size: .76rem; }
+.empty-state { border: 1px dashed var(--panel-border); padding: 28px; color: var(--muted); text-align: center; }
+.phase-gate { border-left-color: var(--gold); }
 
 @media (max-width: 820px) {
   .status-grid { grid-template-columns: repeat(2, 1fr); }
   .section-heading { align-items: start; flex-direction: column; gap: 8px; }
+  .profile-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 540px) {
@@ -107,4 +142,7 @@ button:hover, .secondary:hover { filter: brightness(1.08); }
   .status-grid { grid-template-columns: 1fr; }
   form, .actions { align-items: stretch; flex-direction: column; }
   .workspace { padding: 22px; }
+  .preset-grid, .profile-controls { grid-template-columns: 1fr; }
+  .preset-card.preset-primary { grid-column: auto; }
+  .profile-card-header, .profile-card footer { align-items: flex-start; flex-direction: column; }
 }

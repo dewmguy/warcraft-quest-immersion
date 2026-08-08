@@ -24,6 +24,7 @@ from tts_cli.data_sources import DataSourceError, load_dialogue_csv
 from tts_cli.paths import OUTPUT_DIR, PROJECT_ROOT, SAMPLE_DATA_PATH
 from tts_cli.sql_queries import make_connection
 from tts_cli.tts_utils import TTSProcessor
+from tts_cli.voice_profiles import VoiceProfileError, load_phase2_review
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 DATA_DIR = Path(os.getenv("WQI_DATA_DIR", PROJECT_ROOT / "data")).resolve()
@@ -163,9 +164,30 @@ def dashboard(request: Request, _: Annotated[str, Depends(require_auth)]):
     )
 
 
+@app.get("/voices", response_class=HTMLResponse)
+def voice_profiles(request: Request, _: Annotated[str, Depends(require_auth)]):
+    try:
+        review = load_phase2_review()
+    except VoiceProfileError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return templates.TemplateResponse(
+        request=request,
+        name="voices.html",
+        context={"review": review},
+    )
+
+
 @app.get("/api/status")
 def api_status(_: Annotated[str, Depends(require_auth)]) -> dict:
     return _status_payload()
+
+
+@app.get("/api/phase2")
+def api_phase2(_: Annotated[str, Depends(require_auth)]) -> dict:
+    try:
+        return load_phase2_review()
+    except VoiceProfileError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @app.post("/api/data")

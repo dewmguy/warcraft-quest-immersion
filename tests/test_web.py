@@ -20,6 +20,20 @@ def test_dashboard_is_open_when_authentication_is_delegated(monkeypatch):
     assert "Application login is off" in response.text
 
 
+def test_voice_review_is_read_only_and_complete(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        page = client.get("/voices")
+        payload = client.get("/api/phase2")
+
+    assert page.status_code == 200
+    assert "All 230 planned previews remain ungenerated" in page.text
+    assert "No source voice · no audio" in page.text
+    assert payload.status_code == 200
+    assert payload.json()["manifest"]["profile_count"] == 46
+    assert payload.json()["preview_states"] == {"ungenerated": 230}
+
+
 def test_dashboard_requires_authentication(monkeypatch):
     monkeypatch.setenv("WQI_ADMIN_PASSWORD", "test-password")
     with TestClient(web.app) as client:

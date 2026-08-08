@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "scope": "Legacy VoiceOver clients: Vanilla 1.12.1, TBC 2.4.3, and WotLK 3.3.5",
+  "archetypes": [
+    {
+      "race_id": -1,
+      "slug": "narrator",
+      "name": "Narrator",
+      "identity": "Clear, measured, and unobtrusive; supports the text without becoming a character.",
+      "accent_or_cadence": "Neutral English with careful Warcraft-name pronunciation.",
+      "timbre": "Natural and balanced, with minimal theatrical color.",
+      "pacing": "Measured and consistent.",
+      "guardrail": "Do not imitate a trailer announcer or add supernatural effects."
+    },
+    {
+      "race_id": 1,
+      "slug": "human",
+      "name": "Human",
+      "identity": "Grounded common speech that can support villagers, soldiers, nobles, and scholars.",
+      "accent_or_cadence": "Clear common English; social class belongs in an NPC-specific fork.",
+      "timbre": "Natural, approachable, and adaptable.",
+      "pacing": "Conversational and steady.",
+      "guardrail": "Avoid making every human aristocratic or uniformly heroic."
+    },
+    {
+      "race_id": 2,
+      "slug": "orc",
+      "name": "Orc",
+      "identity": "Direct, physical, and forceful, with a strong chest-centered presence.",
+      "accent_or_cadence": "Compact phrases and firm stresses; roughness comes from texture, not broken grammar.",
+      "timbre": "Low and textured while remaining intelligible.",
+      "pacing": "Deliberate with decisive endings.",
+      "guardrail": "Do not turn every line into a shout or a caricature of low intelligence."
+    },
+    {
+      "race_id": 3,
+      "slug": "dwarf",
+      "name": "Dwarf",
+      "identity": "Warm, sturdy, sociable, and capable of both humor and solemn clan pride.",
+      "accent_or_cadence": "Scottish-influenced Warcraft cadence with clear consonants and a rolling rhythm.",
+      "timbre": "Compact, warm, and slightly weathered.",
+      "pacing": "Lively but grounded.",
+      "guardrail": "Use a light influence rather than an exaggerated real-world impersonation."
+    },
+    {
+      "race_id": 4,
+      "slug": "nightelf",
+      "name": "Night Elf",
+      "identity": "Ancient, self-possessed, observant, and quietly resonant.",
+      "accent_or_cadence": "Lyrical English with elongated thought groups and restrained emphasis.",
+      "timbre": "Smooth, resonant, and composed.",
+      "pacing": "Measured with intentional pauses.",
+      "guardrail": "Avoid breathy mysticism that obscures ordinary dialogue."
+    },
+    {
+      "race_id": 5,
+      "slug": "scourge",
+      "name": "Undead / Scourge",
+      "identity": "Worn, dry, and restrained, retaining the person beneath undeath.",
+      "accent_or_cadence": "Mostly natural speech with slightly clipped breath groups.",
+      "timbre": "Dry or lightly rasped, never dependent on post-processing.",
+      "pacing": "Controlled and a little spare.",
+      "guardrail": "Keep words intelligible; do not make every speaker monstrous or villainous."
+    },
+    {
+      "race_id": 6,
+      "slug": "tauren",
+      "name": "Tauren",
+      "identity": "Patient, grounded, communal, and capable of ceremonial weight.",
+      "accent_or_cadence": "Broad, unhurried phrasing with gentle downward resolutions.",
+      "timbre": "Deep, warm, and open.",
+      "pacing": "Slow to moderate without dragging.",
+      "guardrail": "Do not confuse calm delivery with dullness or flatten emotional range."
+    },
+    {
+      "race_id": 7,
+      "slug": "gnome",
+      "name": "Gnome",
+      "identity": "Bright, articulate, curious, and mentally quick.",
+      "accent_or_cadence": "Precise diction with energetic phrase changes.",
+      "timbre": "Light and focused rather than childlike.",
+      "pacing": "Quick but fully intelligible.",
+      "guardrail": "Avoid squeaky novelty voices and constant manic energy."
+    },
+    {
+      "race_id": 8,
+      "slug": "troll",
+      "name": "Troll",
+      "identity": "Relaxed, rhythmic, wry, and dangerous when the text calls for it.",
+      "accent_or_cadence": "Jamaican-influenced Warcraft cadence with musical stress and relaxed timing.",
+      "timbre": "Flexible, textured, and conversational.",
+      "pacing": "Easy rhythmic flow with clear key words.",
+      "guardrail": "Keep the influence respectful and light; avoid parody or forced slang."
+    },
+    {
+      "race_id": 9,
+      "slug": "goblin",
+      "name": "Goblin",
+      "identity": "Streetwise, opportunistic, inventive, and verbally agile.",
+      "accent_or_cadence": "Fast mercantile patter with sharp pivots and emphatic deal-making words.",
+      "timbre": "Nasal-bright and compact without becoming shrill.",
+      "pacing": "Fast, with intentional rests around the punchline or price.",
+      "guardrail": "Do not make every goblin identical, frantic, or impossible to understand."
+    },
+    {
+      "race_id": 10,
+      "slug": "bloodelf",
+      "name": "Blood Elf",
+      "identity": "Refined, controlled, precise, and lightly self-assured.",
+      "accent_or_cadence": "Polished English with clean consonants and elegant phrase shaping.",
+      "timbre": "Smooth and focused with restrained brightness.",
+      "pacing": "Deliberate, never hurried.",
+      "guardrail": "Avoid making refinement synonymous with whispering or constant contempt."
+    },
+    {
+      "race_id": 11,
+      "slug": "draenei",
+      "name": "Draenei",
+      "identity": "Deliberate, warm, formal, and shaped by long memory.",
+      "accent_or_cadence": "Light Slavic or Eastern-European-influenced Warcraft cadence.",
+      "timbre": "Rounded and resonant.",
+      "pacing": "Measured, with careful emphasis.",
+      "guardrail": "Prefer consistency and clarity over a heavy real-world accent."
+    },
+    {
+      "race_id": 12,
+      "slug": "felorc",
+      "name": "Fel Orc",
+      "identity": "An Orc baseline made volatile, harsher, and more openly aggressive.",
+      "accent_or_cadence": "Orc cadence with more abrupt stress and shorter breath groups.",
+      "timbre": "Rough and pressed while retaining words.",
+      "pacing": "Tense and forward-driving.",
+      "guardrail": "Do not use distortion as a substitute for performance."
+    },
+    {
+      "race_id": 13,
+      "slug": "naga",
+      "name": "Naga",
+      "identity": "Fluid, imperious, calculating, and ancient.",
+      "accent_or_cadence": "Smooth linked phrases with lightly emphasized sibilants.",
+      "timbre": "Cool and sleek, with controlled edge.",
+      "pacing": "Measured and deliberate.",
+      "guardrail": "Do not lengthen every s sound or sacrifice intelligibility for a hiss."
+    },
+    {
+      "race_id": 14,
+      "slug": "broken",
+      "name": "Broken",
+      "identity": "A Draenei-rooted voice made weathered, practical, and more earthbound.",
+      "accent_or_cadence": "Draenei cadence with less formality and shorter phrases.",
+      "timbre": "Gravelly, worn, and humane.",
+      "pacing": "Steady and direct.",
+      "guardrail": "Do not equate physical corruption with low intelligence."
+    },
+    {
+      "race_id": 15,
+      "slug": "skeleton",
+      "name": "Skeleton",
+      "identity": "Dry, spare, and hollow-toned while still reading as a person speaking.",
+      "accent_or_cadence": "Natural diction with economical breath and crisp word endings.",
+      "timbre": "Papery and dry without baked-in effects.",
+      "pacing": "Moderate and restrained.",
+      "guardrail": "Keep the clean source reusable; environmental effects belong downstream."
+    },
+    {
+      "race_id": 16,
+      "slug": "vrykul",
+      "name": "Vrykul",
+      "identity": "Large, formal, proud, and saga-minded.",
+      "accent_or_cadence": "Norse or Scandinavian-influenced Warcraft cadence with broad stresses.",
+      "timbre": "Resonant, weighty, and clear.",
+      "pacing": "Deliberate and declarative.",
+      "guardrail": "Avoid constant bellowing and exaggerated movie-Viking parody."
+    },
+    {
+      "race_id": 17,
+      "slug": "tuskarr",
+      "name": "Tuskarr",
+      "identity": "Warm, communal, patient, and quietly humorous.",
+      "accent_or_cadence": "Rounded phrases with an easy storytelling flow.",
+      "timbre": "Soft-edged, full, and friendly.",
+      "pacing": "Unhurried and conversational.",
+      "guardrail": "Do not turn warmth into a comic mascot voice."
+    },
+    {
+      "race_id": 18,
+      "slug": "foresttroll",
+      "name": "Forest Troll",
+      "identity": "A Troll baseline made lower, rugged, territorial, and physically imposing.",
+      "accent_or_cadence": "Troll rhythmic foundation with firmer stresses and less languor.",
+      "timbre": "Low, rough, and dense.",
+      "pacing": "Moderate and forceful.",
+      "guardrail": "Preserve rhythmic identity without making every line threatening."
+    },
+    {
+      "race_id": 19,
+      "slug": "taunka",
+      "name": "Taunka",
+      "identity": "A Tauren baseline made more weathered, pragmatic, and direct.",
+      "accent_or_cadence": "Broad Tauren phrasing with stronger word attacks.",
+      "timbre": "Deep, wind-worn, and firm.",
+      "pacing": "Measured but more compact than Tauren.",
+      "guardrail": "Keep cultural distinction in delivery, not in reduced emotional range."
+    },
+    {
+      "race_id": 20,
+      "slug": "northrendskeleton",
+      "name": "Northrend Skeleton",
+      "identity": "A Skeleton baseline made colder, more severe, and more austere.",
+      "accent_or_cadence": "Crisp, spare phrasing with colder word endings.",
+      "timbre": "Dry, hollow, and restrained.",
+      "pacing": "Measured and exact.",
+      "guardrail": "Do not bake echo, reverb, or distortion into the reusable voice."
+    },
+    {
+      "race_id": 21,
+      "slug": "icetroll",
+      "name": "Ice Troll",
+      "identity": "A Troll baseline made harsher, colder, and more clipped.",
+      "accent_or_cadence": "Troll rhythmic foundation with shorter vowels and sharper attacks.",
+      "timbre": "Rough, lean, and cutting.",
+      "pacing": "Moderate with tense pauses.",
+      "guardrail": "Retain the Troll foundation; coldness should not erase personality."
+    },
+    {
+      "race_id": 22,
+      "slug": "worgen",
+      "name": "Worgen",
+      "identity": "A Human-rooted voice with controlled feral pressure and restrained growl.",
+      "accent_or_cadence": "Grounded English with firmer consonants and guarded breath.",
+      "timbre": "Human and intelligible with a dark, rough edge.",
+      "pacing": "Controlled, with tension allowed between phrases.",
+      "guardrail": "Do not let growling obscure the text or dominate calm interactions."
+    }
+  ]
+}

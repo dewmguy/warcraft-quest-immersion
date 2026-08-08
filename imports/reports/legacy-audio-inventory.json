@@ -1,0 +1,52 @@
+{
+  "archive": {
+    "crc_verified": true,
+    "entries": 9895,
+    "extension_counts": {
+      ".blp": 21,
+      ".lua": 169,
+      ".mp3": 9555,
+      ".textile": 4,
+      ".toc": 9,
+      ".wav": 1,
+      ".xml": 56
+    },
+    "file": "AI-VoiceOver-1.4.1-plus-VanillaData-0.1-WoW-3.3.5a-Load-Outdated.zip",
+    "files": 9815,
+    "sha256": "f02a1133e1e1e2ac69fb5779416d85674cb7b00544323207b50ac5565cbaf5e3",
+    "size_bytes": 1145558275,
+    "top_level_file_counts": {
+      "AI_VoiceOver": 252,
+      "AI_VoiceOverData_Vanilla": 9563
+    },
+    "uncompressed_bytes": 1169191486,
+    "unsafe_path_count": 0
+  },
+  "audio": {
+    "audio_missing_duration": 0,
+    "duration_entries": 9555,
+    "duration_without_audio": 0,
+    "gossip_files": 2997,
+    "maximum_duration_seconds": 40.124,
+    "median_duration_seconds": 13.270125,
+    "minimum_duration_seconds": 0.5485,
+    "mp3_files": 9555,
+    "other_files": 0,
+    "p95_duration_seconds": 31.4775,
+    "quest_files": 6558,
+    "quest_source_counts": {
+      "accept": 2961,
+      "complete": 3551,
+      "progress": 46
+    },
+    "total_duration_hours": 40.397059,
+    "unique_quest_ids": 3685,
+    "unmatched_quest_filenames": []
+  },
+  "lookups": {
+    "gossip_text_mappings": 5450,
+    "npc_name_records": 2095,
+    "quest_lookup_key_occurrences": 7553
+  },
+  "schema_version": 1
+}

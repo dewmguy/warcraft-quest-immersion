@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "approval_order": [
+    "neutral",
+    "angry",
+    "sorrowful",
+    "joyful",
+    "proclaiming"
+  ],
+  "presets": [
+    {
+      "id": "neutral",
+      "name": "Neutral",
+      "category": "baseline",
+      "intent": "Natural quest conversation with no emotion added beyond the text.",
+      "direction": "Speak naturally and clearly. Preserve the profile's identity without exaggeration.",
+      "guardrail": "Neutral does not mean flat, bored, or emotionally absent."
+    },
+    {
+      "id": "angry",
+      "name": "Angry",
+      "category": "emotion",
+      "intent": "Controlled anger with urgency, pressure, or confrontation appropriate to the words.",
+      "direction": "Increase firmness, pace, and stressed consonants before increasing loudness.",
+      "guardrail": "Do not default to shouting, distortion, or loss of diction."
+    },
+    {
+      "id": "sorrowful",
+      "name": "Sorrowful",
+      "category": "emotion",
+      "intent": "Grief, regret, or exhaustion expressed with restraint and specificity.",
+      "direction": "Allow quieter energy, longer thought pauses, and softened attacks while keeping the line audible.",
+      "guardrail": "Do not use melodramatic sobbing or make every sorrowful line whispery."
+    },
+    {
+      "id": "joyful",
+      "name": "Joyful",
+      "category": "emotion",
+      "intent": "Warmth, relief, delight, or celebration suited to the text.",
+      "direction": "Add lift, forward energy, and brighter phrase endings without speeding past words.",
+      "guardrail": "Do not force laughter, childishness, or constant maximum excitement."
+    },
+    {
+      "id": "proclaiming",
+      "name": "Proclaiming",
+      "category": "delivery",
+      "intent": "A public declaration meant to carry to a group, battlefield, hall, or ceremony.",
+      "direction": "Use projected breath, broad stresses, and deliberate phrase endings as if addressing listeners at distance.",
+      "guardrail": "Projection is not the same as anger or indiscriminate yelling."
+    }
+  ]
+}

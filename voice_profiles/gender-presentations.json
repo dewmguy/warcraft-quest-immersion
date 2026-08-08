@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "principle": "Gender presentation adjusts the center of pitch and resonance without changing intelligence, authority, age, emotional range, or racial identity.",
+  "presentations": [
+    {
+      "gender_id": 0,
+      "slug": "male",
+      "name": "Male",
+      "guidance": "Use a generally lower pitch center and fuller lower resonance while preserving natural variation.",
+      "guardrail": "Do not force an unnaturally deep voice or treat depth as authority."
+    },
+    {
+      "gender_id": 1,
+      "slug": "female",
+      "name": "Female",
+      "guidance": "Use a generally higher pitch center and lighter resonance while preserving weight and natural variation.",
+      "guardrail": "Do not make the voice childlike, breathy by default, or less authoritative."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "phase": 2,
+  "phase_name": "Placeholder Preview",
+  "scope": "Legacy VoiceOver clients: Vanilla 1.12.1, TBC 2.4.3, and WotLK 3.3.5",
+  "profile_count": 46,
+  "preview_count": 230,
+  "race_count": 23,
+  "gender_presentation_count": 2,
+  "delivery_preset_count": 5,
+  "observed_profile_count": 33,
+  "planned_fallback_count": 11,
+  "system_profile_count": 2,
+  "generation_state": "No preview audio has been generated and no paid API call is authorized.",
+  "source_hashes": {
+    "assets/sql/exported/CreatureDisplayInfoExtra.sql": "69d1d2d37c63dce3c0f4fd7ae054f9dd2c727b4ba62abe1d0857fff8d95b15d4",
+    "assets/sql/exported/CreatureDisplayInfo.sql": "48086305bbc84d0af8928c37cb74bcdc95229918b91f00e1c88b74563427c51a"
+  },
+  "registry_hashes": {
+    "race-archetypes.json": "a565751f9b7f59648fdb8a5e978f804bd0927712ad4b3050d0f4e271434ffea3",
+    "gender-presentations.json": "f217578f0956e02f957a6c0536daf09e26a6be63d7092bf1a09301f31153ecc8",
+    "delivery-presets.json": "478424b87e8bf0358e0745b48c55e3bb35ea6e8d49ad7bf93fd72c19a08c449c",
+    "evaluation-scripts.json": "18d99c290af22aa296ea4a795efcd14f168b203ffc65fe96a5c9dbfe117eb54d"
+  }
+}

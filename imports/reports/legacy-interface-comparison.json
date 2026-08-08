@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "archive": "AI-VoiceOver-1.4.1-WoW-3.3.5a.zip",
+  "archive_sha256": "1745adaa3174d748f5b1952779acd9281c3a986216eae3b5451d8dc069d103d4",
+  "compared_to_commit": "dcceabdc68eafecc48520c68320d9ace4756336b",
+  "archive_files": 252,
+  "current_files": 251,
+  "identical_files": 234,
+  "changed_files": [
+    "1.12/Libs/AceGUI-3.0/widgets/AceGUIContainer-TreeGroup.lua",
+    "AI_VoiceOver_2.4.3.toc",
+    "AI_VoiceOver_3.3.5.toc",
+    "AI_VoiceOver_Mainline.toc",
+    "AI_VoiceOver_TBC.toc",
+    "AI_VoiceOver_Vanilla.toc",
+    "AI_VoiceOver_Wrath.toc",
+    "Compatibility.lua",
+    "Environment.lua",
+    "Libs/AceConfig-3.0/AceConfigDialog-3.0/AceConfigDialog-3.0.lua",
+    "Libs/AceConfig-3.0/AceConfigRegistry-3.0/AceConfigRegistry-3.0.lua",
+    "Libs/AceDB-3.0/AceDB-3.0.lua",
+    "Libs/AceDBOptions-3.0/AceDBOptions-3.0.lua",
+    "Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
+    "Options.lua",
+    "SoundQueueUI.lua",
+    "Utils.lua"
+  ],
+  "missing_from_current": [
+    "AI_VoiceOver.toc"
+  ],
+  "current_only": [],
+  "conclusion": "Do not overwrite the maintained interface tree with the supplied 1.4.1 archive. Preserve the archive for comparison and import only its data module."
+}

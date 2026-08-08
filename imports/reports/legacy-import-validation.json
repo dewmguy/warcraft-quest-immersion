@@ -1,0 +1,13 @@
+{
+  "decode_error_count": 0,
+  "decode_errors": [],
+  "duration_comparisons": 9555,
+  "import_root": "data/imported/mrthinger-vanilla-v1.0.0/AI_VoiceOverData_Vanilla",
+  "length_without_audio_count": 0,
+  "maximum_duration_delta_seconds": 0.0,
+  "mean_duration_delta_seconds": 0.0,
+  "missing_length_lookup_count": 0,
+  "missing_length_lookups": [],
+  "mp3_files": 9555,
+  "schema_version": 1
+}

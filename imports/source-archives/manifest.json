@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "artifacts": [
+    {
+      "file": "AI-VoiceOver-1.4.1-WoW-3.3.5a.zip",
+      "role": "interface-only",
+      "size_bytes": 719925,
+      "sha256": "1745adaa3174d748f5b1952779acd9281c3a986216eae3b5451d8dc069d103d4",
+      "archive_entries": 327,
+      "archive_files": 252,
+      "uncompressed_bytes": 2626440,
+      "unsafe_paths": 0,
+      "top_level_directories": ["AI_VoiceOver"]
+    },
+    {
+      "file": "AI-VoiceOver-1.4.1-plus-VanillaData-0.1-WoW-3.3.5a-Load-Outdated.zip",
+      "role": "interface-and-vanilla-audio",
+      "size_bytes": 1145558275,
+      "sha256": "f02a1133e1e1e2ac69fb5779416d85674cb7b00544323207b50ac5565cbaf5e3",
+      "archive_entries": 9895,
+      "archive_files": 9815,
+      "uncompressed_bytes": 1169191486,
+      "unsafe_paths": 0,
+      "top_level_directories": [
+        "AI_VoiceOver",
+        "AI_VoiceOverData_Vanilla"
+      ],
+      "mp3_files": 9555
+    }
+  ]
+}
