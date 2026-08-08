@@ -13,7 +13,7 @@ from threading import Lock
 from typing import Annotated
 
 import pymysql
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile, status
+from fastapi import Body, Depends, FastAPI, File, Header, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
@@ -25,10 +25,12 @@ from tts_cli.paths import OUTPUT_DIR, PROJECT_ROOT, SAMPLE_DATA_PATH
 from tts_cli.sql_queries import make_connection
 from tts_cli.tts_utils import TTSProcessor
 from tts_cli.voice_profiles import VoiceProfileError, load_phase2_review
+from tts_cli.workflow_poc import WorkflowError, WorkflowPoc
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 DATA_DIR = Path(os.getenv("WQI_DATA_DIR", PROJECT_ROOT / "data")).resolve()
 DIALOGUE_PATH = DATA_DIR / "dialogue.csv"
+DWARF_POC_PATH = DATA_DIR / "workflow" / "dwarf-poc.sqlite3"
 MAX_UPLOAD_BYTES = int(os.getenv("WQI_MAX_UPLOAD_BYTES", str(1024 * 1024 * 1024)))
 
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wqi-generator")
@@ -42,6 +44,7 @@ class JobState:
 
 
 job = JobState()
+workflow_poc = WorkflowPoc(DWARF_POC_PATH)
 
 
 @asynccontextmanager
@@ -50,6 +53,7 @@ async def lifespan(_: FastAPI):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if not DIALOGUE_PATH.exists():
         shutil.copyfile(SAMPLE_DATA_PATH, DIALOGUE_PATH)
+    workflow_poc.initialize()
     yield
     executor.shutdown(wait=False, cancel_futures=True)
 
@@ -188,6 +192,104 @@ def api_phase2(_: Annotated[str, Depends(require_auth)]) -> dict:
         return load_phase2_review()
     except VoiceProfileError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+def _dwarf_poc_payload() -> dict:
+    try:
+        return workflow_poc.bundle(load_phase2_review())
+    except (VoiceProfileError, WorkflowError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.get("/poc/dwarves", response_class=HTMLResponse)
+def dwarf_poc(request: Request, _: Annotated[str, Depends(require_auth)]):
+    return templates.TemplateResponse(
+        request=request,
+        name="dwarf-poc.html",
+        context={"poc": _dwarf_poc_payload()},
+    )
+
+
+@app.get("/api/poc/dwarves")
+def api_dwarf_poc(_: Annotated[str, Depends(require_auth)]) -> dict:
+    return _dwarf_poc_payload()
+
+
+@app.patch("/api/poc/dwarves/{profile_id}/settings")
+def update_dwarf_settings(
+    profile_id: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        workflow_poc.save_settings(profile_id, payload)
+        return _dwarf_poc_payload()
+    except WorkflowError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.patch("/api/poc/dwarves/{profile_id}/demo-line")
+def update_dwarf_demo_line(
+    profile_id: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        workflow_poc.save_demo_line(profile_id, payload)
+        return _dwarf_poc_payload()
+    except WorkflowError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/poc/dwarves/{profile_id}/profile-stages/{stage_id}")
+def transition_dwarf_profile_stage(
+    profile_id: str,
+    stage_id: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        workflow_poc.transition(
+            entity_type="profile",
+            entity_id=profile_id,
+            stage_id=stage_id,
+            action=str(payload.get("action", "")),
+            note=str(payload.get("note", "")),
+        )
+        return _dwarf_poc_payload()
+    except WorkflowError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/poc/dwarves/{profile_id}/line-stages/{stage_id}")
+def transition_dwarf_line_stage(
+    profile_id: str,
+    stage_id: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    current = _dwarf_poc_payload()
+    profile = next(
+        (item for item in current["profiles"] if item["profile"]["profile_id"] == profile_id),
+        None,
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Unknown Dwarf proof-of-concept profile.")
+    try:
+        workflow_poc.transition(
+            entity_type="line",
+            entity_id=profile["demo_line"]["line_id"],
+            stage_id=stage_id,
+            action=str(payload.get("action", "")),
+            note=str(payload.get("note", "")),
+        )
+        return _dwarf_poc_payload()
+    except WorkflowError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post("/api/data")

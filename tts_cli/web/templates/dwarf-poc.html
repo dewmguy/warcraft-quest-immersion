@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dwarf workflow proof of concept · Warcraft Quest Immersion</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+  </head>
+  <body>
+    <header class="hero poc-hero">
+      <div class="eyebrow">Project Phase 2 · Voice Workbench</div>
+      <h1>Dwarf workflow proof of concept</h1>
+      <p>A functional model of the review experience. Settings and decisions persist; audio creation is deliberately absent.</p>
+      <nav class="page-nav" aria-label="Project workspaces">
+        <a href="/">Data workspace</a>
+        <a href="/voices">Voice baselines</a>
+        <a class="active" href="/poc/dwarves">Dwarf proof of concept</a>
+      </nav>
+    </header>
+
+    <main id="poc-root">
+      <aside class="access-note safe-state">
+        No-spend mode is active. Nothing on this page can call ElevenLabs, create a voice, or generate audio.
+      </aside>
+
+      <section class="terminology-strip">
+        <article>
+          <span class="label">Project phase</span>
+          <strong>2 · Voice Workbench</strong>
+          <p>The application milestone currently being built and reviewed.</p>
+        </article>
+        <div class="terminology-arrow" aria-hidden="true">≠</div>
+        <article>
+          <span class="label">Audio-production stage</span>
+          <strong>Per profile and per line</strong>
+          <p>Independent operational gates managed inside the finished application.</p>
+        </article>
+      </section>
+
+      <div class="profile-tabs" role="tablist" aria-label="Dwarf profiles">
+        {% for item in poc.profiles %}
+        <button
+          type="button"
+          role="tab"
+          data-profile-tab="{{ item.profile.profile_id }}"
+          aria-selected="{{ 'true' if loop.first else 'false' }}"
+        >
+          {{ item.profile.race_name }} · {{ item.profile.gender_name }}
+        </button>
+        {% endfor %}
+      </div>
+
+      {% for item in poc.profiles %}
+      <div class="poc-profile" id="{{ item.profile.profile_id }}" data-profile-panel="{{ item.profile.profile_id }}" {% if not loop.first %}hidden{% endif %}>
+        <section class="poc-summary" aria-label="Profile readiness">
+          <article><span class="label">Observed displays</span><strong data-field="observed-count">{{ item.profile.observed_display_count }}</strong></article>
+          <article><span class="label">Source strategy</span><strong data-field="strategy-name">{{ item.source_strategy_name }}</strong></article>
+          <article><span class="label">Planned characters</span><strong data-field="character-estimate">{{ item.character_estimate }}</strong></article>
+          <article><span class="label">Audio generated</span><strong>0</strong></article>
+        </section>
+
+        <section class="poc-layout">
+          <article class="workspace settings-workspace">
+            <div class="section-heading compact-heading">
+              <div><span class="step">Profile configuration</span><h2>Voice settings</h2></div>
+              <span class="status-pill status-draft">Simulation</span>
+            </div>
+            <div class="identity-summary">
+              <h3>{{ item.profile.race_name }} · {{ item.profile.gender_name }}</h3>
+              <p>{{ item.profile.identity }}</p>
+              <details>
+                <summary>Identity guidance</summary>
+                <dl>
+                  <div><dt>Cadence</dt><dd>{{ item.profile.accent_or_cadence }}</dd></div>
+                  <div><dt>Timbre</dt><dd>{{ item.profile.timbre }}</dd></div>
+                  <div><dt>Pacing</dt><dd>{{ item.profile.pacing }}</dd></div>
+                  <div><dt>Guardrails</dt><dd>{{ item.profile.guardrails }}</dd></div>
+                </dl>
+              </details>
+            </div>
+            <form class="settings-form" data-profile-id="{{ item.profile.profile_id }}">
+              <label>
+                <span>Source strategy</span>
+                <select name="source_strategy">
+                  {% for value, label in poc.source_strategies.items() %}
+                  <option value="{{ value }}" {% if value == item.settings.source_strategy %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                <span>Reference label</span>
+                <input name="reference_label" value="{{ item.settings.reference_label }}" placeholder="Describe the clip or existing voice to attach later">
+              </label>
+              <div class="split-fields">
+                <label><span>Target model</span><input value="Eleven v3" disabled></label>
+                <label>
+                  <span>Stability</span>
+                  <select name="stability_mode">
+                    {% for value in ['creative', 'natural', 'robust'] %}
+                    <option value="{{ value }}" {% if value == item.settings.stability_mode %}selected{% endif %}>{{ value | title }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+              </div>
+              <label>
+                <span>Locked neutral comparison text</span>
+                <textarea name="neutral_script" rows="4">{{ item.settings.neutral_script }}</textarea>
+              </label>
+              <fieldset>
+                <legend>Delivery presets carried forward</legend>
+                {% for preset in ['neutral', 'angry', 'sorrowful', 'joyful', 'proclaiming'] %}
+                <label class="check-field"><input type="checkbox" name="enabled_deliveries" value="{{ preset }}" {% if preset in item.settings.enabled_deliveries %}checked{% endif %} {% if preset == 'neutral' %}disabled{% endif %}><span>{{ preset | title }}</span></label>
+                {% endfor %}
+              </fieldset>
+              <label>
+                <span>Design and review notes</span>
+                <textarea name="design_notes" rows="4" placeholder="What should the eventual candidate preserve or avoid?">{{ item.settings.design_notes }}</textarea>
+              </label>
+              <button type="submit">Save profile settings</button>
+            </form>
+          </article>
+
+          <article class="workspace gate-workspace">
+            <div class="section-heading compact-heading">
+              <div><span class="step">Baseline-profile workflow</span><h2>Identity gates</h2></div>
+            </div>
+            <p class="workflow-explainer">These gates belong to this Dwarf baseline. They are not project phases.</p>
+            <ol class="stage-list" data-stage-list="profile">
+              {% for stage in item.profile_stages %}
+              <li class="stage-item stage-{{ stage.status }}" data-stage-id="{{ stage.id }}">
+                <span class="stage-number">{{ loop.index }}</span>
+                <div><strong>{{ stage.name }}</strong><p>{{ stage.description }}</p>{% if stage.note %}<small>{{ stage.note }}</small>{% endif %}</div>
+                <span class="stage-state">{{ stage.status | replace('_', ' ') }}</span>
+                <div class="stage-actions">
+                  {% if stage.status in ['current', 'needs_changes'] %}<button type="button" data-action="approve">Approve gate</button>{% endif %}
+                  {% if stage.status != 'not_started' %}<button class="secondary" type="button" data-action="request_changes">Needs changes</button>{% endif %}
+                  {% if stage.status == 'approved' %}<button class="secondary" type="button" data-action="reopen">Reopen</button>{% endif %}
+                </div>
+              </li>
+              {% endfor %}
+            </ol>
+          </article>
+        </section>
+
+        <section class="workspace line-simulator">
+          <div class="section-heading">
+            <div><span class="step">Per-line audio workflow</span><h2>Production-stage simulator</h2></div>
+            <p>This single demonstration line shows how a later quest or gossip record will move independently through production.</p>
+          </div>
+          <div class="line-editor-grid">
+            <div>
+              <label><span>Immutable original</span><textarea rows="4" disabled>{{ item.demo_line.original_text }}</textarea></label>
+            </div>
+            <form class="line-form" data-profile-id="{{ item.profile.profile_id }}">
+              <label><span>Editable processed suggestion</span><textarea name="processed_text" rows="4">{{ item.demo_line.processed_text }}</textarea></label>
+              <div class="split-fields">
+                <label><span>Delivery</span><select name="delivery_preset">{% for preset in ['neutral', 'angry', 'sorrowful', 'joyful', 'proclaiming'] %}<option value="{{ preset }}" {% if preset == item.demo_line.delivery_preset %}selected{% endif %}>{{ preset | title }}</option>{% endfor %}</select></label>
+                <label><span>Route</span><select name="route"><option value="baseline" {% if item.demo_line.route == 'baseline' %}selected{% endif %}>Baseline voice</option><option value="unique" {% if item.demo_line.route == 'unique' %}selected{% endif %}>Unique NPC fork</option></select></label>
+              </div>
+              <button type="submit">Save line decisions</button>
+            </form>
+          </div>
+          <ol class="stage-list line-stage-list" data-stage-list="line" data-line-id="{{ item.demo_line.line_id }}">
+            {% for stage in item.line_stages %}
+            <li class="stage-item stage-{{ stage.status }}" data-stage-id="{{ stage.id }}">
+              <span class="stage-number">{{ loop.index }}</span>
+              <div><strong>{{ stage.name }}</strong><p>{{ stage.description }}</p>{% if stage.note %}<small>{{ stage.note }}</small>{% endif %}</div>
+              <span class="stage-state">{{ stage.status | replace('_', ' ') }}</span>
+              <div class="stage-actions">
+                {% if stage.status in ['current', 'needs_changes'] %}<button type="button" data-action="approve">Approve stage</button>{% endif %}
+                {% if stage.status == 'current' and stage.id in ['short_unique', 'complete_unique'] %}<button class="secondary" type="button" data-action="skip_unique">Not required</button>{% endif %}
+                {% if stage.status != 'not_started' %}<button class="secondary" type="button" data-action="request_changes">Needs changes</button>{% endif %}
+                {% if stage.status in ['approved', 'not_required'] %}<button class="secondary" type="button" data-action="reopen">Reopen</button>{% endif %}
+              </div>
+            </li>
+            {% endfor %}
+          </ol>
+        </section>
+
+        <section class="note decision-history">
+          <h2>Decision history</h2>
+          <p>Every gate change remains visible even when a later decision resets downstream status.</p>
+          <ol data-history-list>
+            {% for event in item.history %}
+            <li><strong>{{ event.stage_id | replace('_', ' ') | title }}</strong><span>{{ event.action | replace('_', ' ') }} · {{ event.created_at[:19] | replace('T', ' ') }} UTC</span>{% if event.note %}<p>{{ event.note }}</p>{% endif %}</li>
+            {% else %}
+            <li class="history-empty">No decisions recorded yet.</li>
+            {% endfor %}
+          </ol>
+        </section>
+      </div>
+      {% endfor %}
+      <dialog id="decision-dialog">
+        <form method="dialog">
+          <span class="step">Workflow decision</span>
+          <h2 id="decision-title">Confirm decision</h2>
+          <p id="decision-description">This changes only the simulated workflow state.</p>
+          <label><span>Decision note</span><textarea id="decision-note" rows="4" placeholder="Optional reason, evidence, or requested adjustment"></textarea></label>
+          <div class="actions">
+            <button class="secondary" value="cancel">Cancel</button>
+            <button id="decision-confirm" value="confirm">Confirm</button>
+          </div>
+        </form>
+      </dialog>
+      <div id="poc-message" class="job" role="status">Ready. No audio or external API actions are available.</div>
+    </main>
+    <script src="{{ url_for('static', path='/dwarf-poc.js') }}"></script>
+  </body>
+</html>

@@ -206,7 +206,7 @@ def build() -> tuple[int, int]:
     manifest = {
         "schema_version": 1,
         "phase": 2,
-        "phase_name": "Placeholder Preview",
+        "phase_name": "Voice Workbench",
         "scope": race_payload["scope"],
         "profile_count": len(profiles),
         "preview_count": len(previews),

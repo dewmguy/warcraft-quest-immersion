@@ -8,7 +8,7 @@
   </head>
   <body>
     <header class="hero voice-hero">
-      <div class="eyebrow">Phase 2 · Placeholder Preview</div>
+      <div class="eyebrow">Project Phase 2 · Voice Workbench</div>
       <h1>Voice baseline review</h1>
       <p>Review the identity rules before a voice is selected or a paid preview is generated.</p>
       <nav class="page-nav" aria-label="Project workspaces">
@@ -21,6 +21,15 @@
       <aside class="access-note safe-state">
         No ElevenLabs request is available on this page. All {{ review.manifest.preview_count }} planned previews remain ungenerated.
       </aside>
+
+      <section class="poc-callout">
+        <div>
+          <span class="step">Interactive proof of concept</span>
+          <h2>Walk two Dwarf profiles through the real workflow</h2>
+          <p>Configure settings, advance gates, revise decisions, and simulate one line from import through production approval. Audio generation stays disabled.</p>
+        </div>
+        <a class="secondary" href="/poc/dwarves">Open Dwarf workbench</a>
+      </section>
 
       <section class="status-grid voice-summary" aria-label="Phase 2 summary">
         <article class="status-card">
@@ -136,7 +145,11 @@
             </dl>
             <footer>
               <span class="status-pill status-draft">Draft</span>
-              <span>No source voice · no audio</span>
+              {% if profile.profile_id in ['dwarf-male', 'dwarf-female'] %}
+                <a href="/poc/dwarves#{{ profile.profile_id }}">Open proof of concept</a>
+              {% else %}
+                <span>No source voice · no audio</span>
+              {% endif %}
             </footer>
           </article>
           {% endfor %}

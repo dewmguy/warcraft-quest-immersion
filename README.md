@@ -71,6 +71,12 @@ read-only and cannot make ElevenLabs calls. Reference clips belong under
 `voice_profiles/source-library/clips/` and generated audio under
 `voice_profiles/generated-audio/`; both are excluded from Git.
 
+The interactive proof of concept is available at `/poc/dwarves`. It deliberately
+limits the workflow to Dwarf Male and Dwarf Female and makes the distinction
+between project phases, baseline-profile gates, and per-line audio-production
+stages visible. It persists simulated settings and decisions beneath `data/`
+without creating audio or contacting ElevenLabs.
+
 ## Container layout
 
 | Container | Purpose | Published port | Required |
