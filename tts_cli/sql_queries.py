@@ -1,21 +1,25 @@
-import pymysql
 import pandas as pd
-from tts_cli.env_vars import MYSQL_HOST, MYSQL_PORT, MYSQL_PASSWORD, MYSQL_USER, MYSQL_DATABASE
+import pymysql
+
+from tts_cli.config import Settings, load_settings
 
 
-def make_connection():
+def make_connection(settings: Settings | None = None, *, connect_timeout: int = 10):
+    settings = settings or load_settings()
     return pymysql.connect(
-        host=MYSQL_HOST,
-        port=MYSQL_PORT,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        database=MYSQL_DATABASE
+        host=settings.mysql_host,
+        port=settings.mysql_port,
+        user=settings.mysql_user,
+        password=settings.mysql_password,
+        database=settings.mysql_database,
+        charset="utf8mb4",
+        connect_timeout=connect_timeout,
     )
 
 
 def query_dataframe_for_area(x_range, y_range, map_id):
     db = make_connection()
-    sql_query = '''
+    sql_query = """
 WITH RECURSIVE
 filtered_creatures AS (
     SELECT *
@@ -90,7 +94,13 @@ SELECT
     cdie.DisplayRaceID,
     cdie.DisplaySexID,
     ct.name,
-    qr.creature_id as id
+    'creature' as type,
+    qr.creature_id as id,
+    CASE
+        WHEN qr.source = 'accept' THEN qt.Details
+        WHEN qr.source = 'progress' THEN qt.RequestItemsText
+        ELSE qt.OfferRewardText
+    END as original_text
 FROM
     quest_relations qr
 JOIN quest_template qt ON qr.quest = qt.entry
@@ -115,7 +125,9 @@ SELECT
     creature_data.DisplayRaceID,
     creature_data.DisplaySexID,
     creature_data.name,
-    creature_data.id
+    'creature' as type,
+    creature_data.id,
+    IF(creature_data.DisplaySexID = 0, bt.male_text, bt.female_text) AS original_text
 FROM creature_data
     CROSS JOIN numbers
     JOIN npc_text nt ON nt.ID = creature_data.text_id
@@ -134,11 +146,10 @@ WHERE
     (DisplaySexID = 0 AND bt.male_text IS NOT NULL AND bt.male_text != '')
     OR (DisplaySexID = 1 AND bt.female_text IS NOT NULL AND bt.female_text != '')
 ;
-    '''
+    """
 
     with db.cursor() as cursor:
-        cursor.execute(
-            sql_query, (map_id, x_range[0], x_range[1], y_range[0], y_range[1]))
+        cursor.execute(sql_query, (map_id, x_range[0], x_range[1], y_range[0], y_range[1]))
         data = cursor.fetchall()
         columns = [desc[0] for desc in cursor.description]
 
@@ -150,7 +161,7 @@ WHERE
 
 def query_dataframe_for_all_quests_and_gossip(lang: int = 0):
     db = make_connection()
-    sql_query = '''
+    sql_query = """
 WITH RECURSIVE
 creature_quest_relations AS (
     SELECT 'accept' as source, qr.quest, ct.entry as creature_id
@@ -425,10 +436,10 @@ FROM gameobject_data
     JOIN quest_greeting qg ON qg.entry=gameobject_data.id AND type=1
 
 )
-    '''
+    """
 
     if lang == 0:
-        sql_query += '''
+        sql_query += """
 SELECT
     source,
     quest,
@@ -441,9 +452,9 @@ SELECT
     id,
     text as original_text
 FROM ALL_DATA
-        '''
+        """
     else:
-        sql_query += f'''
+        sql_query += f"""
 SELECT
     source,
     quest,
@@ -477,7 +488,7 @@ FROM ALL_DATA
     LEFT JOIN mangos.locales_gameobject     lg  ON lg .entry = id AND type = 'gameobject'
     LEFT JOIN mangos.locales_item           li  ON li .entry = id AND type = 'item'
     LEFT JOIN mangos.quest_greeting         qg  ON qg .entry = id AND qg.type = (CASE ALL_DATA.type WHEN 'creature' THEN 0 WHEN 'gameobject' THEN 1 ELSE -1 END)
-        '''
+        """
 
     with db.cursor() as cursor:
         cursor.execute(sql_query)

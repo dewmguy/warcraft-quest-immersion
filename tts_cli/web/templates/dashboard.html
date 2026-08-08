@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Warcraft Quest Immersion</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+  </head>
+  <body>
+    <header class="hero">
+      <div class="eyebrow">VoiceOver workshop</div>
+      <h1>Warcraft Quest Immersion</h1>
+      <p>Prepare dialogue data and build addon lookup tables from one guarded workspace.</p>
+    </header>
+
+    <main>
+      <section class="status-grid" aria-label="Project status">
+        <article class="status-card">
+          <span class="label">Dialogue rows</span>
+          <strong id="data-rows">{{ "{:,}".format(status.data.rows) }}</strong>
+          <span id="data-state">{{ "Ready" if status.data.available else "Needs data" }}</span>
+        </article>
+        <article class="status-card">
+          <span class="label">Lookup files</span>
+          <strong id="lookup-count">{{ status.output.lookups }}</strong>
+          <span>Generated Lua tables</span>
+        </article>
+        <article class="status-card">
+          <span class="label">Database</span>
+          <strong id="database-state">{{ "Online" if status.database.available else "Unavailable" }}</strong>
+          <span id="database-detail">{{ (status.database.tables ~ " imported tables") if status.database.available else "Optional service not running" }}</span>
+        </article>
+        <article class="status-card">
+          <span class="label">ElevenLabs</span>
+          <strong id="elevenlabs-state">{{ "Configured" if status.elevenlabs_configured else "Optional" }}</strong>
+          <span>Required only for audio</span>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <div class="section-heading">
+          <div>
+            <span class="step">Step 1</span>
+            <h2>Choose dialogue data</h2>
+          </div>
+          <p>The bundled sample is ready now. Upload a full validated export whenever you have one.</p>
+        </div>
+        <form id="upload-form">
+          <label class="file-picker">
+            <span>Dialogue CSV</span>
+            <input id="data-file" name="file" type="file" accept=".csv,text/csv" required>
+          </label>
+          <button type="submit">Upload and validate</button>
+        </form>
+      </section>
+
+      <section class="workspace">
+        <div class="section-heading">
+          <div>
+            <span class="step">Step 2</span>
+            <h2>Build addon lookups</h2>
+          </div>
+          <p>This runs locally in the container and does not contact ElevenLabs.</p>
+        </div>
+        <div class="actions">
+          <button id="generate-button" type="button">Generate lookup tables</button>
+          <a id="download-link" class="secondary" href="/api/download-lookups">Download lookup ZIP</a>
+        </div>
+        <div id="job-status" class="job job-{{ status.job.state }}" role="status">
+          {{ status.job.message }}
+        </div>
+      </section>
+
+      <section class="note">
+        <h2>Full database rebuild</h2>
+        <p>The MySQL service stays private inside Docker. Database download/import and paid audio generation are intentionally command-line operations so they cannot be triggered from the public web route.</p>
+      </section>
+    </main>
+    <script src="{{ url_for('static', path='/app.js') }}"></script>
+  </body>
+</html>

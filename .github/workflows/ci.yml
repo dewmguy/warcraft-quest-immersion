@@ -1,0 +1,35 @@
+name: Validate
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest
+      - run: python -m tts_cli doctor
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: warcraft-quest-immersion:${{ github.sha }}

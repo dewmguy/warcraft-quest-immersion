@@ -1,5 +1,3 @@
-"""Backward-compatible launcher for the packaged CLI."""
-
 from tts_cli.cli import main
 
 if __name__ == "__main__":

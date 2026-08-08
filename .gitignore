@@ -1,4 +1,9 @@
 __pycache__
+.pytest_cache
+.ruff_cache
+*.egg-info
+build
+dist
 datagrip
 .venv
 sql-data
@@ -6,6 +11,8 @@ sql-data
 sql/db_dump
 assets/sql/db_dump
 generated
+data/*
+!data/.gitkeep
 .vscode/settings.json
 .DS_Store
 AI_VoiceOver/AI_VoiceOver.toc

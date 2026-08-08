@@ -1,19 +1,21 @@
+# These blocks are merged into /home/plex/docker-compose.yml on the homelab server.
+# Only warcraft-quest-immersion publishes a host port. The optional database is private.
 services:
   warcraft-quest-immersion:
     build:
-      context: .
+      context: /opt/warcraft-quest-immersion
     image: warcraft-quest-immersion:local
     container_name: warcraft-quest-immersion
     env_file:
-      - .env
+      - /opt/warcraft-quest-immersion/.env
     environment:
       MYSQL_HOST: warcraft-quest-db
       WQI_DATA_DIR: /app/data
     ports:
-      - "${WQI_WEB_PORT:-8090}:8080"
+      - "8090:8080"
     volumes:
-      - ./data:/app/data
-      - ./AI_VoiceOverData_Vanilla/generated:/app/AI_VoiceOverData_Vanilla/generated
+      - /opt/warcraft-quest-immersion/data:/app/data
+      - /opt/warcraft-quest-immersion/AI_VoiceOverData_Vanilla/generated:/app/AI_VoiceOverData_Vanilla/generated
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -23,7 +25,7 @@ services:
     image: mysql:8.4
     container_name: warcraft-quest-db
     env_file:
-      - .env
+      - /opt/warcraft-quest-immersion/.env
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci

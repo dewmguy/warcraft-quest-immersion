@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "warcraft-quest-immersion"
+version = "0.1.0"
+description = "Local tooling and a guarded web workspace for World of Warcraft VoiceOver data."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { file = "LICENSE" }
+dependencies = [
+  "cryptography>=41,<51",
+  "fastapi>=0.115,<1",
+  "jinja2>=3.1,<4",
+  "matplotlib>=3.7,<4",
+  "mutagen>=1.46,<2",
+  "numpy>=1.24,<3",
+  "pandas>=1.5,<3",
+  "pillow>=9.4,<12",
+  "prompt-toolkit>=3.0.38,<4",
+  "pymysql>=1.0.2,<2",
+  "python-dotenv>=1,<2",
+  "python-multipart>=0.0.9,<1",
+  "requests>=2.28,<3",
+  "slpp>=1.2.3,<2",
+  "tqdm>=4.65,<5",
+  "uvicorn[standard]>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27,<1",
+  "pytest>=8,<9",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+wqi = "tts_cli.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["tts_cli*"]
+
+[tool.setuptools.package-data]
+tts_cli = ["web/static/*", "web/templates/*"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]

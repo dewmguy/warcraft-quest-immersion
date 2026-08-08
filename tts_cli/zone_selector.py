@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 import numpy as np
+from matplotlib.patches import Rectangle
+
+from tts_cli.paths import ASSETS_DIR
 
 
 class ZoneSelector:
@@ -12,11 +14,11 @@ class ZoneSelector:
         self.y_offset = y_offset
         self.start_point = None
         self.end_point = None
-        self.rect = Rectangle((0, 0), 0, 0, linewidth=1,
-                              edgecolor='r', facecolor='none')
+        self.rect = Rectangle((0, 0), 0, 0, linewidth=1, edgecolor="r", facecolor="none")
         self.drawing = False
         self.confirm_fig = None
         self.confirm_rect = None
+        self.coordinate_ranges = None
 
     def image_to_game_coordinates(self, x, y):
         game_x = x * self.x_scale + self.x_offset
@@ -24,7 +26,7 @@ class ZoneSelector:
         return game_x, game_y
 
     def on_click(self, event):
-        if not self.drawing:
+        if not self.drawing and event.xdata is not None and event.ydata is not None:
             self.start_point = (event.xdata, event.ydata)
             self.drawing = True
             self.rect.set_width(0)
@@ -56,17 +58,22 @@ class ZoneSelector:
         img = plt.imread(self.image_path)
         ax.imshow(img)
 
-        self.confirm_rect = Rectangle(self.start_point, self.rect.get_width(), self.rect.get_height(),
-                                      linewidth=2, edgecolor='g', facecolor='none')
+        self.confirm_rect = Rectangle(
+            self.start_point,
+            self.rect.get_width(),
+            self.rect.get_height(),
+            linewidth=2,
+            edgecolor="g",
+            facecolor="none",
+        )
         ax.add_patch(self.confirm_rect)
 
         self.ok_button_ax = plt.axes([0.7, 0.05, 0.1, 0.075])
-        self.ok_button = plt.Button(self.ok_button_ax, 'OK')
+        self.ok_button = plt.Button(self.ok_button_ax, "OK")
         self.ok_button.on_clicked(self.confirm_selection)
 
         self.try_again_button_ax = plt.axes([0.81, 0.05, 0.1, 0.075])
-        self.try_again_button = plt.Button(
-            self.try_again_button_ax, 'Try Again')
+        self.try_again_button = plt.Button(self.try_again_button_ax, "Try Again")
         self.try_again_button.on_clicked(self.cancel_selection)
 
         plt.show()
@@ -74,8 +81,7 @@ class ZoneSelector:
     def confirm_selection(self, event):
         plt.close(self.confirm_fig)
 
-        game_start_point = self.image_to_game_coordinates(
-            *self.start_point)
+        game_start_point = self.image_to_game_coordinates(*self.start_point)
         game_end_point = self.image_to_game_coordinates(*self.end_point)
         x_min = min(game_start_point[0], game_end_point[0])
         x_max = max(game_start_point[0], game_end_point[0])
@@ -113,18 +119,18 @@ class ZoneSelector:
         img_ax.add_patch(self.rect)
 
         # Attach event listeners to the image axes
-        img_ax.figure.canvas.mpl_connect('button_press_event', self.on_click)
-        img_ax.figure.canvas.mpl_connect(
-            'button_release_event', self.on_release)
-        img_ax.figure.canvas.mpl_connect('motion_notify_event', self.on_motion)
+        img_ax.figure.canvas.mpl_connect("button_press_event", self.on_click)
+        img_ax.figure.canvas.mpl_connect("button_release_event", self.on_release)
+        img_ax.figure.canvas.mpl_connect("motion_notify_event", self.on_motion)
 
         plt.show()
         return self.coordinate_ranges
 
 
 def compute_scaling_factors(image_points, game_points):
-    assert len(image_points) == len(
-        game_points), "The number of image points and game points must be the same."
+    assert len(image_points) == len(game_points), (
+        "The number of image points and game points must be the same."
+    )
 
     A = np.array([[image_points[i][0], 1] for i in range(len(image_points))])
     B = np.array([game_points[i][0] for i in range(len(game_points))])
@@ -144,21 +150,15 @@ class KalimdorZoneSelector(ZoneSelector):
         image_points = [
             (433.2499999999999, 458.5),
             (358.5153846153844, 139.62307692307684),
-            (211.1923076923075, 332.36153846153843)
+            (211.1923076923075, 332.36153846153843),
         ]
 
-        game_points = [
-            (-4251.33, -607.434),
-            (-2216.35, 7848.3),
-            (1466.45, 2682.83)
-        ]
+        game_points = [(-4251.33, -607.434), (-2216.35, 7848.3), (1466.45, 2682.83)]
 
-        x_scale, y_scale, x_offset, y_offset = compute_scaling_factors(
-            image_points, game_points)
+        x_scale, y_scale, x_offset, y_offset = compute_scaling_factors(image_points, game_points)
 
-        image_path = 'assets/images/kalimdor.jpg'
-        super(KalimdorZoneSelector, self).__init__(
-            image_path, x_scale, y_scale, x_offset, y_offset)
+        image_path = ASSETS_DIR / "images" / "kalimdor.jpg"
+        super().__init__(image_path, x_scale, y_scale, x_offset, y_offset)
 
 
 class EasternKingdomsZoneSelector(ZoneSelector):
@@ -166,7 +166,7 @@ class EasternKingdomsZoneSelector(ZoneSelector):
         image_points = [
             (444.49999999999983, 166.0),
             (219.49999999999994, 820.75),
-            (349.99999999999994, 472.0)
+            (349.99999999999994, 472.0),
         ]
 
         game_points = [
@@ -175,9 +175,7 @@ class EasternKingdomsZoneSelector(ZoneSelector):
             (-2929.87, -5424.85),
         ]
 
-        x_scale, y_scale, x_offset, y_offset = compute_scaling_factors(
-            image_points, game_points)
+        x_scale, y_scale, x_offset, y_offset = compute_scaling_factors(image_points, game_points)
 
-        image_path = 'assets/images/easternkingdoms.jpg'
-        super(EasternKingdomsZoneSelector, self).__init__(
-            image_path, x_scale, y_scale, x_offset, y_offset)
+        image_path = ASSETS_DIR / "images" / "easternkingdoms.jpg"
+        super().__init__(image_path, x_scale, y_scale, x_offset, y_offset)

@@ -1,10 +1,12 @@
 import pandas as pd
-from tts_cli.sql_queries import make_connection
+
 from tts_cli.consts import RACE_DICT
+from tts_cli.sql_queries import make_connection
+
 
 def write_model_data():
     db = make_connection()
-    query = '''
+    query = """
     with data112 as (
         with normalized_models(entry, display_id, name) as (
             select entry, display_id1, name from mangos.creature_template where display_id1
@@ -53,7 +55,7 @@ def write_model_data():
         select * from data335
     ) combined
     order by entry
-    '''
+    """
     with db.cursor() as cursor:
         cursor.execute(query)
         data = cursor.fetchall()
@@ -62,13 +64,12 @@ def write_model_data():
     db.close()
     df = pd.DataFrame(data, columns=columns)
 
-
     def extract_info(modelname):
         race_id = -1
         gender = -1
         if not modelname:
             return race_id, gender, -1
-        
+
         unique_voice_name = modelname.split("\\")[-1].split(".")[0]
 
         for key, value in RACE_DICT.items():
@@ -83,10 +84,10 @@ def write_model_data():
 
         return race_id, gender, unique_voice_name
 
-
     # Create new columns 'race_id', 'gender', and 'unique_voice_name'
-    df[['race_id', 'gender', 'unique_voice_name']] = df['modelname'].apply(
-        lambda x: pd.Series(extract_info(x)))
+    df[["race_id", "gender", "unique_voice_name"]] = df["modelname"].apply(
+        lambda x: pd.Series(extract_info(x))
+    )
 
     # Write the updated DataFrame to a new CSV file
     df.to_csv("generated/warcraft-display-metadata.csv", index=False)

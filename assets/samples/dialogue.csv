@@ -1,0 +1,5 @@
+source,quest,quest_title,text,DisplayRaceID,DisplaySexID,name,type,id,original_text
+accept,101,A Call to Adventure,"Welcome, $N. The road ahead will test your courage.",1,0,Marshal Rowan,creature,90001,"Welcome, $N. The road ahead will test your courage."
+complete,101,A Call to Adventure,"You have done well, $c. Take this with my thanks.",1,0,Marshal Rowan,creature,90001,"You have done well, $c. Take this with my thanks."
+gossip,,,"Keep your eyes open, traveler. These woods are not as quiet as they seem.",4,1,Sentinel Amara,creature,90002,"Keep your eyes open, traveler. These woods are not as quiet as they seem."
+accept,102,Words in Stone,"The weathered inscription reads: $GHeir:Heiress; of the dawn, step forward.",-1,0,Weathered Tablet,gameobject,90003,"The weathered inscription reads: $GHeir:Heiress; of the dawn, step forward."
