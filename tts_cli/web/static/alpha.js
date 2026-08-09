@@ -579,10 +579,8 @@ if (methodController) {
   const syncMethod = () => {
     const selected = selector.value;
     const usesVoiceDesign = selected === "designed" || selected === "reference_design";
-    const showsDisabledPrompt = selected === "instant_clone";
     if (promptContext && promptField) {
-      promptContext.hidden = !usesVoiceDesign && !showsDisabledPrompt;
-      promptContext.classList.toggle("is-disabled", showsDisabledPrompt);
+      promptContext.hidden = !usesVoiceDesign;
       promptField.disabled = !usesVoiceDesign;
     }
     for (const copy of document.querySelectorAll("[data-method-copy] [data-method]")) {

@@ -406,9 +406,10 @@ def test_voice_design_prompt_visibility_follows_creation_method():
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
     assert 'selected === "designed" || selected === "reference_design"' in script
-    assert 'selected === "instant_clone"' in script
-    assert "promptContext.hidden = !usesVoiceDesign && !showsDisabledPrompt" in script
+    assert "promptContext.hidden = !usesVoiceDesign" in script
     assert "promptField.disabled = !usesVoiceDesign" in script
+    assert "showsDisabledPrompt" not in script
+    assert 'classList.toggle("is-disabled"' not in script
     assert "selected !== savedMethod" not in script
     assert 'field.disabled = field.dataset.serverDisabled === "true" || !active' in script
 
@@ -749,6 +750,7 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
     assert "The selected audio determines the cloned voice" in page.text
     assert "automatically shortened to ElevenLabs' 500-character limit" in page.text
     assert "Instant clone active" in page.text
+    assert "data-prompt-context hidden" in page.text
     assert "Instant Voice Clone does not return Voice Design candidates" in page.text
     assert "Previous design candidate" in page.text
     assert 'href="#delivery-neutral"' in page.text

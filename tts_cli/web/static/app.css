@@ -375,7 +375,6 @@ dialog .actions { justify-content: flex-end; }
 .method-explanation p { margin: 8px 0; }
 [data-method][hidden], [data-method-panel][hidden] { display: none !important; }
 [data-prompt-context][hidden] { display: none !important; }
-[data-prompt-context].is-disabled { opacity: .55; }
 .provider-id-card { display: grid; gap: 5px; border: 1px solid #397356; border-radius: 7px; padding: 13px; background: #16251d; }
 .provider-id-card span { color: #9cc7ad; font-size: .75rem; text-transform: uppercase; }
 .provider-id-card code { color: #a9d9bb; overflow-wrap: anywhere; }
