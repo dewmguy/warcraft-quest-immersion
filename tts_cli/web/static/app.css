@@ -403,7 +403,7 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preset-batch-actions { display: flex !important; align-items: center; justify-content: flex-end; gap: 12px !important; }
 .delivery-preset-batch-actions button { min-height: 36px; padding: 7px 11px; white-space: nowrap; }
 .delivery-preset-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
-.delivery-preset-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(275px, .34fr); grid-template-areas: "heading heading" "settings review"; align-items: start; column-gap: 24px; row-gap: 16px; border: 1px solid #39343d; border-radius: 8px; padding: 16px; background: #131216; }
+.delivery-preset-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(275px, .34fr); grid-template-areas: "heading review" "settings review"; grid-template-rows: auto 1fr; align-items: start; column-gap: 24px; row-gap: 16px; border: 1px solid #39343d; border-radius: 8px; padding: 16px; background: #131216; }
 .delivery-preset-card.is-generating { border-color: #9b7835; box-shadow: 0 0 0 2px rgb(201 157 67 / 12%); }
 .delivery-preset-heading { grid-area: heading; display: grid; grid-template-columns: minmax(180px, auto) minmax(0, 1fr); align-items: center; gap: 18px; border-bottom: 1px solid #302c33; padding-bottom: 12px; }
 .delivery-preset-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -416,10 +416,20 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preset-settings label small { margin-top: auto; }
 .delivery-preset-settings button { justify-self: start; min-width: 190px; min-height: 41px; white-space: nowrap; }
 .delivery-preset-settings [data-dirty-submit][hidden] { display: none; }
-.delivery-preset-review { grid-area: review; display: grid; min-width: 0; gap: 12px; border-left: 1px solid #302c33; padding-left: 24px; }
+.delivery-preset-review { grid-area: review; display: grid; min-width: 0; align-self: stretch; align-content: start; gap: 12px; border-left: 1px solid #302c33; padding-left: 24px; }
 .delivery-test-form { margin: 0; }
 .delivery-preview-list { display: grid; gap: 10px; margin-top: 0; }
-.delivery-preview-list > div { display: grid; gap: 6px; padding: 9px; border: 1px solid #302c33; border-radius: 6px; background: #0e0d10; }
+.delivery-preview { overflow: hidden; border: 1px solid #302c33; border-radius: 6px; background: #0e0d10; }
+.delivery-preview summary { display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; align-items: center; gap: 7px; min-height: 38px; padding: 5px 8px; cursor: pointer; list-style: none; }
+.delivery-preview summary::-webkit-details-marker { display: none; }
+.delivery-preview summary:hover { background: #1e1b21; }
+.delivery-preview-icon { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 4px; background: #28232b; color: #d8b86d; font-size: .75rem; }
+.delivery-preview-summary { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
+.delivery-preview-summary strong { overflow: hidden; color: #eee4ca; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.delivery-preview-summary small { flex: none; color: #8f8793; font-size: .66rem; white-space: nowrap; }
+.delivery-preview-chevron { color: #8f8793; font-size: .68rem; text-align: center; transition: transform .16s ease; }
+.delivery-preview[open] .delivery-preview-chevron { transform: rotate(180deg); }
+.delivery-preview-body { display: grid; gap: 6px; border-top: 1px solid #302c33; padding: 7px 8px 8px; background: #111014; }
 .delivery-player { width: 100%; }
 .delivery-preview-list small { color: #aaa0ad; }
 .delivery-preview-list button { justify-self: start; }
@@ -504,5 +514,7 @@ dialog .actions { justify-content: flex-end; }
   .delivery-preset-batch-actions { width: 100%; align-items: stretch; flex-direction: column; }
   .delivery-preset-batch-actions button { width: 100%; }
   .delivery-preset-heading { grid-template-columns: 1fr; }
+  .delivery-preview-summary { display: grid; gap: 1px; }
+  .delivery-preview-summary small { white-space: normal; }
   .delivery-preset-settings > .delivery-preset-section-label, .delivery-preset-settings > button { grid-column: auto; }
 }

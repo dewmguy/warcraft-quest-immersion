@@ -367,7 +367,7 @@ for (const form of document.querySelectorAll("[data-upload-form]")) {
 }
 
 const compactAudioPlayers = [...document.querySelectorAll("[data-compact-audio]")];
-const referenceClips = [...document.querySelectorAll(".reference-clip")];
+const audioDisclosures = [...document.querySelectorAll("[data-audio-disclosure]")];
 
 function formatAudioTime(seconds) {
   const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
@@ -434,20 +434,26 @@ for (const player of compactAudioPlayers) {
   syncCompactPlayer(player);
 }
 
-for (const clip of referenceClips) {
-  const player = clip.querySelector("[data-compact-audio]");
+for (const disclosure of audioDisclosures) {
+  const player = disclosure.querySelector("[data-compact-audio]");
   const audio = player?.querySelector("audio");
   if (!player || !audio) continue;
-  clip.addEventListener("toggle", () => {
-    if (!clip.open) {
+  disclosure.addEventListener("toggle", () => {
+    if (!disclosure.open) {
       resetCompactAudio(player);
       return;
     }
-    for (const otherClip of referenceClips) {
-      if (otherClip === clip || !otherClip.open) continue;
-      const otherPlayer = otherClip.querySelector("[data-compact-audio]");
+    for (const otherDisclosure of audioDisclosures) {
+      if (
+        otherDisclosure === disclosure ||
+        !otherDisclosure.open ||
+        otherDisclosure.dataset.audioDisclosure !== disclosure.dataset.audioDisclosure
+      ) {
+        continue;
+      }
+      const otherPlayer = otherDisclosure.querySelector("[data-compact-audio]");
       if (otherPlayer) resetCompactAudio(otherPlayer);
-      otherClip.open = false;
+      otherDisclosure.open = false;
     }
     if (audio.currentTime !== 0) audio.currentTime = 0;
     audio.play().catch(() => {

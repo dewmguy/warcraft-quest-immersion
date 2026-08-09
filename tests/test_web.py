@@ -226,13 +226,19 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "No stored candidates will be removed" in page.text
 
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
-    assert 'grid-template-areas: "heading heading" "settings review"' in stylesheet
+    assert 'grid-template-areas: "heading review" "settings review"' in stylesheet
     assert (
         ".alpha-panel .delivery-preset-settings { grid-area: settings; grid-template-columns: 1fr;"
         in stylesheet
     )
     assert stylesheet.count(".alpha-panel .delivery-preset-settings {") == 1
     assert ".delivery-preset-grid { display: grid; grid-template-columns: 1fr;" in stylesheet
+    template = (web.WEB_DIR / "templates" / "alpha-voice.html").read_text(encoding="utf-8")
+    assert (
+        '<div class="creation-controls">\n'
+        '        <div class="panel-heading"><div><span class="panel-step">Provider creation</span>'
+        in template
+    )
 
 
 def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
@@ -316,6 +322,10 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
 
     assert page.status_code == 200
     assert 'class="reference-player delivery-player"' in page.text
+    assert page.text.count('class="delivery-preview"') == 3
+    assert page.text.count('data-audio-disclosure="delivery-samples"') == 3
+    assert page.text.count("<summary>") >= 3
+    assert page.text.count('class="delivery-preview-chevron"') == 3
     assert 'data-audio-name="Neutral sample 1"' in page.text
     assert (
         f'<audio hidden preload="metadata" src="/api/alpha/delivery-previews/{preview["preview_id"]}/audio">'
@@ -677,12 +687,15 @@ def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
     assert len(web.alpha_store.get_voice(voice_id)["clips"]) == 1
 
 
-def test_reference_library_script_uses_single_playing_clip_accordion():
+def test_audio_disclosures_play_on_expand_and_collapse_the_previous_item():
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
-    assert 'document.querySelectorAll(".reference-clip")' in script
-    assert 'clip.addEventListener("toggle"' in script
-    assert "otherClip.open = false" in script
+    assert 'document.querySelectorAll("[data-audio-disclosure]")' in script
+    assert 'disclosure.addEventListener("toggle"' in script
+    assert "otherDisclosure.open = false" in script
+    assert (
+        "otherDisclosure.dataset.audioDisclosure !== disclosure.dataset.audioDisclosure" in script
+    )
     assert "audio.play()" in script
     assert "audio.pause()" in script
     assert "syncCompactPlayer" in script
