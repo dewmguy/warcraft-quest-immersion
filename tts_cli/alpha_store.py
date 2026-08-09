@@ -80,6 +80,7 @@ PRODUCTION_STATES = (
     "approved",
 )
 MAX_REFERENCE_BYTES = 50 * 1024 * 1024
+BASELINE_CONTEXT_REVISION = 2
 
 
 class AlphaError(ValueError):
@@ -105,6 +106,25 @@ def _loads(value: str | None, fallback: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
+
+
+def _baseline_description(profile: dict[str, Any]) -> str:
+    """Build the provider prompt in the order recommended for Voice Design v3."""
+    return " ".join(
+        part.strip()
+        for part in (
+            profile["accent_target"],
+            f"Adult {profile['gender_name'].lower()} voice. Perfect audio quality.",
+            f"Persona: {profile['identity']}",
+            f"Delivery: {profile['accent_or_cadence']}",
+            profile["timbre"],
+            profile["pacing"],
+            profile["gender_guidance"],
+            profile["guardrails"],
+            f"Accent exclusions: {profile['accent_avoid']}",
+        )
+        if part.strip()
+    )
 
 
 def _audio_duration(path: Path) -> float | None:
@@ -416,6 +436,7 @@ class AlphaStore:
             self._ensure_columns(connection)
             self._seed_app_settings(connection)
             self._seed_baseline_voices(connection)
+            self._sync_baseline_contexts(connection)
 
     @staticmethod
     def _ensure_columns(connection: sqlite3.Connection) -> None:
@@ -442,18 +463,7 @@ class AlphaStore:
         }
         for profile in review["profiles"]:
             voice_id = f"baseline--{profile['profile_id']}"
-            description = " ".join(
-                part.strip()
-                for part in (
-                    profile["identity"],
-                    profile["accent_or_cadence"],
-                    profile["timbre"],
-                    profile["pacing"],
-                    profile["gender_guidance"],
-                    profile["guardrails"],
-                )
-                if part.strip()
-            )
+            description = _baseline_description(profile)
             connection.execute(
                 "INSERT OR IGNORE INTO voices(voice_id, name, scope, profile_id, race_id, "
                 "gender_id, created_at, updated_at) VALUES (?, ?, 'baseline', ?, ?, ?, ?, ?)",
@@ -474,6 +484,63 @@ class AlphaStore:
                 (voice_id, description, _json(default_settings), now),
             )
             self._seed_delivery_presets(connection, voice_id)
+
+    def _sync_baseline_contexts(self, connection: sqlite3.Connection) -> None:
+        """Version baseline prompts once when the reviewed source context changes.
+
+        This Alpha migration intentionally preserves the creation method, provider
+        voice, lifecycle state, model, settings, reference clips, and previews.
+        """
+        row = connection.execute(
+            "SELECT value_json FROM app_settings WHERE setting_key='baseline_context_revision'"
+        ).fetchone()
+        applied_revision = int(_loads(row["value_json"], 0)) if row else 0
+        if applied_revision >= BASELINE_CONTEXT_REVISION:
+            return
+
+        now = utc_now()
+        for profile in load_phase2_review()["profiles"]:
+            voice_id = f"baseline--{profile['profile_id']}"
+            current = connection.execute(
+                "SELECT * FROM voice_versions WHERE voice_id=? AND is_current=1", (voice_id,)
+            ).fetchone()
+            if not current:
+                continue
+            description = _baseline_description(profile)
+            if current["description"] == description:
+                continue
+            next_version = connection.execute(
+                "SELECT COALESCE(MAX(version_number), 0)+1 FROM voice_versions WHERE voice_id=?",
+                (voice_id,),
+            ).fetchone()[0]
+            connection.execute(
+                "UPDATE voice_versions SET is_current=0 WHERE voice_id=?", (voice_id,)
+            )
+            connection.execute(
+                "INSERT INTO voice_versions(voice_id, version_number, description, "
+                "creation_method, provider, provider_voice_id, model_id, settings_json, status, "
+                "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    voice_id,
+                    next_version,
+                    description,
+                    current["creation_method"],
+                    current["provider"],
+                    current["provider_voice_id"],
+                    current["model_id"],
+                    current["settings_json"],
+                    current["status"],
+                    now,
+                ),
+            )
+            connection.execute("UPDATE voices SET updated_at=? WHERE voice_id=?", (now, voice_id))
+
+        connection.execute(
+            "INSERT INTO app_settings(setting_key, value_json, updated_at) VALUES "
+            "('baseline_context_revision', ?, ?) ON CONFLICT(setting_key) DO UPDATE SET "
+            "value_json=excluded.value_json, updated_at=excluded.updated_at",
+            (_json(BASELINE_CONTEXT_REVISION), now),
+        )
 
     @staticmethod
     def _seed_app_settings(connection: sqlite3.Connection) -> None:

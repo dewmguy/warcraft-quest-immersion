@@ -224,6 +224,53 @@ def test_voice_versions_only_change_on_delta_and_can_be_restored(store: AlphaSto
     assert restored["description"] == current["description"]
 
 
+def test_baseline_context_revision_preserves_creation_work(store: AlphaStore, monkeypatch):
+    voice_id = "baseline--bloodelf-female"
+    current = store.get_voice(voice_id)
+    configured = store.update_voice(
+        voice_id,
+        {
+            "description": "Legacy baseline context that is long enough for an Alpha voice record.",
+            "creation_method": "reference_design",
+            "status": "draft",
+            "stability": 1,
+        },
+    )
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
+    store.save_reference_clip(
+        voice_id,
+        original_name="blood-elf-reference.ogg",
+        content=b"reference-audio",
+        provenance="Test fixture",
+        provider_eligible=True,
+    )
+    store.record_voice_previews(
+        voice_id,
+        prompt=configured["description"],
+        preview_text="A sufficiently long fixed comparison script for the saved Alpha preview record.",
+        model_id="eleven_ttv_v3",
+        previews=[{"content": b"candidate-audio", "generated_voice_id": "generated-test"}],
+    )
+    with store.connect() as connection:
+        connection.execute(
+            "UPDATE app_settings SET value_json='1' WHERE setting_key='baseline_context_revision'"
+        )
+
+    store.initialize()
+    revised = store.get_voice(voice_id)
+
+    assert revised["version_number"] == configured["version_number"] + 1
+    assert revised["creation_method"] == "reference_design"
+    assert revised["status"] == "draft"
+    assert revised["settings"]["stability"] == 1
+    assert len(revised["clips"]) == 1
+    assert len(revised["previews"]) == 1
+    assert "modern General American" in revised["description"]
+    assert "Adult female voice" in revised["description"]
+    assert "No British influence" in revised["description"]
+    assert current["version_number"] < revised["version_number"]
+
+
 def test_delivery_presets_are_voice_metadata_used_for_dialogue(store: AlphaStore):
     row = _first_dialogue(store)
     prepared = store.prepare_spoken_text(row["dialogue_id"])

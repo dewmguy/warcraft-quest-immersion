@@ -346,7 +346,20 @@ dialog .actions { justify-content: flex-end; }
 .context-summary { border: 1px solid #39343d; border-radius: 7px; padding: 14px; background: #111014; }
 .context-summary span { color: #9d94a0; font-size: .72rem; letter-spacing: .07em; text-transform: uppercase; }
 .context-summary p { margin-bottom: 0; white-space: pre-wrap; }
-.creation-workspace > form { max-width: 940px; }
+.creation-workspace-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, .65fr); align-items: start; gap: 24px; }
+.creation-controls { min-width: 0; }
+.creation-candidates { min-width: 0; border-left: 1px solid #39343d; padding-left: 24px; }
+.candidate-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.candidate-heading h3 { margin: 2px 0 0; color: #fff3d3; font-family: Georgia, serif; font-size: 1.2rem; }
+.candidate-heading > span { display: grid; min-width: 28px; min-height: 28px; place-items: center; border: 1px solid #49434f; border-radius: 999px; color: #cfc5d0; font-size: .75rem; }
+.creation-candidates .candidate-list { gap: 8px; }
+.creation-candidates .candidate-list article { grid-template-columns: 1fr; gap: 8px; padding: 10px; background: #111014; }
+.creation-candidates .candidate-list audio { height: 34px; min-width: 0; }
+.creation-candidates .candidate-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; }
+.creation-candidates .candidate-meta strong { color: #eee4ca; font-size: .86rem; }
+.creation-candidates .candidate-meta span { color: #aaa3ad; font-size: .72rem; text-align: right; }
+.creation-candidates .candidate-meta small { grid-column: 1 / -1; }
+.creation-candidates button { width: 100%; min-height: 34px; padding: 7px 9px; font-size: .76rem; }
 .delivery-preset-grid { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap: 10px; overflow-x: auto; }
 .delivery-preset-card { align-content: start; min-width: 190px; border: 1px solid #39343d; border-radius: 8px; padding: 14px; background: #131216; }
 .delivery-preset-card > div:first-child { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -414,6 +427,8 @@ dialog .actions { justify-content: flex-end; }
   .alpha-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .delivery-preset-grid { grid-template-columns: repeat(3, minmax(210px, 1fr)); }
   .cost-guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .creation-workspace-grid { grid-template-columns: 1fr; }
+  .creation-candidates { border-top: 1px solid #39343d; border-left: 0; padding-top: 20px; padding-left: 0; }
 }
 
 @media (max-width: 760px) {

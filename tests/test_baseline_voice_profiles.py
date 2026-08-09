@@ -41,6 +41,31 @@ def test_profile_matrix_covers_every_legacy_race_and_gender():
     assert review["preview_states"] == {"ungenerated": 230}
 
 
+def test_every_race_has_an_explicit_auditable_accent_contract():
+    payload = json.loads((PROFILE_DIR / "race-archetypes.json").read_text(encoding="utf-8"))
+
+    assert len(payload["archetypes"]) == 23
+    for race in payload["archetypes"]:
+        assert race["accent_target"].startswith("Native English")
+        assert len(race["accent_avoid"]) >= 40
+        assert len(race["accent_basis"]) >= 30
+
+    blood_elf = next(race for race in payload["archetypes"] if race["slug"] == "bloodelf")
+    assert "General American" in blood_elf["accent_target"]
+    assert "fully rhotic" in blood_elf["accent_target"]
+    assert "No British influence" in blood_elf["accent_avoid"]
+    assert "Mid-Atlantic" in blood_elf["accent_avoid"]
+
+
+def test_provider_prompts_name_dialect_gender_and_exclusions():
+    review = load_phase2_review()
+
+    for profile in review["profiles"]:
+        assert profile["accent_target"].startswith("Native English")
+        assert profile["gender_name"] in {"Male", "Female"}
+        assert profile["accent_avoid"]
+
+
 def test_known_display_counts_come_from_the_pinned_export():
     review = load_phase2_review()
     profiles = {profile["profile_id"]: profile for profile in review["profiles"]}

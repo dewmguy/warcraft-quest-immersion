@@ -74,6 +74,8 @@
 
   <section class="alpha-panel creation-workspace" id="provider-creation">
     <div class="panel-heading"><div><span class="panel-step">Provider creation</span><h2>Create the reusable voice</h2></div><span>{{ app_settings.voice_design_model_id }}</span></div>
+    <div class="creation-workspace-grid">
+      <div class="creation-controls">
     <div data-method-panel="unselected"><p class="empty-copy">Choose and save a creation path above. Only the controls required by that method will appear here.</p></div>
     <form data-json-form data-paid data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="designed">
       <div class="context-summary"><span>Context sent to ElevenLabs</span><p>{{ voice.description }}</p></div>
@@ -94,6 +96,12 @@
       <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Create instant voice clone</button>
     </form>
     {% if not provider_configured %}<aside class="inline-warning">ElevenLabs is not configured. Provider creation remains disabled and no request can be sent.</aside>{% endif %}
+      </div>
+      <aside class="creation-candidates" aria-labelledby="voice-candidates-heading">
+        <div class="candidate-heading"><div><span class="panel-step">Generated output</span><h3 id="voice-candidates-heading">Candidates</h3></div><span>{{ voice.previews|length }}</span></div>
+        <div class="candidate-list">{% for preview in voice.previews %}<article><audio controls preload="none" src="/api/alpha/voice-previews/{{ preview.preview_id }}/audio"></audio><div class="candidate-meta"><strong>Candidate {{ loop.index }}</strong><span>{{ "%.2f"|format(preview.duration_seconds or 0) }} sec · {{ preview.status | title }}</span><small>{{ preview.model_id }}</small></div>{% if preview.status == 'candidate' %}<button type="button" data-action data-paid data-url="/api/alpha/voice-previews/{{ preview.preview_id }}/activate" data-method="POST" {% if not provider_configured %}disabled{% endif %}>Create reusable voice</button>{% endif %}</article>{% else %}<p class="empty-copy">Generated candidates will appear here beside the creation controls.</p>{% endfor %}</div>
+      </aside>
+    </div>
   </section>
 
   <section class="alpha-panel">
@@ -114,11 +122,6 @@
       <div class="delivery-preview-list">{% for preview in preset.previews[:2] %}<div><audio controls preload="none" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio><small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} metered chars{% endif %}</small>{% if preview.status == 'candidate' %}<button type="button" data-action data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST">Approve</button>{% endif %}</div>{% endfor %}</div>
     </article>{% endfor %}</div>
     <p class="form-help">These are five delivery presets for one reusable voice—not five cloned voices. Each preset advances only after an exact generated comparison is approved.</p>
-  </section>
-
-  <section class="alpha-panel">
-    <div class="panel-heading"><div><h2>Voice Design candidates</h2></div><span>{{ voice.previews|length }} previews</span></div>
-    <div class="candidate-list">{% for preview in voice.previews %}<article><audio controls preload="none" src="/api/alpha/voice-previews/{{ preview.preview_id }}/audio"></audio><div><strong>{{ preview.model_id }}</strong><span>{{ "%.2f"|format(preview.duration_seconds or 0) }} seconds · {{ preview.status }}</span></div>{% if preview.status == 'candidate' %}<button type="button" data-action data-paid data-url="/api/alpha/voice-previews/{{ preview.preview_id }}/activate" data-method="POST" {% if not provider_configured %}disabled{% endif %}>Create reusable voice from this candidate</button>{% endif %}</article>{% else %}<p class="empty-copy">No Voice Design candidates exist.</p>{% endfor %}</div>
   </section>
 
   <div class="record-grid">

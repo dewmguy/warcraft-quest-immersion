@@ -17,7 +17,7 @@
     "assets/sql/exported/CreatureDisplayInfo.sql": "48086305bbc84d0af8928c37cb74bcdc95229918b91f00e1c88b74563427c51a"
   },
   "registry_hashes": {
-    "race-archetypes.json": "a565751f9b7f59648fdb8a5e978f804bd0927712ad4b3050d0f4e271434ffea3",
+    "race-archetypes.json": "249a61a8756e70aebb29fc6e0c370e4372c9036bf7820d360e480b90344eef82",
     "gender-presentations.json": "f217578f0956e02f957a6c0536daf09e26a6be63d7092bf1a09301f31153ecc8",
     "delivery-presets.json": "478424b87e8bf0358e0745b48c55e3bb35ea6e8d49ad7bf93fd72c19a08c449c",
     "evaluation-scripts.json": "18d99c290af22aa296ea4a795efcd14f168b203ffc65fe96a5c9dbfe117eb54d"
