@@ -166,6 +166,11 @@
             <span class="reference-player-time" data-audio-time>0:00 / 0:00</span>
             <audio hidden preload="metadata" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio>
           </div>
+          <dl class="delivery-preview-metadata">
+            {% if preview.actor_notes %}<div><dt>Voice actor notes</dt><dd>{{ preview.actor_notes }}</dd></div>{% endif %}
+            <div><dt>Performance method</dt><dd>{{ preview.performance_method_label }}</dd></div>
+            <div><dt>ElevenLabs voice ID</dt><dd><code>{{ preview.baseline_voice_id }}</code></dd></div>
+          </dl>
           <div class="delivery-preview-footer"><small>{{ preview.created_at[:19] | replace('T', ' ') }} UTC</small><div class="delivery-preview-actions">{% if preview.status == 'candidate' %}<button type="button" class="icon-button delivery-sample-approve" title="Approve {{ preset.delivery }} sample {{ loop.index }}" aria-label="Approve {{ preset.delivery }} sample {{ loop.index }}" data-action data-confirm-required data-confirm="Approve this {{ preset.delivery }} sample? This will mark it ready for future dialogue using this delivery preset." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST"><i class="fa-solid fa-check" aria-hidden="true"></i></button>{% endif %}<button type="button" class="secondary icon-button delivery-preview-delete" title="Delete {{ preset.delivery }} sample {{ loop.index }}" aria-label="Delete {{ preset.delivery }} sample {{ loop.index }}" data-action data-confirm-required data-confirm="Permanently delete this {{ preset.delivery }} sample from local storage?{% if preview.status == 'approved' %} This will remove its approval; approve another sample when you are satisfied.{% endif %} ElevenLabs usage cannot be refunded." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div></div>
         </div>
       </details>{% endfor %}</div>

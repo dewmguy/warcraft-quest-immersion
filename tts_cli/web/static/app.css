@@ -431,6 +431,11 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preview[open] .delivery-preview-chevron { transform: rotate(180deg); }
 .delivery-preview-body { display: grid; gap: 6px; border-top: 1px solid #302c33; padding: 7px 8px 8px; background: #111014; }
 .delivery-player { width: 100%; }
+.delivery-preview-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 2px 0; border-block: 1px solid #2c2830; padding: 7px 0; }
+.delivery-preview-metadata div { display: grid; min-width: 0; gap: 2px; }
+.delivery-preview-metadata dt { color: #8f8793; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.delivery-preview-metadata dd { min-width: 0; margin: 0; color: #d9d0db; font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere; }
+.delivery-preview-metadata code { color: #e2c270; font-size: .68rem; }
 .delivery-preview-list small { color: #aaa0ad; }
 .delivery-preview-list button { justify-self: start; }
 .delivery-preview-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

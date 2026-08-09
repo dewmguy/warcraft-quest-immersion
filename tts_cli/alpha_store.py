@@ -70,6 +70,11 @@ VOICE_METHODS = (
     "external",
 )
 DELIVERY_STATUSES = ("not_tested", "previewed", "approved")
+PERFORMANCE_METHODS = {
+    0.0: ("creative", "Creative"),
+    0.5: ("natural", "Natural"),
+    1.0: ("robust", "Robust"),
+}
 PRODUCTION_STATES = (
     "needs_text",
     "needs_voice",
@@ -162,6 +167,44 @@ def _delivery_request_text(notes: Any, spoken_text: str) -> str:
     direction = _normalize_voice_actor_notes(notes)
     text = spoken_text.strip()
     return f"[{direction}] {text}" if direction else text
+
+
+def _performance_method(value: Any) -> tuple[str, str, float]:
+    stability = float(value)
+    key, label = PERFORMANCE_METHODS.get(stability, ("custom", f"Custom ({stability:g})"))
+    return key, label, stability
+
+
+def _delivery_preview_metadata(request: dict[str, Any], sample_text: str) -> dict[str, str]:
+    actor_notes = str(request.get("actor_notes") or "").strip()
+    if "actor_notes" not in request:
+        request_text = str(request.get("text") or "")
+        if sample_text and request_text.endswith(sample_text):
+            prefix = request_text[: -len(sample_text)].strip()
+            match = re.fullmatch(r"\[(.*)]", prefix)
+            actor_notes = match.group(1).strip() if match else ""
+
+    method = str(request.get("performance_method") or "").strip()
+    method_label = str(request.get("performance_method_label") or "").strip()
+    if not method or not method_label:
+        settings = request.get("voice_settings")
+        stability = settings.get("stability", 0.5) if isinstance(settings, dict) else 0.5
+        inferred_method, inferred_label, _ = _performance_method(stability)
+        method = method or inferred_method
+        method_label = method_label or inferred_label
+
+    baseline_voice_id = str(
+        request.get("baseline_voice_id")
+        or request.get("provider_voice_id")
+        or request.get("voice_id")
+        or ""
+    ).strip()
+    return {
+        "actor_notes": actor_notes,
+        "performance_method": method,
+        "performance_method_label": method_label,
+        "baseline_voice_id": baseline_voice_id,
+    }
 
 
 def _baseline_description(profile: dict[str, Any]) -> str:
@@ -1543,13 +1586,19 @@ class AlphaStore:
         if not voice.get("provider_voice_id"):
             raise AlphaError("Create the reusable provider voice before testing delivery presets.")
         preset = next(item for item in voice["delivery_presets"] if item["delivery"] == delivery)
-        request_text = _delivery_request_text(preset["prompt_tag"], text)
+        actor_notes = _normalize_voice_actor_notes(preset["prompt_tag"])
+        request_text = _delivery_request_text(actor_notes, text)
         model_id = self.get_app_settings()["tts_model_id"]
         settings = voice["settings"].copy()
+        method, method_label, stability = _performance_method(preset["stability"])
         if model_id == "eleven_v3":
-            settings = {"stability": float(preset["stability"])}
+            settings = {"stability": stability}
         return {
             "voice_id": voice["provider_voice_id"],
+            "baseline_voice_id": voice["provider_voice_id"],
+            "actor_notes": actor_notes,
+            "performance_method": method,
+            "performance_method_label": method_label,
             "text": request_text,
             "model_id": model_id,
             "voice_settings": settings,
@@ -1809,6 +1858,9 @@ class AlphaStore:
         preview_payloads = [dict(row) for row in delivery_previews]
         for preview in preview_payloads:
             preview["subscription"] = _loads(preview.get("subscription_json"), {})
+            request = _loads(preview.get("request_json"), {})
+            preview["request"] = request
+            preview.update(_delivery_preview_metadata(request, preview["sample_text"]))
         payload["delivery_presets"] = []
         for row in delivery_presets:
             preset = dict(row)

@@ -290,6 +290,11 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
                 "provider_voice_id": "provider-voice-test",
             },
         )
+        web.alpha_store.update_delivery_preset(
+            voice_id,
+            "neutral",
+            {"prompt_tag": "with restrained warmth", "stability": 1},
+        )
         request = web.alpha_store.delivery_preview_request(
             voice_id,
             "neutral",
@@ -313,6 +318,11 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
                 provider_request_id=f"additional-delivery-request-{index}",
                 subscription={"request_character_cost": 80},
             )
+        web.alpha_store.update_delivery_preset(
+            voice_id,
+            "neutral",
+            {"prompt_tag": "more brightly", "stability": 0.5},
+        )
         preview_path = web.alpha_store.delivery_preview_path(preview["preview_id"])
         page = client.get(f"/alpha/voices/{voice_id}")
         deleted = client.delete(
@@ -339,6 +349,14 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert page.text.count("Permanently delete this neutral sample") == 3
     assert page.text.count("Stored samples") == 1
     assert page.text.count('class="reference-player delivery-player"') == 3
+    assert page.text.count('class="delivery-preview-metadata"') == 3
+    assert page.text.count("Voice actor notes") == 3
+    assert page.text.count(">with restrained warmth</dd>") == 3
+    assert 'value="more brightly"' in page.text
+    assert page.text.count("Performance method") == 3
+    assert page.text.count(">Robust</dd>") == 3
+    assert page.text.count("ElevenLabs voice ID") == 3
+    assert page.text.count("provider-voice-test") >= 3
     assert "ElevenLabs usage cannot be refunded" in page.text
     assert "<audio controls" not in page.text
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")

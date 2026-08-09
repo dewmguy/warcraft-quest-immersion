@@ -507,6 +507,10 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
     request = store.delivery_preview_request(voice["voice_id"], "angry", sample_text)
     assert request["text"].startswith("[angry]")
     assert request["voice_settings"] == {"stability": 0.0}
+    assert request["actor_notes"] == "angry"
+    assert request["performance_method"] == "creative"
+    assert request["performance_method_label"] == "Creative"
+    assert request["baseline_voice_id"] == "provider-voice-test"
     assert "notes" not in request
     assert store.progress()["voices"]["complete"] == 0
 
@@ -520,6 +524,11 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
         subscription={"character_count": len(request["text"])},
     )
     assert store.delivery_preview_path(preview["preview_id"]).is_file()
+    stored = store.get_voice(voice["voice_id"])["delivery_presets"][1]["previews"][0]
+    assert stored["actor_notes"] == "angry"
+    assert stored["performance_method"] == "creative"
+    assert stored["performance_method_label"] == "Creative"
+    assert stored["baseline_voice_id"] == "provider-voice-test"
     assert store.progress()["voices"]["complete"] == 0
 
     approved = store.approve_delivery_preview(preview["preview_id"])
@@ -527,6 +536,53 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
     assert angry["status"] == "approved"
     assert angry["previews"][0]["status"] == "approved"
     assert store.progress()["voices"]["complete"] == 1
+
+
+def test_existing_delivery_samples_recover_metadata_from_their_saved_request(
+    store: AlphaStore, monkeypatch: pytest.MonkeyPatch
+):
+    voice_id = "baseline--bloodelf-female"
+    voice = store.get_voice(voice_id)
+    store.update_voice(
+        voice_id,
+        {
+            "description": voice["description"],
+            "creation_method": "external",
+            "provider_voice_id": "legacy-provider-voice",
+        },
+    )
+    sample_text = (
+        "The road ahead is dangerous, but our purpose remains clear. Stay close, listen "
+        "carefully, and remember why we began this journey."
+    )
+    request = store.delivery_preview_request(voice_id, "angry", sample_text)
+    legacy_request = {
+        key: value
+        for key, value in request.items()
+        if key
+        not in {
+            "actor_notes",
+            "baseline_voice_id",
+            "performance_method",
+            "performance_method_label",
+        }
+    }
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
+    store.record_delivery_preview(
+        voice_id,
+        "angry",
+        legacy_request,
+        content=b"legacy-delivery-audio",
+        provider_request_id="legacy-request",
+        subscription={},
+    )
+
+    stored = store.get_voice(voice_id)["delivery_presets"][1]["previews"][0]
+
+    assert stored["actor_notes"] == "angry"
+    assert stored["performance_method"] == "natural"
+    assert stored["performance_method_label"] == "Natural"
+    assert stored["baseline_voice_id"] == "legacy-provider-voice"
 
 
 def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
