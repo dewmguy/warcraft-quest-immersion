@@ -886,8 +886,14 @@ def api_delete_voice_preview(
 ) -> dict:
     try:
         voice = alpha_store.delete_voice_preview(preview_id)
+        selected = bool(voice.pop("deleted_selected_preview", False))
         return {
-            "message": "Voice candidate was deleted from local storage.",
+            "message": (
+                "Selected candidate was deleted locally and its reusable voice ID was "
+                "disconnected. The ElevenLabs voice remains in your provider account."
+                if selected
+                else "Voice candidate was deleted from local storage."
+            ),
             "voice": voice,
         }
     except AlphaError as error:
@@ -914,16 +920,17 @@ def api_design_voice(
     _require_elevenlabs()
     try:
         voice = alpha_store.get_voice(voice_id)
-        if voice["creation_method"] not in {"designed", "reference_design"}:
+        creation_method = str(payload.get("creation_method", voice["creation_method"])).strip()
+        if creation_method not in {"designed", "reference_design"}:
             raise AlphaError("Select a Voice Design method before generating design candidates.")
         preview_text = str(payload.get("preview_text", "")).strip()
         if not 100 <= len(preview_text) <= 1000:
             raise AlphaError("Voice preview text must contain 100–1,000 characters.")
         reference_audio = None
         clip_id = str(payload.get("reference_clip_id", "")).strip()
-        if voice["creation_method"] == "reference_design" and not clip_id:
+        if creation_method == "reference_design" and not clip_id:
             raise AlphaError("Reference-guided Voice Design requires one reference clip.")
-        if voice["creation_method"] == "reference_design":
+        if creation_method == "reference_design":
             clip = alpha_store.get_reference_clip(clip_id)
             if clip["voice_id"] != voice_id:
                 raise AlphaError("The reference clip belongs to another voice.")
@@ -968,14 +975,18 @@ def api_design_voice(
             preview_text=preview_text,
             model_id=design_model,
             previews=previews,
+            creation_method=creation_method,
             replace_existing=True,
         )
-        replaced_count = sum(
-            preview["status"] != "selected" for preview in voice["previews"]
+        alpha_store.update_voice(
+            voice_id,
+            {
+                "description": voice["description"],
+                "creation_method": creation_method,
+            },
         )
-        selected_preserved = any(
-            preview["status"] == "selected" for preview in voice["previews"]
-        )
+        replaced_count = sum(preview["status"] != "selected" for preview in voice["previews"])
+        selected_preserved = any(preview["status"] == "selected" for preview in voice["previews"])
         cost_note = (
             f" ElevenLabs reported {result.character_cost:,} metered characters for the request."
             if result.character_cost is not None
@@ -1050,7 +1061,8 @@ def api_clone_voice(
     _require_elevenlabs()
     try:
         voice = alpha_store.get_voice(voice_id)
-        if voice["creation_method"] != "instant_clone":
+        creation_method = str(payload.get("creation_method", voice["creation_method"])).strip()
+        if creation_method != "instant_clone":
             raise AlphaError("Select Instant Voice Clone before creating a clone.")
         clip_ids = payload.get("clip_ids", [])
         if not isinstance(clip_ids, list) or not clip_ids:

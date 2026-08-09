@@ -49,6 +49,11 @@ class DesigningElevenLabs(ConfiguredElevenLabs):
         return {"voice_id": "provider-voice-selected"}
 
 
+class CloningElevenLabs(ConfiguredElevenLabs):
+    def clone_voice(self, **_kwargs):
+        return {"voice_id": "provider-instant-clone"}
+
+
 @pytest.fixture(autouse=True)
 def isolated_alpha(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     data_dir = tmp_path / "data"
@@ -222,7 +227,10 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
 
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
     assert 'grid-template-areas: "heading heading" "settings review"' in stylesheet
-    assert ".alpha-panel .delivery-preset-settings { grid-area: settings; grid-template-columns: 1fr;" in stylesheet
+    assert (
+        ".alpha-panel .delivery-preset-settings { grid-area: settings; grid-template-columns: 1fr;"
+        in stylesheet
+    )
     assert stylesheet.count(".alpha-panel .delivery-preset-settings {") == 1
     assert ".delivery-preset-grid { display: grid; grid-template-columns: 1fr;" in stylesheet
 
@@ -332,7 +340,7 @@ def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_individual_con
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
     assert 'document.querySelectorAll("[data-dirty-form]")' in script
-    assert 'submit.hidden = JSON.stringify(jsonFromForm(form)) === initialPayload' in script
+    assert "submit.hidden = JSON.stringify(jsonFromForm(form)) === initialPayload" in script
     assert "if (conditionalSubmit?.hidden) return" in script
     assert 'deliveryBatchButton.textContent = "Generate all samples"' in script
     assert "if (!window.confirm(deliveryBatchConfirmation(forms))) return" in script
@@ -346,6 +354,8 @@ def test_voice_design_prompt_visibility_follows_creation_method():
     assert 'selected === "instant_clone"' in script
     assert "promptContext.hidden = !usesVoiceDesign && !showsDisabledPrompt" in script
     assert "promptField.disabled = !usesVoiceDesign" in script
+    assert "selected !== savedMethod" not in script
+    assert 'field.disabled = field.dataset.serverDisabled === "true" || !active' in script
 
 
 def test_every_voice_page_delete_control_requires_confirmation():
@@ -374,13 +384,11 @@ def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):
         dialogue_page = client.get(f"/alpha/dialogue/{dialogue_id}")
 
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
-    assert 'data-alpha-message-title' in voice_page.text
-    assert 'data-alpha-message-elapsed' in voice_page.text
-    assert 'data-alpha-message-progress' in voice_page.text
+    assert "data-alpha-message-title" in voice_page.text
+    assert "data-alpha-message-elapsed" in voice_page.text
+    assert "data-alpha-message-progress" in voice_page.text
     assert 'aria-live="polite"' in voice_page.text
-    assert voice_page.text.count("data-paid") == voice_page.text.count(
-        "data-provider-operation"
-    )
+    assert voice_page.text.count("data-paid") == voice_page.text.count("data-provider-operation")
     assert dialogue_page.text.count("data-paid") == dialogue_page.text.count(
         "data-provider-operation"
     )
@@ -424,10 +432,11 @@ def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
                 "X-WQI-Paid-Action": "confirmed",
             },
             json={
+                "creation_method": "designed",
                 "preview_text": (
                     "The road ahead is dangerous, but our purpose remains clear. Stay close, "
                     "listen carefully, and remember why we began this journey together."
-                )
+                ),
             },
         )
         revised = web.alpha_store.get_voice(voice_id)
@@ -439,7 +448,7 @@ def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
     assert not former_path.exists()
 
 
-def test_selected_voice_candidate_is_protected_and_survives_regeneration(monkeypatch):
+def test_selected_voice_candidate_survives_regeneration(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())
     with TestClient(web.app) as client:
@@ -478,10 +487,6 @@ def test_selected_voice_candidate_is_protected_and_survives_regeneration(monkeyp
             },
         )
         selected_page = client.get(f"/alpha/voices/{voice_id}")
-        protected_delete = client.delete(
-            f"/api/alpha/voice-previews/{selected_id}",
-            headers={"X-WQI-Action": "confirmed"},
-        )
         regenerated = client.post(
             f"/api/alpha/voices/{voice_id}/design",
             headers={
@@ -489,10 +494,11 @@ def test_selected_voice_candidate_is_protected_and_survives_regeneration(monkeyp
                 "X-WQI-Paid-Action": "confirmed",
             },
             json={
+                "creation_method": "designed",
                 "preview_text": (
                     "The road ahead is dangerous, but our purpose remains clear. Stay close, "
                     "listen carefully, and remember why we began this journey together."
-                )
+                ),
             },
         )
         revised = web.alpha_store.get_voice(voice_id)
@@ -502,16 +508,15 @@ def test_selected_voice_candidate_is_protected_and_survives_regeneration(monkeyp
     assert selected_page.status_code == 200
     assert 'class="candidate-selected"' in selected_page.text
     assert "Selected candidate" in selected_page.text
-    assert "Protected until replaced" in selected_page.text
+    assert "disconnect its reusable voice ID from this profile" in selected_page.text
     assert "The selected candidate and reusable ElevenLabs voice will be preserved" in (
         selected_page.text
     )
-    assert f'data-url="/api/alpha/voice-previews/{selected_id}"' not in selected_page.text
-    assert protected_delete.status_code == 422
-    assert "selected candidate is protected" in protected_delete.json()["detail"]
+    assert f'data-url="/api/alpha/voice-previews/{selected_id}"' in selected_page.text
     assert regenerated.status_code == 200
-    assert "Preserved the selected candidate and reusable ElevenLabs voice" in (
-        regenerated.json()["message"]
+    assert (
+        "Preserved the selected candidate and reusable ElevenLabs voice"
+        in (regenerated.json()["message"])
     )
     assert revised["provider_voice_id"] == "provider-voice-selected"
     assert len(revised["previews"]) == 4
@@ -526,6 +531,109 @@ def test_selected_voice_candidate_is_protected_and_survives_regeneration(monkeyp
         for preview_id, path in original_paths.items()
         if preview_id != selected_id
     )
+
+
+def test_selected_voice_candidate_can_be_deleted_and_disconnects_reusable_id(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        preview_id = web.alpha_store.record_voice_previews(
+            voice_id,
+            prompt="Candidate prompt",
+            preview_text="Candidate comparison text",
+            model_id="eleven_ttv_v3",
+            creation_method="reference_design",
+            previews=[{"content": b"candidate", "generated_voice_id": "candidate-selected"}],
+        )[0]
+        activated = client.post(
+            f"/api/alpha/voice-previews/{preview_id}/activate",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+        )
+        selected_path = Path(web.alpha_store.get_voice_preview(preview_id)["storage_path"])
+        deleted = client.delete(
+            f"/api/alpha/voice-previews/{preview_id}",
+            headers={"X-WQI-Action": "confirmed"},
+        )
+        revised = web.alpha_store.get_voice(voice_id)
+
+    assert activated.status_code == 200
+    assert deleted.status_code == 200
+    assert "reusable voice ID was disconnected" in deleted.json()["message"]
+    assert "remains in your provider account" in deleted.json()["message"]
+    assert revised["provider_voice_id"] is None
+    assert revised["previews"] == []
+    assert not selected_path.exists()
+
+
+def test_provider_creation_accepts_new_unsaved_path_and_records_candidate_method(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        current = web.alpha_store.get_voice(voice_id)
+        web.alpha_store.update_voice(
+            voice_id,
+            {
+                "description": current["description"],
+                "creation_method": "reference_design",
+            },
+        )
+        generated = client.post(
+            f"/api/alpha/voices/{voice_id}/design",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+            json={
+                "creation_method": "designed",
+                "preview_text": (
+                    "The road ahead is dangerous, but our purpose remains clear. Stay close, "
+                    "listen carefully, and remember why we began this journey together."
+                ),
+            },
+        )
+        revised = web.alpha_store.get_voice(voice_id)
+        page = client.get(f"/alpha/voices/{voice_id}")
+
+    assert generated.status_code == 200
+    assert revised["creation_method"] == "designed"
+    assert {preview["creation_method"] for preview in revised["previews"]} == {"designed"}
+    assert page.text.count("Created with Voice Design") == 3
+
+
+def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(web, "elevenlabs", CloningElevenLabs())
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 65.0)
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        clip = web.alpha_store.save_reference_clip(
+            voice_id,
+            original_name="clone-source.wav",
+            content=b"reference-audio",
+            provenance="Test fixture",
+            provider_eligible=True,
+        )["clips"][0]
+        cloned = client.post(
+            f"/api/alpha/voices/{voice_id}/clone",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+            json={
+                "creation_method": "instant_clone",
+                "clip_ids": [clip["clip_id"]],
+            },
+        )
+        revised = web.alpha_store.get_voice(voice_id)
+
+    assert cloned.status_code == 200
+    assert revised["creation_method"] == "instant_clone"
+    assert revised["provider_voice_id"] == "provider-instant-clone"
 
 
 def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):

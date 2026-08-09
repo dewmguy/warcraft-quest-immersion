@@ -418,6 +418,7 @@ class AlphaStore:
                     prompt TEXT NOT NULL,
                     preview_text TEXT NOT NULL,
                     model_id TEXT NOT NULL,
+                    creation_method TEXT NOT NULL DEFAULT 'legacy_unknown',
                     status TEXT NOT NULL DEFAULT 'candidate',
                     created_at TEXT NOT NULL
                 );
@@ -506,6 +507,14 @@ class AlphaStore:
         if "metadata_json" not in columns:
             connection.execute(
                 "ALTER TABLE dialogue_entries ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'"
+            )
+        preview_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(voice_previews)")
+        }
+        if "creation_method" not in preview_columns:
+            connection.execute(
+                "ALTER TABLE voice_previews ADD COLUMN creation_method TEXT NOT NULL "
+                "DEFAULT 'legacy_unknown'"
             )
 
     def _seed_baseline_voices(self, connection: sqlite3.Connection) -> None:
@@ -1653,8 +1662,7 @@ class AlphaStore:
                     "DELETE FROM voice_delivery_previews WHERE preview_id=?", (preview_id,)
                 )
                 remaining = connection.execute(
-                    "SELECT status FROM voice_delivery_previews "
-                    "WHERE voice_id=? AND delivery=?",
+                    "SELECT status FROM voice_delivery_previews WHERE voice_id=? AND delivery=?",
                     (row["voice_id"], row["delivery"]),
                 ).fetchall()
                 remaining_statuses = {item["status"] for item in remaining}
@@ -1983,10 +1991,8 @@ class AlphaStore:
             ).fetchone()
         if not row:
             raise AlphaError("Voice candidate was not found.")
-        if row["status"] == "selected":
-            raise AlphaError(
-                "The selected candidate is protected. Select another candidate to replace it."
-            )
+        selected = row["status"] == "selected"
+        current = self.get_voice(row["voice_id"]) if selected else None
         path = Path(row["storage_path"]).resolve()
         if self.storage_root not in path.parents:
             raise AlphaError("Voice candidate storage path is invalid.")
@@ -1994,14 +2000,36 @@ class AlphaStore:
         if path.is_file():
             path.replace(temporary_path)
         try:
+            if current:
+                self.update_voice(
+                    row["voice_id"],
+                    {
+                        "description": current["description"],
+                        "creation_method": current["creation_method"],
+                        "provider_voice_id": "",
+                        "model_id": current["model_id"],
+                    },
+                )
             with self.connect() as connection:
                 connection.execute("DELETE FROM voice_previews WHERE preview_id=?", (preview_id,))
         except Exception:
+            if current:
+                self.update_voice(
+                    row["voice_id"],
+                    {
+                        "description": current["description"],
+                        "creation_method": current["creation_method"],
+                        "provider_voice_id": current["provider_voice_id"] or "",
+                        "model_id": current["model_id"],
+                    },
+                )
             if temporary_path.is_file():
                 temporary_path.replace(path)
             raise
         temporary_path.unlink(missing_ok=True)
-        return self.get_voice(row["voice_id"])
+        revised = self.get_voice(row["voice_id"])
+        revised["deleted_selected_preview"] = selected
+        return revised
 
     def record_voice_previews(
         self,
@@ -2011,10 +2039,13 @@ class AlphaStore:
         preview_text: str,
         model_id: str,
         previews: list[dict[str, Any]],
+        creation_method: str = "legacy_unknown",
         replace_existing: bool = False,
     ) -> list[str]:
         if not previews:
             raise AlphaError("At least one generated voice candidate is required.")
+        if creation_method not in {"designed", "reference_design", "legacy_unknown"}:
+            raise AlphaError("Unknown Voice Design candidate method.")
         self.get_voice(voice_id)
         folder = self.storage_root / "voice-previews" / voice_id
         folder.mkdir(parents=True, exist_ok=True)
@@ -2039,8 +2070,10 @@ class AlphaStore:
                     path.write_bytes(content)
                     new_paths.append(path)
                     connection.execute(
-                        "INSERT INTO voice_previews VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                        "'candidate', ?)",
+                        "INSERT INTO voice_previews(preview_id, voice_id, generated_voice_id, "
+                        "storage_path, sha256, duration_seconds, prompt, preview_text, model_id, "
+                        "creation_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                        "?, 'candidate', ?)",
                         (
                             preview_id,
                             voice_id,
@@ -2051,6 +2084,7 @@ class AlphaStore:
                             prompt,
                             preview_text,
                             model_id,
+                            creation_method,
                             now,
                         ),
                     )
@@ -2108,7 +2142,11 @@ class AlphaStore:
             preview["voice_id"],
             {
                 "description": preview["description"],
-                "creation_method": current["creation_method"],
+                "creation_method": (
+                    preview["creation_method"]
+                    if preview["creation_method"] in {"designed", "reference_design"}
+                    else current["creation_method"]
+                ),
                 "provider_voice_id": provider_voice_id,
                 "model_id": "eleven_v3",
             },

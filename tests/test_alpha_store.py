@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,25 @@ def store(tmp_path: Path) -> AlphaStore:
 
 def _first_dialogue(store: AlphaStore) -> dict:
     return store.list_dialogue(page_size=10)["rows"][0]
+
+
+def test_initialize_adds_candidate_method_to_existing_alpha_database(tmp_path: Path):
+    database = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE voice_previews (preview_id TEXT PRIMARY KEY, voice_id TEXT NOT NULL, "
+            "generated_voice_id TEXT NOT NULL, storage_path TEXT NOT NULL, sha256 TEXT NOT NULL, "
+            "duration_seconds REAL, prompt TEXT NOT NULL, preview_text TEXT NOT NULL, "
+            "model_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'candidate', "
+            "created_at TEXT NOT NULL)"
+        )
+
+    legacy_store = AlphaStore(database, tmp_path / "storage")
+    legacy_store.initialize()
+    with legacy_store.connect() as connection:
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(voice_previews)")}
+
+    assert "creation_method" in columns
 
 
 def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore):
@@ -280,9 +300,7 @@ def test_voice_versions_only_change_on_delta_and_can_be_restored(store: AlphaSto
 
     assert unchanged["version_changed"] is False
     assert changed["version_number"] == current["version_number"] + 1
-    assert {"Voice description", "Creation method"}.issubset(
-        set(changed["versions"][0]["delta"])
-    )
+    assert {"Voice description", "Creation method"}.issubset(set(changed["versions"][0]["delta"]))
     assert restored["version_number"] == changed["version_number"] + 1
     assert restored["description"] == current["description"]
 
@@ -359,9 +377,7 @@ def test_voice_candidate_regeneration_replaces_files_only_after_new_set_is_ready
             previews=[],
             replace_existing=True,
         )
-    assert {item["preview_id"] for item in store.get_voice(voice_id)["previews"]} == set(
-        former_ids
-    )
+    assert {item["preview_id"] for item in store.get_voice(voice_id)["previews"]} == set(former_ids)
     assert all(path.is_file() for path in former_paths)
 
     replacement_ids = store.record_voice_previews(
@@ -553,9 +569,7 @@ def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
     second_path = store.delivery_preview_path(second["preview_id"])
 
     with_candidate = store.delete_delivery_preview(first["preview_id"])
-    angry = next(
-        item for item in with_candidate["delivery_presets"] if item["delivery"] == "angry"
-    )
+    angry = next(item for item in with_candidate["delivery_presets"] if item["delivery"] == "angry")
     assert angry["status"] == "previewed"
     assert [item["preview_id"] for item in angry["previews"]] == [second["preview_id"]]
     assert not first_path.exists()

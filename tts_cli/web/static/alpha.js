@@ -492,7 +492,6 @@ for (const input of document.querySelectorAll('input[type="range"]')) {
 const methodController = document.querySelector("[data-method-controller]");
 if (methodController) {
   const selector = methodController.querySelector('[name="creation_method"]');
-  const savedMethod = methodController.dataset.savedMethod;
   const promptContext = methodController.querySelector("[data-prompt-context]");
   const promptField = promptContext?.querySelector("textarea");
   const panels = [...document.querySelectorAll("[data-method-panel]")];
@@ -518,7 +517,7 @@ if (methodController) {
       panel.hidden = !active;
       for (const field of panel.querySelectorAll("input, select, textarea, button")) {
         if (field.tagName === "BUTTON") {
-          field.disabled = field.dataset.serverDisabled === "true" || selected !== savedMethod;
+          field.disabled = field.dataset.serverDisabled === "true" || !active;
         } else {
           field.disabled = !active;
         }
