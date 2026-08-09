@@ -69,8 +69,9 @@ function syncMeteringCard(element) {
   if (duration) duration.textContent = formatSeconds(estimate.seconds);
 }
 
-async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmText = "" }) {
-  if (paid && !window.confirm(confirmText || "This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
+async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmRequired = false, confirmText = "" }) {
+  const shouldConfirm = paid || confirmRequired;
+  if (shouldConfirm && !window.confirm(confirmText || "This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
   showAlphaMessage(paid ? "Sending the confirmed ElevenLabs request…" : "Saving…");
   const headers = { "X-WQI-Action": "confirmed" };
   if (paid) headers["X-WQI-Paid-Action"] = "confirmed";
@@ -112,6 +113,7 @@ for (const form of document.querySelectorAll("[data-upload-form]")) {
         method: "POST",
         body: new FormData(form),
       });
+      form.reset();
       showAlphaMessage(payload.message || "Uploaded.", "complete");
       window.setTimeout(() => window.location.reload(), 350);
     } catch (error) {
@@ -127,6 +129,7 @@ for (const button of document.querySelectorAll("[data-action]")) {
         url: button.dataset.url,
         method: button.dataset.method || "POST",
         paid: button.dataset.paid !== undefined,
+        confirmRequired: button.dataset.confirmRequired !== undefined,
         confirmText: paidConfirmation(button),
       });
       if (!payload) return;

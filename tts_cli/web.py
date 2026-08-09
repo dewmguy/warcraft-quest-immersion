@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -43,6 +44,7 @@ from tts_cli.alpha_store import (
     AlphaError,
     AlphaStore,
 )
+from tts_cli.audio_processing import AudioProcessingError, compress_reference_audio
 from tts_cli.config import load_settings
 from tts_cli.consts import GENDER_DICT, RACE_DICT
 from tts_cli.data_sources import REQUIRED_COLUMNS, DataSourceError, load_dialogue_csv
@@ -812,7 +814,17 @@ async def api_upload_reference_clip(
                     status_code=422,
                     detail="The selected reference batch exceeds 100 MB.",
                 )
-            pending.append((upload.filename or "reference-audio", content))
+            original_name = upload.filename or "reference-audio"
+            try:
+                compressed = await asyncio.to_thread(
+                    compress_reference_audio, content, original_name
+                )
+            except AudioProcessingError as error:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Could not prepare {original_name}: {error}",
+                ) from error
+            pending.append((original_name, compressed))
     finally:
         for upload in file:
             await upload.close()
@@ -842,6 +854,19 @@ def api_reference_clip_audio(
 ) -> FileResponse:
     try:
         return FileResponse(alpha_store.reference_path(clip_id))
+    except AlphaError as error:
+        raise _alpha_error(error, 404) from error
+
+
+@app.delete("/api/alpha/reference-clips/{clip_id}")
+def api_delete_reference_clip(
+    clip_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        voice = alpha_store.delete_reference_clip(clip_id)
+        return {"message": "Reference clip was deleted from local storage.", "voice": voice}
     except AlphaError as error:
         raise _alpha_error(error, 404) from error
 

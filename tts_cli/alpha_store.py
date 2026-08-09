@@ -1753,7 +1753,7 @@ class AlphaStore:
         clip_id = uuid.uuid4().hex
         folder = self.storage_root / "reference-clips" / voice_id
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"{clip_id}-{_safe_filename(original_name)}"
+        path = folder / f"{clip_id}.mp3"
         path.write_bytes(content)
         duration = _audio_duration(path)
         with self.connect() as connection:
@@ -1772,6 +1772,29 @@ class AlphaStore:
                 ),
             )
         return self.get_voice(voice_id)
+
+    def delete_reference_clip(self, clip_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT voice_id, storage_path FROM reference_clips WHERE clip_id=?", (clip_id,)
+            ).fetchone()
+        if not row:
+            raise AlphaError("Reference clip was not found.")
+        path = Path(row["storage_path"]).resolve()
+        if self.storage_root not in path.parents:
+            raise AlphaError("Reference clip storage path is invalid.")
+        temporary_path = path.with_name(f".{path.name}.deleting")
+        if path.is_file():
+            path.replace(temporary_path)
+        try:
+            with self.connect() as connection:
+                connection.execute("DELETE FROM reference_clips WHERE clip_id=?", (clip_id,))
+        except Exception:
+            if temporary_path.is_file():
+                temporary_path.replace(path)
+            raise
+        temporary_path.unlink(missing_ok=True)
+        return self.get_voice(row["voice_id"])
 
     def record_voice_previews(
         self,

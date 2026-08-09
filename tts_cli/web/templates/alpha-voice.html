@@ -45,11 +45,12 @@
     <section class="alpha-panel">
       <div class="panel-heading"><div><h2>Reference library</h2><p>Always available for comparison, preview, reference-guided design, or cloning.</p></div><span>{{ voice.clips|length }} clips</span></div>
       <form data-upload-form data-url="/api/alpha/voices/{{ voice.voice_id }}/reference-clips">
-        <label><span>Audio files</span><input type="file" name="file" accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac" multiple required><small>Select up to 20 MP3, WAV, M4A, OGG, or FLAC files. ElevenLabs recommends MP3 at 192 kbps or above, but clean single-speaker recording quality matters more than the codec.</small></label>
+        <label><span>Audio files</span><input type="file" name="file" accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac" multiple required><small>Select up to 20 MP3, WAV, M4A, OGG, or FLAC files. New clips are stored compactly as mono MP3 at 192 kbps; clean single-speaker recording quality still matters more than the source codec.</small></label>
         <label><span>Shared provenance</span><textarea name="provenance" rows="3" placeholder="Source, speaker, scene, and why these clips are representative" required></textarea><small>This note is applied to every file in the selected batch.</small></label>
         <button type="submit">Store selected clips</button>
       </form>
-      <div class="reference-list">{% for clip in voice.clips %}<article><audio controls preload="none" src="/api/alpha/reference-clips/{{ clip.clip_id }}/audio"></audio><div><strong>{{ clip.original_name }}</strong><span>{{ "%.2f"|format(clip.duration_seconds or 0) }} seconds</span><p>{{ clip.provenance }}</p></div></article>{% else %}<p class="empty-copy">No reference clips stored.</p>{% endfor %}</div>
+      <div class="reference-library-separator" role="separator"><span>Stored reference clips</span></div>
+      <div class="reference-list">{% for clip in voice.clips %}<article><audio controls preload="none" src="/api/alpha/reference-clips/{{ clip.clip_id }}/audio"></audio><div><strong>{{ clip.original_name }}</strong><span>{{ "%.2f"|format(clip.duration_seconds or 0) }} seconds · {{ 'stored MP3' if clip.storage_path.lower().endswith('.mp3') else 'legacy source format' }}</span><p>{{ clip.provenance }}</p></div><button type="button" class="secondary" data-action data-confirm-required data-confirm="Delete {{ clip.original_name }} from the local reference library? This does not affect an already-created ElevenLabs voice." data-url="/api/alpha/reference-clips/{{ clip.clip_id }}" data-method="DELETE">Delete</button></article>{% else %}<p class="empty-copy">No reference clips stored.</p>{% endfor %}</div>
     </section>
   </div>
 

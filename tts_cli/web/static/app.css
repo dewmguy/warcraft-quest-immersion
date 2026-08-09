@@ -357,7 +357,11 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preview-list small { color: #aaa0ad; }
 .delivery-preview-list button { justify-self: start; }
 .reference-list audio { width: 100%; }
-.reference-list article { grid-template-columns: minmax(230px, 340px) 1fr; }
+.reference-list article { grid-template-columns: minmax(230px, 340px) 1fr auto; }
+.reference-library-separator { display: flex; align-items: center; gap: 12px; margin: 24px 0 14px; color: #9f98a4; font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.reference-library-separator::before, .reference-library-separator::after { content: ""; height: 1px; background: #49434f; }
+.reference-library-separator::before { width: 24px; }
+.reference-library-separator::after { flex: 1; }
 .detailed-versions { padding: 0; list-style: none; }
 .detailed-versions li { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; border-bottom: 1px solid #302c33; padding: 11px 0; }
 .detailed-versions li > div { display: grid; gap: 3px; }
