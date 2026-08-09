@@ -369,7 +369,10 @@ dialog .actions { justify-content: flex-end; }
 .reference-clip-chevron { color: #8f8793; font-size: .68rem; text-align: center; transition: transform .16s ease; }
 .reference-clip[open] .reference-clip-chevron { transform: rotate(180deg); }
 .reference-clip-body { display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; gap: 6px 8px; border-top: 1px solid #302c33; padding: 7px 8px 8px; background: #111014; }
-.reference-clip-body audio { width: 100%; height: 30px; }
+.reference-player { display: grid; grid-template-columns: 28px minmax(70px, 1fr) auto; align-items: center; gap: 7px; min-width: 0; }
+.alpha-body .reference-player-toggle { width: 28px; min-height: 28px; border-color: #66542e; padding: 0; background: #2b2417; color: #e4c777; font-size: .72rem; }
+.reference-player-progress { width: 100%; height: 16px; min-width: 0; margin: 0; accent-color: #c99d43; cursor: pointer; }
+.reference-player-time { min-width: 65px; color: #aaa3ad; font-size: .68rem; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .alpha-body .icon-button { width: 30px; min-height: 30px; padding: 0; }
 .reference-delete { color: #d78787 !important; border-color: #704446 !important; }
 .reference-clip-provenance { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; color: #8f8793; font-size: .7rem; }

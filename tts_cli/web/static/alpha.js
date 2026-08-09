@@ -124,14 +124,60 @@ for (const form of document.querySelectorAll("[data-upload-form]")) {
 
 const referenceClips = [...document.querySelectorAll(".reference-clip")];
 
+function formatAudioTime(seconds) {
+  const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = Math.floor(safeSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainder}`;
+}
+
+function syncReferencePlayer(clip) {
+  const audio = clip.querySelector("audio");
+  const button = clip.querySelector("[data-audio-toggle]");
+  const progress = clip.querySelector("[data-audio-progress]");
+  const time = clip.querySelector("[data-audio-time]");
+  if (!audio || !button || !progress || !time) return;
+  const fallbackDuration = Number(clip.dataset.duration) || 0;
+  const duration = Number.isFinite(audio.duration) ? audio.duration : fallbackDuration;
+  const currentTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+  const playing = !audio.paused && !audio.ended;
+  progress.max = String(duration);
+  progress.value = String(Math.min(currentTime, duration));
+  time.textContent = `${formatAudioTime(currentTime)} / ${formatAudioTime(duration)}`;
+  button.ariaPressed = String(playing);
+  button.ariaLabel = `${playing ? "Pause" : "Play"} ${clip.dataset.clipName}`;
+  const icon = button.querySelector("i");
+  if (icon) icon.className = `fa-solid ${playing ? "fa-pause" : "fa-play"}`;
+}
+
 function resetReferenceAudio(clip) {
   const audio = clip.querySelector("audio");
   if (!audio) return;
   audio.pause();
   if (audio.currentTime !== 0) audio.currentTime = 0;
+  syncReferencePlayer(clip);
 }
 
 for (const clip of referenceClips) {
+  const audio = clip.querySelector("audio");
+  const toggle = clip.querySelector("[data-audio-toggle]");
+  const progress = clip.querySelector("[data-audio-progress]");
+  if (!audio || !toggle || !progress) continue;
+  for (const eventName of ["loadedmetadata", "timeupdate", "play", "pause"]) {
+    audio.addEventListener(eventName, () => syncReferencePlayer(clip));
+  }
+  audio.addEventListener("ended", () => resetReferenceAudio(clip));
+  toggle.addEventListener("click", () => {
+    if (audio.paused) {
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  });
+  progress.addEventListener("input", () => {
+    audio.currentTime = Number(progress.value);
+    syncReferencePlayer(clip);
+  });
   clip.addEventListener("toggle", () => {
     if (!clip.open) {
       resetReferenceAudio(clip);
@@ -142,13 +188,12 @@ for (const clip of referenceClips) {
       resetReferenceAudio(otherClip);
       otherClip.open = false;
     }
-    const audio = clip.querySelector("audio");
-    if (!audio) return;
     if (audio.currentTime !== 0) audio.currentTime = 0;
     audio.play().catch(() => {
       // Browsers may still require the visible play control under strict autoplay policies.
     });
   });
+  syncReferencePlayer(clip);
 }
 
 for (const button of document.querySelectorAll("[data-action]")) {

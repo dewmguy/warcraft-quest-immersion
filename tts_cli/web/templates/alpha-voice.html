@@ -51,14 +51,19 @@
       </form>
       <div class="reference-library-separator" role="separator"><span>Stored reference clips</span></div>
       <div class="reference-list">{% for clip in voice.clips %}
-        <details class="reference-clip">
+        <details class="reference-clip" data-clip-name="{{ clip.original_name }}" data-duration="{{ clip.duration_seconds or 0 }}">
           <summary>
             <span class="reference-clip-icon" aria-hidden="true"><i class="fa-solid fa-file-audio"></i></span>
             <span class="reference-clip-summary"><strong title="{{ clip.original_name }}">{{ clip.original_name }}</strong><small>{{ "%.2f"|format(clip.duration_seconds or 0) }} sec · {{ clip.storage_path.rsplit('.', 1)[-1] | upper }}</small></span>
             <span class="reference-clip-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
           </summary>
           <div class="reference-clip-body">
-            <audio controls preload="none" src="/api/alpha/reference-clips/{{ clip.clip_id }}/audio"></audio>
+            <div class="reference-player" data-reference-player>
+              <button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play {{ clip.original_name }}" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button>
+              <input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ clip.duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for {{ clip.original_name }}">
+              <span class="reference-player-time" data-audio-time>0:00 / 0:00</span>
+            </div>
+            <audio hidden preload="metadata" src="/api/alpha/reference-clips/{{ clip.clip_id }}/audio"></audio>
             <button type="button" class="secondary icon-button reference-delete" title="Delete {{ clip.original_name }}" aria-label="Delete {{ clip.original_name }}" data-action data-confirm-required data-confirm="Delete {{ clip.original_name }} from the local reference library? This does not affect an already-created ElevenLabs voice." data-url="/api/alpha/reference-clips/{{ clip.clip_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
             <div class="reference-clip-provenance"><span><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Provenance</span><p>{{ clip.provenance }}</p></div>
           </div>

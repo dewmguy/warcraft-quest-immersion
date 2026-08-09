@@ -192,6 +192,10 @@ def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
     assert stored_content == {b"first-audio", b"second-audio"}
     assert page.text.count('class="reference-clip"') == 2
     assert 'class="fa-solid fa-trash-can"' in page.text
+    assert page.text.count("data-reference-player") == 2
+    assert page.text.count("data-audio-toggle") == 2
+    assert page.text.count("data-audio-progress") == 2
+    assert page.text.count("<audio hidden") == 2
     assert deleted.status_code == 200
     assert deleted.json()["message"] == "Reference clip was deleted from local storage."
     assert not deleted_path.exists()
@@ -206,6 +210,8 @@ def test_reference_library_script_uses_single_playing_clip_accordion():
     assert "otherClip.open = false" in script
     assert "audio.play()" in script
     assert "audio.pause()" in script
+    assert "syncReferencePlayer" in script
+    assert 'progress.addEventListener("input"' in script
 
 
 def test_actionable_statuses_link_to_the_work_that_resolves_them(monkeypatch):
