@@ -343,7 +343,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert "<audio controls" not in page.text
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
     assert (
-        ".alpha-body .delivery-sample-approve, .alpha-body .delivery-preview-delete { "
+        ".alpha-body .delivery-sample-approve, .alpha-body .delivery-preview-delete.secondary { "
         "flex: 0 0 30px; border-color: #66542e; background: #100f12; "
         "color: var(--gold-bright); }" in stylesheet
     )

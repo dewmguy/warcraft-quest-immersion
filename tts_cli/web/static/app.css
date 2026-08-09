@@ -435,7 +435,7 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preview-list button { justify-self: start; }
 .delivery-preview-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .delivery-preview-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
-.alpha-body .delivery-sample-approve, .alpha-body .delivery-preview-delete { flex: 0 0 30px; border-color: #66542e; background: #100f12; color: var(--gold-bright); }
+.alpha-body .delivery-sample-approve, .alpha-body .delivery-preview-delete.secondary { flex: 0 0 30px; border-color: #66542e; background: #100f12; color: var(--gold-bright); }
 .alpha-body .delivery-sample-approve:hover, .alpha-body .delivery-sample-approve:focus-visible { border-color: var(--success); background: var(--success); color: #100f12; filter: none; }
 .alpha-body .delivery-preview-delete:hover, .alpha-body .delivery-preview-delete:focus-visible { border-color: var(--danger); background: var(--danger); color: #100f12; filter: none; }
 .reference-list { gap: 5px; }
