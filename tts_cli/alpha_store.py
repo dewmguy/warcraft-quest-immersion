@@ -1571,6 +1571,51 @@ class AlphaStore:
             raise AlphaError("Delivery preview file is unavailable.")
         return path
 
+    def delete_delivery_preview(self, preview_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT voice_id, delivery, storage_path FROM voice_delivery_previews "
+                "WHERE preview_id=?",
+                (preview_id,),
+            ).fetchone()
+        if not row:
+            raise AlphaError("Delivery preview was not found.")
+        path = Path(row["storage_path"]).resolve()
+        if self.storage_root not in path.parents:
+            raise AlphaError("Delivery preview storage path is invalid.")
+        temporary_path = path.with_name(f".{path.name}.deleting")
+        if path.is_file():
+            path.replace(temporary_path)
+        try:
+            with self.connect() as connection:
+                connection.execute(
+                    "DELETE FROM voice_delivery_previews WHERE preview_id=?", (preview_id,)
+                )
+                remaining = connection.execute(
+                    "SELECT status FROM voice_delivery_previews "
+                    "WHERE voice_id=? AND delivery=?",
+                    (row["voice_id"], row["delivery"]),
+                ).fetchall()
+                remaining_statuses = {item["status"] for item in remaining}
+                preset_status = (
+                    "approved"
+                    if "approved" in remaining_statuses
+                    else "previewed"
+                    if remaining_statuses
+                    else "not_tested"
+                )
+                connection.execute(
+                    "UPDATE voice_delivery_presets SET status=?, updated_at=? "
+                    "WHERE voice_id=? AND delivery=?",
+                    (preset_status, utc_now(), row["voice_id"], row["delivery"]),
+                )
+        except Exception:
+            if temporary_path.is_file():
+                temporary_path.replace(path)
+            raise
+        temporary_path.unlink(missing_ok=True)
+        return self.get_voice(row["voice_id"])
+
     def restore_voice_version(self, voice_id: str, version_id: int) -> dict[str, Any]:
         with self.connect() as connection:
             row = connection.execute(

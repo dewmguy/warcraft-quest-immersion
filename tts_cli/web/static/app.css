@@ -414,6 +414,9 @@ dialog .actions { justify-content: flex-end; }
 .delivery-player { width: 100%; }
 .delivery-preview-list small { color: #aaa0ad; }
 .delivery-preview-list button { justify-self: start; }
+.delivery-preview-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.delivery-preview-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.alpha-body .delivery-preview-delete { flex: 0 0 30px; color: #d78787; border-color: #704446; }
 .reference-list { gap: 5px; }
 .reference-clip { overflow: hidden; border: 1px solid #39343d; border-radius: 6px; background: #151318; }
 .reference-clip summary { display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; align-items: center; gap: 7px; min-height: 38px; padding: 5px 8px; cursor: pointer; list-style: none; }

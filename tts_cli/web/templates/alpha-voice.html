@@ -146,14 +146,14 @@
         <div class="metering-preview compact"><span><strong data-estimate-characters>--</strong> chars</span><span><strong data-estimate-dollars>--</strong></span><span><strong data-estimate-duration>--</strong></span></div>
         <button type="submit" {% if not provider_configured or not voice.provider_voice_id %}disabled{% endif %}>{{ 'Generate another comparison' if preset.previews else 'Generate one comparison' }}</button>
       </form>
-      <div class="delivery-preview-list">{% for preview in preset.previews[:2] %}<div>
+      <div class="delivery-preview-list">{% for preview in preset.previews %}<div>
         <div class="reference-player delivery-player" data-compact-audio data-audio-name="{{ preset.delivery | title }} comparison {{ loop.index }}" data-duration="{{ preview.duration_seconds or 0 }}">
           <button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play {{ preset.delivery }} comparison {{ loop.index }}" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button>
           <input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ preview.duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for {{ preset.delivery }} comparison {{ loop.index }}">
           <span class="reference-player-time" data-audio-time>0:00 / 0:00</span>
           <audio hidden preload="metadata" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio>
         </div>
-        <small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} metered chars{% endif %}</small>{% if preview.status == 'candidate' %}<button type="button" data-action data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST">Approve</button>{% endif %}</div>{% endfor %}</div>
+        <div class="delivery-preview-footer"><small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} metered chars{% endif %}</small><div class="delivery-preview-actions">{% if preview.status == 'candidate' %}<button type="button" data-action data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST">Approve</button>{% endif %}<button type="button" class="secondary icon-button delivery-preview-delete" title="Delete {{ preset.delivery }} comparison {{ loop.index }}" aria-label="Delete {{ preset.delivery }} comparison {{ loop.index }}" data-action data-confirm-required data-confirm="Permanently delete this {{ preset.delivery }} comparison from local storage?{% if preview.status == 'approved' %} This will remove its approval; approve another take when you are satisfied.{% endif %} ElevenLabs usage cannot be refunded." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div></div></div>{% endfor %}</div>
       </div>
     </article>{% endfor %}</div>
     <p class="form-help">Approving a comparison approves these delivery settings for future dialogue. It does not create another reusable voice.</p>

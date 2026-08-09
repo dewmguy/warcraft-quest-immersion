@@ -433,6 +433,65 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
     assert store.progress()["voices"]["complete"] == 1
 
 
+def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
+    store: AlphaStore, monkeypatch: pytest.MonkeyPatch
+):
+    voice_id = "baseline--bloodelf-female"
+    voice = store.get_voice(voice_id)
+    store.update_voice(
+        voice_id,
+        {
+            "description": voice["description"],
+            "creation_method": "external",
+            "provider_voice_id": "provider-voice-test",
+            "status": "active",
+        },
+    )
+    sample_text = (
+        "The road ahead is dangerous, but our purpose remains clear. Stay close, listen "
+        "carefully, and remember why we began this journey."
+    )
+    request = store.delivery_preview_request(voice_id, "angry", sample_text)
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
+    first = store.record_delivery_preview(
+        voice_id,
+        "angry",
+        request,
+        content=b"first-delivery-audio",
+        provider_request_id="request-first",
+        subscription={},
+    )
+    store.approve_delivery_preview(first["preview_id"])
+    second = store.record_delivery_preview(
+        voice_id,
+        "angry",
+        request,
+        content=b"second-delivery-audio",
+        provider_request_id="request-second",
+        subscription={},
+    )
+    first_path = store.delivery_preview_path(first["preview_id"])
+    second_path = store.delivery_preview_path(second["preview_id"])
+
+    with_candidate = store.delete_delivery_preview(first["preview_id"])
+    angry = next(
+        item for item in with_candidate["delivery_presets"] if item["delivery"] == "angry"
+    )
+    assert angry["status"] == "previewed"
+    assert [item["preview_id"] for item in angry["previews"]] == [second["preview_id"]]
+    assert not first_path.exists()
+
+    without_previews = store.delete_delivery_preview(second["preview_id"])
+    angry = next(
+        item for item in without_previews["delivery_presets"] if item["delivery"] == "angry"
+    )
+    assert angry["status"] == "not_tested"
+    assert angry["previews"] == []
+    assert not second_path.exists()
+    with pytest.raises(AlphaError, match="Delivery preview was not found"):
+        store.delete_delivery_preview(second["preview_id"])
+
+
 def test_filters_isolate_work_by_status_and_content(store: AlphaStore):
     row = _first_dialogue(store)
     store.prepare_spoken_text(row["dialogue_id"])

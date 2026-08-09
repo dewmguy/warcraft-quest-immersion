@@ -269,7 +269,21 @@ def test_delivery_comparisons_use_the_compact_custom_player(monkeypatch):
             provider_request_id="delivery-request-test",
             subscription={"request_character_cost": 80},
         )
+        for index in range(2):
+            web.alpha_store.record_delivery_preview(
+                voice_id,
+                "neutral",
+                request,
+                content=f"additional-delivery-audio-{index}".encode(),
+                provider_request_id=f"additional-delivery-request-{index}",
+                subscription={"request_character_cost": 80},
+            )
+        preview_path = web.alpha_store.delivery_preview_path(preview["preview_id"])
         page = client.get(f"/alpha/voices/{voice_id}")
+        deleted = client.delete(
+            f"/api/alpha/delivery-previews/{preview['preview_id']}",
+            headers={"X-WQI-Action": "confirmed"},
+        )
 
     assert page.status_code == 200
     assert 'class="reference-player delivery-player"' in page.text
@@ -278,7 +292,14 @@ def test_delivery_comparisons_use_the_compact_custom_player(monkeypatch):
         f'<audio hidden preload="metadata" src="/api/alpha/delivery-previews/{preview["preview_id"]}/audio">'
         in page.text
     )
+    assert f'data-url="/api/alpha/delivery-previews/{preview["preview_id"]}"' in page.text
+    assert page.text.count('class="secondary icon-button delivery-preview-delete"') == 3
+    assert page.text.count('class="reference-player delivery-player"') == 3
+    assert "ElevenLabs usage cannot be refunded" in page.text
     assert "<audio controls" not in page.text
+    assert deleted.status_code == 200
+    assert deleted.json()["message"] == "Delivery comparison was deleted from local storage."
+    assert not preview_path.exists()
 
 
 def test_paid_confirmation_includes_candidate_replacement_warning():

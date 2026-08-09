@@ -747,6 +747,22 @@ def api_approve_delivery_preview(
         raise _alpha_error(error) from error
 
 
+@app.delete("/api/alpha/delivery-previews/{preview_id}")
+def api_delete_delivery_preview(
+    preview_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        voice = alpha_store.delete_delivery_preview(preview_id)
+        return {
+            "message": "Delivery comparison was deleted from local storage.",
+            "voice": voice,
+        }
+    except AlphaError as error:
+        raise _alpha_error(error, 404) from error
+
+
 @app.get("/api/alpha/delivery-previews/{preview_id}/audio")
 def api_delivery_preview_audio(
     preview_id: str,
