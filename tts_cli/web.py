@@ -38,6 +38,7 @@ from tts_cli.alpha_store import (
     AFFILIATION_OPTIONS,
     DELIVERIES,
     IMPORTANCE_SCORES,
+    MAX_REFERENCE_BYTES,
     ROLE_OPTIONS,
     AlphaError,
     AlphaStore,
@@ -58,6 +59,9 @@ SOURCE_DIR = DATA_DIR / "sources"
 ALPHA_DIR = DATA_DIR / "alpha"
 ALPHA_DB_PATH = ALPHA_DIR / "production.sqlite3"
 MAX_UPLOAD_BYTES = int(os.getenv("WQI_MAX_UPLOAD_BYTES", str(1024 * 1024 * 1024)))
+MAX_REFERENCE_FILES = 20
+MAX_REFERENCE_BATCH_BYTES = 100 * 1024 * 1024
+REFERENCE_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac"}
 
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wqi-generator")
 job_lock = Lock()
@@ -769,29 +773,64 @@ async def api_upload_reference_clip(
     voice_id: str,
     _: Annotated[str, Depends(require_auth)],
     __: Annotated[None, Depends(require_action_header)],
-    file: Annotated[UploadFile, File()],
+    file: Annotated[list[UploadFile], File()],
     provenance: Annotated[str, Form()] = "",
 ) -> dict:
-    suffix = Path(file.filename or "").suffix.lower()
-    if not (file.content_type or "").startswith("audio/") and suffix not in {
-        ".mp3",
-        ".wav",
-        ".m4a",
-        ".ogg",
-        ".flac",
-    }:
-        raise HTTPException(status_code=422, detail="Upload a recognized audio file.")
-    content = await file.read()
-    await file.close()
-    try:
-        voice = alpha_store.save_reference_clip(
-            voice_id,
-            original_name=file.filename or "reference-audio",
-            content=content,
-            provenance=provenance,
-            provider_eligible=True,
+    if not file:
+        raise HTTPException(status_code=422, detail="Select at least one reference audio file.")
+    if len(file) > MAX_REFERENCE_FILES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Upload no more than {MAX_REFERENCE_FILES} reference files at once.",
         )
-        return {"message": "Reference audio was stored outside Git.", "voice": voice}
+    invalid_names = [
+        upload.filename or "unnamed file"
+        for upload in file
+        if Path(upload.filename or "").suffix.lower() not in REFERENCE_AUDIO_EXTENSIONS
+    ]
+    if invalid_names:
+        supported = ", ".join(
+            sorted(extension[1:].upper() for extension in REFERENCE_AUDIO_EXTENSIONS)
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported reference file: {invalid_names[0]}. Use {supported}.",
+        )
+    pending: list[tuple[str, bytes]] = []
+    total_size = 0
+    try:
+        for upload in file:
+            content = await upload.read(MAX_REFERENCE_BYTES + 1)
+            if not content or len(content) > MAX_REFERENCE_BYTES:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{upload.filename or 'A reference file'} must contain 1 byte–50 MB.",
+                )
+            total_size += len(content)
+            if total_size > MAX_REFERENCE_BATCH_BYTES:
+                raise HTTPException(
+                    status_code=422,
+                    detail="The selected reference batch exceeds 100 MB.",
+                )
+            pending.append((upload.filename or "reference-audio", content))
+    finally:
+        for upload in file:
+            await upload.close()
+    try:
+        voice = None
+        for original_name, content in pending:
+            voice = alpha_store.save_reference_clip(
+                voice_id,
+                original_name=original_name,
+                content=content,
+                provenance=provenance,
+                provider_eligible=True,
+            )
+        count = len(pending)
+        return {
+            "message": f"Stored {count} reference {'clip' if count == 1 else 'clips'} outside Git.",
+            "voice": voice,
+        }
     except AlphaError as error:
         raise _alpha_error(error) from error
 

@@ -155,6 +155,29 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert 'type="range"' in page.text
     assert 'href="#provider-creation"' in page.text
     assert 'id="provider-creation"' in page.text
+    assert "multiple" in page.text
+    assert "MP3, WAV, M4A, OGG, or FLAC" in page.text
+
+
+def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        voice_id = web.alpha_store.list_voices("baseline")[0]["voice_id"]
+        response = client.post(
+            f"/api/alpha/voices/{voice_id}/reference-clips",
+            headers={"X-WQI-Action": "confirmed"},
+            data={"provenance": "Two clean test excerpts from the same speaker."},
+            files=[
+                ("file", ("sample-one.mp3", b"first-audio", "audio/mpeg")),
+                ("file", ("sample-two.wav", b"second-audio", "audio/wav")),
+            ],
+        )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Stored 2 reference clips outside Git."
+    clips = web.alpha_store.get_voice(voice_id)["clips"]
+    assert {clip["original_name"] for clip in clips} == {"sample-one.mp3", "sample-two.wav"}
+    assert all(clip["provenance"].startswith("Two clean") for clip in clips)
 
 
 def test_actionable_statuses_link_to_the_work_that_resolves_them(monkeypatch):

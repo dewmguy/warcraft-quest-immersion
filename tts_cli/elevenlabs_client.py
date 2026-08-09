@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -161,7 +162,8 @@ class ElevenLabsClient:
             for path in files:
                 handle = path.open("rb")
                 opened_files.append(handle)
-                multipart_files.append(("files", (path.name, handle, "audio/mpeg")))
+                content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+                multipart_files.append(("files", (path.name, handle, content_type)))
             response = self.session.post(
                 f"{self.base_url}/v1/voices/add",
                 headers=self._headers(),

@@ -79,3 +79,26 @@ def test_voice_design_exposes_provider_cost_metadata():
     assert result.request_id == "request-1"
     assert result.character_cost == 19
     assert session.calls[0][1].endswith("/v1/text-to-voice/design")
+
+
+def test_voice_clone_preserves_each_reference_files_mime_type(tmp_path):
+    mp3 = tmp_path / "speaker-one.mp3"
+    wav = tmp_path / "speaker-two.wav"
+    mp3.write_bytes(b"mp3")
+    wav.write_bytes(b"wav")
+    session = FakeSession()
+    client = ElevenLabsClient(
+        settings=Settings(elevenlabs_api_key="test-key"),
+        session=session,
+    )
+
+    client.clone_voice(
+        name="Test voice",
+        description="A controlled test voice.",
+        labels={"language": "en"},
+        files=[mp3, wav],
+    )
+
+    multipart = session.calls[0][2]["files"]
+    assert multipart[0][1][2] == "audio/mpeg"
+    assert multipart[1][1][2] in {"audio/wav", "audio/x-wav"}
