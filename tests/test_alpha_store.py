@@ -411,6 +411,7 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
     request = store.delivery_preview_request(voice["voice_id"], "angry", sample_text)
     assert request["text"].startswith("[angry]")
     assert request["voice_settings"] == {"stability": 0.0}
+    assert "notes" not in request
     assert store.progress()["voices"]["complete"] == 0
 
     monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)

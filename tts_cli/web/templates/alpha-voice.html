@@ -4,6 +4,14 @@
 {% block content %}
   {% set selected_previews = voice.previews | selectattr('status', 'equalto', 'selected') | list %}
   {% set replaceable_previews = voice.previews | rejectattr('status', 'equalto', 'selected') | list %}
+  {% set delivery_sample_text = "The road ahead is dangerous, but our purpose remains clear. Stay close, listen carefully, and remember why we began this journey. Whatever waits beyond the pass, we will face it together and return with the truth." %}
+  {% set delivery_guidance = {
+    'neutral': 'No emotional direction. Confirms that the reusable voice still sounds right in the production speech model.',
+    'angry': 'Tests whether the same voice can express anger without losing its identity or becoming distorted.',
+    'sorrowful': 'Tests a restrained sad delivery suitable for loss, regret, and somber quest moments.',
+    'joyful': 'Tests warmth and positive energy without turning the character into a different persona.',
+    'proclaiming': 'Tests a projected public-address delivery for warnings, orders, ceremonies, and declarations.'
+  } %}
   <nav class="breadcrumbs"><a href="/alpha/voices">Voices</a><span>›</span><span>{{ voice.name }}</span></nav>
   <section class="alpha-page-heading record-heading">
     <div><span class="alpha-kicker">{{ voice.scope | title }} voice profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} dialogue records · {{ voice.missing_dialogue_count }} missing audio</p></div>
@@ -31,14 +39,17 @@
         <label><span>Lifecycle status</span><select name="status">{% for value in ['draft','candidate','active','retired'] %}<option value="{{ value }}" {% if voice.status == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></label>
         {% if voice.provider_voice_id %}<div class="provider-id-card"><span>Reusable ElevenLabs voice</span><strong>Connected</strong><code>{{ voice.provider_voice_id }}</code></div>{% endif %}
         <fieldset class="voice-settings" data-tts-model="{{ app_settings.tts_model_id }}"><legend>Speech behavior · {{ 'Eleven v3' if app_settings.tts_model_id == 'eleven_v3' else 'Multilingual v2' }}</legend>
-          <label><span>Stability <output data-range-output>{{ voice.settings.get('stability', 0.5) }}</output></span><input type="range" name="stability" min="0" max="1" step="0.5" value="{{ voice.settings.get('stability', 0.5) }}"></label>
-          <div data-v2-settings {% if app_settings.tts_model_id == 'eleven_v3' %}hidden{% endif %}>
+          {% if app_settings.tts_model_id == 'eleven_v3' %}
+          <small>Eleven v3 stability is saved per delivery preset below because it changes how strongly each emotional direction is performed.</small>
+          {% else %}
+          <label><span>Stability <output data-range-output>{{ voice.settings.get('stability', 0.5) }}</output></span><input type="range" name="stability" min="0" max="1" step="0.01" value="{{ voice.settings.get('stability', 0.5) }}"></label>
+          <div data-v2-settings>
             <label><span>Similarity <output data-range-output>{{ voice.settings.get('similarity_boost', 0.75) }}</output></span><input type="range" name="similarity_boost" min="0" max="1" step="0.01" value="{{ voice.settings.get('similarity_boost', 0.75) }}" {% if app_settings.tts_model_id == 'eleven_v3' %}disabled{% endif %}></label>
             <label><span>Style exaggeration <output data-range-output>{{ voice.settings.get('style', 0) }}</output></span><input type="range" name="style" min="0" max="1" step="0.01" value="{{ voice.settings.get('style', 0) }}" {% if app_settings.tts_model_id == 'eleven_v3' %}disabled{% endif %}></label>
             <label><span>Speed <output data-range-output>{{ voice.settings.get('speed', 1) }}</output></span><input type="range" name="speed" min="0.7" max="1.2" step="0.01" value="{{ voice.settings.get('speed', 1) }}" {% if app_settings.tts_model_id == 'eleven_v3' %}disabled{% endif %}></label>
             <label class="check-row"><input type="checkbox" name="use_speaker_boost" {% if voice.settings.get('use_speaker_boost', True) %}checked{% endif %} {% if app_settings.tts_model_id == 'eleven_v3' %}disabled{% endif %}><span>Use speaker boost</span></label>
           </div>
-          {% if app_settings.tts_model_id == 'eleven_v3' %}<small>Creative 0 · Natural 0.5 · Robust 1. Similarity, style, numeric speed, and speaker boost are unavailable in Eleven v3.</small>{% endif %}
+          {% endif %}
         </fieldset>
         <button type="submit">Save changed voice settings</button>
       </form>
@@ -107,23 +118,33 @@
   </section>
 
   <section class="alpha-panel">
-    <div class="panel-heading"><div><span class="panel-step">Race / gender delivery</span><h2>Delivery presets</h2><p>One reusable voice profile, with reviewed Eleven v3 audio tags and stability for each baseline emotion.</p></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div>
+    <div class="panel-heading"><div><span class="panel-step">Race / gender delivery</span><h2>Delivery presets</h2><p>The selected candidate defines who is speaking. These presets verify how that same reusable voice performs common quest emotions.</p></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div>
+    <div class="delivery-preset-explainer">
+      <div><strong>One comparison per paid click</strong><span>Listen, adjust if necessary, then approve. Generate another take only when the first is not usable.</span></div>
+      <details><summary>Fixed comparison script</summary><blockquote>{{ delivery_sample_text }}</blockquote></details>
+    </div>
     <div class="delivery-preset-grid">{% for preset in voice.delivery_presets %}<article class="delivery-preset-card">
-      <div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}">{{ preset.status | replace('_',' ') | title }}</span></div>
-      <form data-json-form data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}" data-method="PATCH">
-        <label><span>Eleven v3 audio tag</span><input name="prompt_tag" value="{{ preset.prompt_tag }}" placeholder="No tag for neutral"></label>
-        <label><span>Stability <output data-range-output>{{ preset.stability }}</output></span><input name="stability" type="range" min="0" max="1" step="0.5" value="{{ preset.stability }}"></label>
-        <label><span>Notes</span><textarea name="notes" rows="2">{{ preset.notes }}</textarea></label>
-        <button type="submit">Save metadata</button>
+      <header class="delivery-preset-heading"><div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}">{{ preset.status | replace('_',' ') | title }}</span></div><p>{{ delivery_guidance[preset.delivery] }}</p></header>
+      <form class="delivery-preset-settings" data-json-form data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}" data-method="PATCH">
+        <label><span>Eleven v3 direction{% if preset.delivery == 'neutral' %} · optional{% endif %}</span><input name="prompt_tag" value="{{ preset.prompt_tag }}" maxlength="80" placeholder="{{ 'No tag — baseline delivery' if preset.delivery == 'neutral' else '[emotional direction]' }}"><small>Sent in brackets immediately before the spoken text. It guides delivery but is not a guaranteed standardized preset.</small></label>
+        <label><span>Performance consistency</span><select name="stability">
+          <option value="0" {% if preset.stability == 0 %}selected{% endif %}>Creative · expressive, least predictable</option>
+          <option value="0.5" {% if preset.stability == 0.5 %}selected{% endif %}>Natural · balanced and closest to the voice</option>
+          <option value="1" {% if preset.stability == 1 %}selected{% endif %}>Robust · consistent, least responsive to direction</option>
+        </select><small>Creative follows emotion more strongly; Robust prioritizes consistency. Natural is the recommended starting point.</small></label>
+        <label><span>Review notes · local only</span><textarea name="notes" rows="2" placeholder="What worked, failed, or needs another take">{{ preset.notes }}</textarea><small>Saved for your review history. Never sent to ElevenLabs.</small></label>
+        <button type="submit">Save preset settings</button>
       </form>
+      <div class="delivery-preset-review">
       <form data-json-form data-paid data-provider-operation="Generating a delivery comparison" data-metering="speech" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form">
-        <input type="hidden" name="sample_text" data-metered-text value="The road ahead is dangerous, but our purpose remains clear. Stay close, listen carefully, and remember why we began this journey. Whatever waits beyond the pass, we will face it together and return with the truth.">
+        <input type="hidden" name="sample_text" data-metered-text value="{{ delivery_sample_text }}">
         <div class="metering-preview compact"><span><strong data-estimate-characters>--</strong> chars</span><span><strong data-estimate-dollars>--</strong></span><span><strong data-estimate-duration>--</strong></span></div>
-        <button type="submit" {% if not provider_configured or not voice.provider_voice_id %}disabled{% endif %}>Generate comparison</button>
+        <button type="submit" {% if not provider_configured or not voice.provider_voice_id %}disabled{% endif %}>{{ 'Generate another comparison' if preset.previews else 'Generate one comparison' }}</button>
       </form>
       <div class="delivery-preview-list">{% for preview in preset.previews[:2] %}<div><audio controls preload="none" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio><small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} metered chars{% endif %}</small>{% if preview.status == 'candidate' %}<button type="button" data-action data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST">Approve</button>{% endif %}</div>{% endfor %}</div>
+      </div>
     </article>{% endfor %}</div>
-    <p class="form-help">These are five delivery presets for one reusable voice—not five cloned voices. Each preset advances only after an exact generated comparison is approved.</p>
+    <p class="form-help">Approving a comparison approves these delivery settings for future dialogue. It does not create another reusable voice.</p>
   </section>
 
   <div class="record-grid">

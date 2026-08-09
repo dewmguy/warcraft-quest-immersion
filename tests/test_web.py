@@ -174,6 +174,15 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Reference-guided Voice Design" in page.text
     assert "Instant Voice Clone" in page.text
     assert "Delivery presets" in page.text
+    assert "selected candidate defines who is speaking" in page.text
+    assert "One comparison per paid click" in page.text
+    assert "Review notes · local only" in page.text
+    assert "Never sent to ElevenLabs" in page.text
+    assert "Creative · expressive, least predictable" in page.text
+    assert "Natural · balanced and closest to the voice" in page.text
+    assert "Robust · consistent, least responsive to direction" in page.text
+    assert "Save preset settings" in page.text
+    assert "Generate one comparison" in page.text
     assert 'type="range"' in page.text
     assert 'href="#provider-creation"' in page.text
     assert 'id="provider-creation"' in page.text
@@ -183,6 +192,10 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "https://kit.fontawesome.com/666b0b7246.js" in page.text
     assert "Files are preserved exactly as uploaded" in page.text
     assert "No stored candidates will be removed" in page.text
+
+    stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".delivery-preset-card { display: grid; grid-template-columns:" in stylesheet
+    assert ".delivery-preset-grid { display: grid; grid-template-columns: 1fr;" in stylesheet
 
 
 def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):

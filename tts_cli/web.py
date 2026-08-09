@@ -678,7 +678,10 @@ def api_update_delivery_preset(
     try:
         voice = alpha_store.update_delivery_preset(voice_id, delivery, payload)
         return {
-            "message": f"Saved the {delivery.replace('_', ' ')} delivery preset.",
+            "message": (
+                f"Saved the {delivery.replace('_', ' ')} delivery settings locally. "
+                "No ElevenLabs request was made."
+            ),
             "voice": voice,
         }
     except AlphaError as error:
