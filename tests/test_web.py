@@ -173,6 +173,10 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Lifecycle · Draft" in page.text
     assert "Automatic lifecycle" in page.text
     assert "Draft until you" in page.text
+    assert "Voice Design Prompt Context" in page.text
+    assert "Context sent to Voice Design" not in page.text
+    assert "This prompt is sent only by Voice Design" in page.text
+    assert "data-prompt-context hidden" in page.text
     assert 'name="status"' not in page.text
     assert "Lifecycle status</span><select" not in page.text
     assert "Provider voice missing" in page.text
@@ -333,6 +337,15 @@ def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_individual_con
     assert 'deliveryBatchButton.textContent = "Generate all samples"' in script
     assert "if (!window.confirm(deliveryBatchConfirmation(forms))) return" in script
     assert "if (!window.confirm(paidConfirmation(form))) return" not in script
+
+
+def test_voice_design_prompt_visibility_follows_creation_method():
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+
+    assert 'selected === "designed" || selected === "reference_design"' in script
+    assert 'selected === "instant_clone"' in script
+    assert "promptContext.hidden = !usesVoiceDesign && !showsDisabledPrompt" in script
+    assert "promptField.disabled = !usesVoiceDesign" in script
 
 
 def test_every_voice_page_delete_control_requires_confirmation():
