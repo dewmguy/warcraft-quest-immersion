@@ -260,7 +260,7 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
         )
 
     assert page.status_code == 200
-    assert "permanently replace and delete all 1 stored candidates" in page.text
+    assert "permanently replace and delete all 1 stored candidate" in page.text
     assert f'data-url="/api/alpha/voice-previews/{preview_id}"' in page.text
     assert 'data-method="DELETE"' in page.text
     assert "This does not affect reference clips" in page.text
@@ -374,7 +374,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert not preview_path.exists()
 
 
-def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_individual_confirmation():
+def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_all_confirmations():
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
     assert 'document.querySelectorAll("[data-dirty-form]")' in script
@@ -388,8 +388,13 @@ def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_individual_con
     assert "if (conditionalSubmit) conditionalSubmit.disabled = false" in script
     assert "if (conditionalSubmit?.hidden) return" in script
     assert 'deliveryBatchButton.textContent = "Generate all samples"' in script
-    assert "if (!window.confirm(deliveryBatchConfirmation(forms))) return" in script
-    assert "if (!window.confirm(paidConfirmation(form))) return" not in script
+    assert "deliveryBatchConfirmation" not in script
+    assert "paidConfirmation" not in script
+    assert "const shouldConfirm = paid" not in script
+    assert (
+        'if (confirmRequired && !window.confirm(confirmText || "Confirm this action?"))' in script
+    )
+    assert "for (const form of forms) launchDeliveryGeneration(form);" in script
 
 
 def test_voice_design_prompt_visibility_follows_creation_method():
@@ -413,11 +418,38 @@ def test_every_voice_page_delete_control_requires_confirmation():
     assert all("data-confirm=" in tag for tag in delete_controls)
 
 
-def test_paid_confirmation_includes_candidate_replacement_warning():
+def test_build_actions_skip_confirmation_while_teardown_keeps_it():
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+    voice_template = (web.WEB_DIR / "templates" / "alpha-voice.html").read_text(encoding="utf-8")
+    dialogue_template = (web.WEB_DIR / "templates" / "alpha-dialogue.html").read_text(
+        encoding="utf-8"
+    )
+    voice_design_forms = [
+        chunk.split(">", 1)[0]
+        for chunk in voice_template.split("<form")[1:]
+        if 'data-provider-operation="Generating three' in chunk.split(">", 1)[0]
+    ]
+    instant_clone_form = next(
+        chunk.split(">", 1)[0]
+        for chunk in voice_template.split("<form")[1:]
+        if 'data-provider-operation="Creating an instant voice clone"' in chunk.split(">", 1)[0]
+    )
+    reusable_voice_button = next(
+        chunk.split(">", 1)[0]
+        for chunk in voice_template.split("<button")[1:]
+        if 'data-provider-operation="Creating a reusable ElevenLabs voice"'
+        in chunk.split(">", 1)[0]
+    )
 
-    assert "const warning = element.dataset.confirm?.trim()" in script
-    assert "const preface = warning" in script
+    assert len(voice_design_forms) == 2
+    assert all("data-confirm=" not in tag for tag in voice_design_forms)
+    assert all("data-confirm-required" not in tag for tag in voice_design_forms)
+    assert 'data-provider-operation="Generating a dialogue candidate"' in dialogue_template
+    assert "data-confirm=" not in instant_clone_form
+    assert "data-confirm-required" not in instant_clone_form
+    assert "data-confirm=" not in reusable_voice_button
+    assert "data-confirm-required" not in reusable_voice_button
+    assert "paidConfirmation" not in script
 
 
 def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):

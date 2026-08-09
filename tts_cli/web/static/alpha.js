@@ -139,17 +139,6 @@ function formatSeconds(seconds) {
   return `${(seconds / 60).toFixed(1)} minutes`;
 }
 
-function paidConfirmation(element) {
-  const estimate = meteringEstimate(element);
-  if (!estimate) return element.dataset.confirm || "";
-  const warning = element.dataset.confirm?.trim();
-  const action = estimate.kind === "voice-design"
-    ? "This creates three Voice Design candidates; ElevenLabs charges the preview text once."
-    : "This creates one speech candidate.";
-  const preface = warning ? `${warning}\n\n` : "";
-  return `${preface}${action}\n\nPreflight estimate:\n- ${estimate.characters.toLocaleString()} metered characters\n- about $${estimate.dollars.toFixed(3)} at the published v2/v3 API list rate\n- about ${formatSeconds(estimate.seconds)} of audio per candidate\n\nYour plan and the provider response determine exact usage. Continue?`;
-}
-
 function syncMeteringCard(element) {
   const estimate = meteringEstimate(element);
   if (!estimate) return;
@@ -161,9 +150,8 @@ function syncMeteringCard(element) {
   if (duration) duration.textContent = formatSeconds(estimate.seconds);
 }
 
-async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmRequired = false, confirmText = "", providerOperation = "", providerEstimate = null, skipConfirmation = false }) {
-  const shouldConfirm = paid || confirmRequired;
-  if (!skipConfirmation && shouldConfirm && !window.confirm(confirmText || "This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
+async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmRequired = false, confirmText = "", providerOperation = "", providerEstimate = null }) {
+  if (confirmRequired && !window.confirm(confirmText || "Confirm this action?")) return null;
   const providerRequestId = paid ? startElevenLabsRequest(providerOperation, providerEstimate) : null;
   if (!paid) showAlphaMessage("Saving…");
   try {
@@ -212,7 +200,8 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
         method: form.dataset.method || "PATCH",
         body: requestBody,
         paid: form.dataset.paid !== undefined,
-        confirmText: paidConfirmation(form),
+        confirmRequired: form.dataset.confirmRequired !== undefined,
+        confirmText: form.dataset.confirm || "",
         providerOperation: form.dataset.providerOperation,
         providerEstimate: meteringEstimate(form),
       });
@@ -274,14 +263,6 @@ function syncDeliveryBatchButton() {
   }
 }
 
-function deliveryBatchConfirmation(forms) {
-  const estimates = forms.map(meteringEstimate).filter(Boolean);
-  const characters = estimates.reduce((total, estimate) => total + estimate.characters, 0);
-  const dollars = estimates.reduce((total, estimate) => total + estimate.dollars, 0);
-  const seconds = estimates.reduce((total, estimate) => total + estimate.seconds, 0);
-  return `This starts ${forms.length} independent preset sample request${forms.length === 1 ? "" : "s"} at the same time. Each successful result is stored separately, even if another request fails.\n\nCombined preflight estimate:\n- ${characters.toLocaleString()} metered characters\n- about $${dollars.toFixed(3)} at the published v2/v3 API list rate\n- about ${formatSeconds(seconds)} of finished audio across all requests\n\nYour plan's concurrency limit may cause an individual request to fail without affecting the others. Continue?`;
-}
-
 function finishDeliveryGenerationRun() {
   const successes = deliveryGenerationOutcomes.filter((outcome) => outcome.ok);
   const failures = deliveryGenerationOutcomes.filter((outcome) => !outcome.ok);
@@ -314,7 +295,6 @@ function launchDeliveryGeneration(form) {
         paid: true,
         providerOperation: form.dataset.providerOperation,
         providerEstimate: meteringEstimate(form),
-        skipConfirmation: true,
       });
       deliveryGenerationOutcomes.push({
         ok: true,
@@ -354,7 +334,6 @@ if (deliveryBatchButton) {
   deliveryBatchButton.addEventListener("click", () => {
     const forms = availableDeliveryGenerationForms();
     if (!forms.length) return;
-    if (!window.confirm(deliveryBatchConfirmation(forms))) return;
     for (const form of forms) launchDeliveryGeneration(form);
   });
   syncDeliveryBatchButton();
@@ -482,7 +461,7 @@ for (const button of document.querySelectorAll("[data-action]")) {
         method: button.dataset.method || "POST",
         paid: button.dataset.paid !== undefined,
         confirmRequired: button.dataset.confirmRequired !== undefined,
-        confirmText: paidConfirmation(button),
+        confirmText: button.dataset.confirm || "",
         providerOperation: button.dataset.providerOperation,
         providerEstimate: meteringEstimate(button),
       });
