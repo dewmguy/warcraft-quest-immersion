@@ -181,17 +181,36 @@ async function runAlphaAction({ url, method = "POST", body = null, paid = false,
   }
 }
 
+const dirtyFormSnapshots = new WeakMap();
+
+function syncDirtyForm(form) {
+  const submit = form.querySelector("[data-dirty-submit]");
+  if (!submit) return;
+  submit.hidden = JSON.stringify(jsonFromForm(form)) === dirtyFormSnapshots.get(form);
+}
+
+for (const form of document.querySelectorAll("[data-dirty-form]")) {
+  dirtyFormSnapshots.set(form, JSON.stringify(jsonFromForm(form)));
+  for (const field of form.querySelectorAll("input, select, textarea")) {
+    field.addEventListener("input", () => syncDirtyForm(form));
+    field.addEventListener("change", () => syncDirtyForm(form));
+  }
+  syncDirtyForm(form);
+}
+
 for (const form of document.querySelectorAll("[data-json-form]")) {
   if (form.dataset.deliveryGeneration !== undefined) continue;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const conditionalSubmit = form.querySelector("[data-dirty-submit]");
     if (conditionalSubmit?.hidden) return;
+    const requestBody = jsonFromForm(form);
+    if (conditionalSubmit) conditionalSubmit.disabled = true;
     try {
       const payload = await runAlphaAction({
         url: form.dataset.url,
         method: form.dataset.method || "PATCH",
-        body: jsonFromForm(form),
+        body: requestBody,
         paid: form.dataset.paid !== undefined,
         confirmText: paidConfirmation(form),
         providerOperation: form.dataset.providerOperation,
@@ -199,25 +218,18 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
       });
       if (!payload) return;
       showAlphaMessage(payload.message || "Saved.", "complete");
+      if (form.dataset.dirtyForm !== undefined) {
+        dirtyFormSnapshots.set(form, JSON.stringify(requestBody));
+        syncDirtyForm(form);
+        return;
+      }
       window.setTimeout(() => window.location.reload(), 350);
     } catch (error) {
       showAlphaMessage(error.message, "failed");
+    } finally {
+      if (conditionalSubmit) conditionalSubmit.disabled = false;
     }
   });
-}
-
-for (const form of document.querySelectorAll("[data-dirty-form]")) {
-  const submit = form.querySelector("[data-dirty-submit]");
-  if (!submit) continue;
-  const initialPayload = JSON.stringify(jsonFromForm(form));
-  const syncDirtyState = () => {
-    submit.hidden = JSON.stringify(jsonFromForm(form)) === initialPayload;
-  };
-  for (const field of form.querySelectorAll("input, select, textarea")) {
-    field.addEventListener("input", syncDirtyState);
-    field.addEventListener("change", syncDirtyState);
-  }
-  syncDirtyState();
 }
 
 const deliveryGenerationForms = [...document.querySelectorAll("[data-delivery-generation]")];

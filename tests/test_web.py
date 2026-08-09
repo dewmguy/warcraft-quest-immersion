@@ -360,7 +360,14 @@ def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_individual_con
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
     assert 'document.querySelectorAll("[data-dirty-form]")' in script
-    assert "submit.hidden = JSON.stringify(jsonFromForm(form)) === initialPayload" in script
+    assert "const dirtyFormSnapshots = new WeakMap()" in script
+    assert "function syncDirtyForm(form)" in script
+    assert "const requestBody = jsonFromForm(form)" in script
+    assert "dirtyFormSnapshots.set(form, JSON.stringify(requestBody))" in script
+    assert "syncDirtyForm(form)" in script
+    assert "if (form.dataset.dirtyForm !== undefined)" in script
+    assert "if (conditionalSubmit) conditionalSubmit.disabled = true" in script
+    assert "if (conditionalSubmit) conditionalSubmit.disabled = false" in script
     assert "if (conditionalSubmit?.hidden) return" in script
     assert 'deliveryBatchButton.textContent = "Generate all samples"' in script
     assert "if (!window.confirm(deliveryBatchConfirmation(forms))) return" in script
