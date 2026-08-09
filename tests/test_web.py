@@ -174,11 +174,18 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "ElevenLabs voice ID" not in page.text
     assert "Reference-guided Voice Design" in page.text
     assert "Instant Voice Clone" in page.text
-    assert "Delivery presets" in page.text
-    assert "selected candidate defines who is speaking" in page.text
-    assert "One comparison per paid click" in page.text
-    assert "Review notes · local only" in page.text
-    assert "Never sent to ElevenLabs" in page.text
+    assert "Emotional delivery presets" in page.text
+    assert "Shape how this voice performs common emotions" in page.text
+    assert "selected candidate defines who is speaking" not in page.text
+    assert "One comparison per paid click" not in page.text
+    assert "Review notes · local only" not in page.text
+    assert "Never sent to ElevenLabs" not in page.text
+    assert page.text.count("Voice Actor Notes (Optional)") == 5
+    assert page.text.count("Performance Method") == 5
+    assert "Sent in brackets immediately before the spoken text" not in page.text
+    assert "Creative follows emotion more strongly" not in page.text
+    assert 'value="[angry]"' not in page.text
+    assert 'value="angry"' in page.text
     assert "Creative · expressive, least predictable" in page.text
     assert "Natural · balanced and closest to the voice" in page.text
     assert "Robust · consistent, least responsive to direction" in page.text
@@ -187,6 +194,8 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Preset settings" in page.text
     assert "Comparison" in page.text
     assert "Generate all five comparisons" in page.text
+    assert "<blockquote>" in page.text
+    assert "<details><summary>Fixed comparison script" not in page.text
     assert page.text.count("data-delivery-generation") == 5
     assert "data-delivery-batch" in page.text
     assert 'type="range"' in page.text

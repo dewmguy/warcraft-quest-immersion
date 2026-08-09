@@ -359,8 +359,27 @@ def test_delivery_presets_are_voice_metadata_used_for_dialogue(store: AlphaStore
     )
 
     dialogue = store.get_dialogue(row["dialogue_id"])
+    voice = store.get_voice(prepared["voice_id"])
+    angry = next(item for item in voice["delivery_presets"] if item["delivery"] == "angry")
+    assert angry["prompt_tag"] == "furious"
     assert dialogue["generation_text"].startswith("[furious]")
     assert store.progress()["voices"]["complete"] == 1
+
+
+def test_initialize_removes_legacy_brackets_from_saved_voice_actor_notes(store: AlphaStore):
+    voice_id = store.list_voices("baseline")[0]["voice_id"]
+    with store.connect() as connection:
+        connection.execute(
+            "UPDATE voice_delivery_presets SET prompt_tag='[[sharply]]' "
+            "WHERE voice_id=? AND delivery='angry'",
+            (voice_id,),
+        )
+
+    store.initialize()
+
+    voice = store.get_voice(voice_id)
+    angry = next(item for item in voice["delivery_presets"] if item["delivery"] == "angry")
+    assert angry["prompt_tag"] == "sharply"
 
 
 def test_incomplete_baseline_filter_requires_all_five_delivery_presets(store: AlphaStore):
@@ -401,7 +420,7 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
     store.update_delivery_preset(
         voice["voice_id"],
         "angry",
-        {"prompt_tag": "[angry]", "stability": 0, "notes": "Comparison candidate"},
+        {"prompt_tag": "angry", "stability": 0, "notes": "Comparison candidate"},
     )
     sample_text = (
         "The road ahead is dangerous, but our purpose remains clear. Stay close, listen "

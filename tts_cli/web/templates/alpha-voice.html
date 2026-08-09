@@ -118,11 +118,10 @@
   </section>
 
   <section class="alpha-panel">
-    <div class="panel-heading"><div><span class="panel-step">Race / gender delivery</span><h2>Delivery presets</h2><p>The selected candidate defines who is speaking. These presets verify how that same reusable voice performs common quest emotions.</p></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div>
+    <div class="panel-heading"><div><span class="panel-step">Race / gender delivery</span><h2>Emotional delivery presets</h2><p>Shape how this voice performs common emotions. Adjust the acting direction, generate comparable takes from the same script, and approve the result that sounds right.</p></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div>
     <div class="delivery-preset-explainer">
-      <div><strong>One comparison per paid click</strong><span>Listen, adjust if necessary, then approve. Generate another take only when the first is not usable.</span></div>
+      <div class="delivery-comparison-script"><span>Fixed comparison script</span><blockquote>{{ delivery_sample_text }}</blockquote></div>
       <div class="delivery-preset-batch-actions">
-        <details><summary>Fixed comparison script</summary><blockquote>{{ delivery_sample_text }}</blockquote></details>
         <button type="button" data-delivery-batch data-paid data-provider-operation="Generating all delivery comparisons" {% if not provider_configured or not voice.provider_voice_id %}disabled{% endif %}>Generate all five comparisons</button>
       </div>
     </div>
@@ -130,13 +129,12 @@
       <header class="delivery-preset-heading"><div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}">{{ preset.status | replace('_',' ') | title }}</span></div><p>{{ delivery_guidance[preset.delivery] }}</p></header>
       <form class="delivery-preset-settings" data-json-form data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}" data-method="PATCH">
         <span class="delivery-preset-section-label">Preset settings</span>
-        <label><span>Eleven v3 direction{% if preset.delivery == 'neutral' %} · optional{% endif %}</span><input name="prompt_tag" value="{{ preset.prompt_tag }}" maxlength="80" placeholder="{{ 'No tag — baseline delivery' if preset.delivery == 'neutral' else '[emotional direction]' }}"><small>Sent in brackets immediately before the spoken text. It guides delivery but is not a guaranteed standardized preset.</small></label>
-        <label><span>Performance consistency</span><select name="stability">
+        <label><span>Voice Actor Notes (Optional)</span><input name="prompt_tag" value="{{ preset.prompt_tag }}" maxlength="80" placeholder="{{ 'Baseline delivery needs no additional direction' if preset.delivery == 'neutral' else 'Describe the intended delivery' }}"></label>
+        <label><span>Performance Method</span><select name="stability">
           <option value="0" {% if preset.stability == 0 %}selected{% endif %}>Creative · expressive, least predictable</option>
           <option value="0.5" {% if preset.stability == 0.5 %}selected{% endif %}>Natural · balanced and closest to the voice</option>
           <option value="1" {% if preset.stability == 1 %}selected{% endif %}>Robust · consistent, least responsive to direction</option>
-        </select><small>Creative follows emotion more strongly; Robust prioritizes consistency. Natural is the recommended starting point.</small></label>
-        <label><span>Review notes · local only</span><textarea name="notes" rows="2" placeholder="What worked, failed, or needs another take">{{ preset.notes }}</textarea><small>Saved for your review history. Never sent to ElevenLabs.</small></label>
+        </select></label>
         <button type="submit">Save preset settings</button>
       </form>
       <div class="delivery-preset-review">

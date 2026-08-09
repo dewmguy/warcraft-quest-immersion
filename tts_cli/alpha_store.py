@@ -18,10 +18,10 @@ from tts_cli.voice_profiles import load_phase2_review
 DELIVERIES = ("neutral", "angry", "sorrowful", "joyful", "proclaiming")
 DELIVERY_DEFAULTS = {
     "neutral": {"prompt_tag": "", "stability": 0.5},
-    "angry": {"prompt_tag": "[angry]", "stability": 0.5},
-    "sorrowful": {"prompt_tag": "[sad]", "stability": 0.5},
-    "joyful": {"prompt_tag": "[cheerfully]", "stability": 0.5},
-    "proclaiming": {"prompt_tag": "[projecting]", "stability": 0.5},
+    "angry": {"prompt_tag": "angry", "stability": 0.5},
+    "sorrowful": {"prompt_tag": "sad", "stability": 0.5},
+    "joyful": {"prompt_tag": "cheerfully", "stability": 0.5},
+    "proclaiming": {"prompt_tag": "projecting", "stability": 0.5},
 }
 ROLE_OPTIONS = (
     "default",
@@ -106,6 +106,16 @@ def _loads(value: str | None, fallback: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
+
+
+def _normalize_voice_actor_notes(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value).replace("[", "").replace("]", "")).strip()
+
+
+def _delivery_request_text(notes: Any, spoken_text: str) -> str:
+    direction = _normalize_voice_actor_notes(notes)
+    text = spoken_text.strip()
+    return f"[{direction}] {text}" if direction else text
 
 
 def _baseline_description(profile: dict[str, Any]) -> str:
@@ -436,6 +446,7 @@ class AlphaStore:
             self._ensure_columns(connection)
             self._seed_app_settings(connection)
             self._seed_baseline_voices(connection)
+            self._normalize_delivery_prompt_tags(connection)
             self._sync_baseline_contexts(connection)
 
     @staticmethod
@@ -566,6 +577,20 @@ class AlphaStore:
                 "stability, status, updated_at) VALUES (?, ?, ?, ?, 'not_tested', ?)",
                 (voice_id, delivery, defaults["prompt_tag"], defaults["stability"], now),
             )
+
+    @staticmethod
+    def _normalize_delivery_prompt_tags(connection: sqlite3.Connection) -> None:
+        rows = connection.execute(
+            "SELECT voice_id, delivery, prompt_tag FROM voice_delivery_presets"
+        ).fetchall()
+        for row in rows:
+            normalized = _normalize_voice_actor_notes(row["prompt_tag"])[:80]
+            if normalized != row["prompt_tag"]:
+                connection.execute(
+                    "UPDATE voice_delivery_presets SET prompt_tag=? "
+                    "WHERE voice_id=? AND delivery=?",
+                    (normalized, row["voice_id"], row["delivery"]),
+                )
 
     @staticmethod
     def _dialogue_id(row: dict[str, Any], expansion: str, locale: str) -> str:
@@ -1439,7 +1464,7 @@ class AlphaStore:
         status = str(payload.get("status", existing["status"]))
         if status not in DELIVERY_STATUSES:
             raise AlphaError("Unknown delivery status.")
-        prompt_tag = str(payload.get("prompt_tag", "")).strip()[:80]
+        prompt_tag = _normalize_voice_actor_notes(payload.get("prompt_tag", ""))[:80]
         stability = float(payload.get("stability", 0.5))
         if not 0 <= stability <= 1:
             raise AlphaError("Delivery stability must be between 0 and 1.")
@@ -1473,7 +1498,7 @@ class AlphaStore:
         if not voice.get("provider_voice_id"):
             raise AlphaError("Create the reusable provider voice before testing delivery presets.")
         preset = next(item for item in voice["delivery_presets"] if item["delivery"] == delivery)
-        request_text = f"{preset['prompt_tag']} {text}".strip()
+        request_text = _delivery_request_text(preset["prompt_tag"], text)
         model_id = self.get_app_settings()["tts_model_id"]
         settings = voice["settings"].copy()
         if model_id == "eleven_v3":
@@ -2102,8 +2127,8 @@ class AlphaStore:
                 "SELECT prompt_tag FROM voice_delivery_presets WHERE voice_id=? AND delivery=?",
                 (voice_id, delivery),
             ).fetchone()
-        prompt_tag = str(preset["prompt_tag"] if preset else "").strip()
-        return f"{prompt_tag} {text}".strip()
+        prompt_tag = preset["prompt_tag"] if preset else ""
+        return _delivery_request_text(prompt_tag, text)
 
     def begin_generation(self, dialogue_id: str) -> dict[str, Any]:
         dialogue = self.get_dialogue(dialogue_id)
