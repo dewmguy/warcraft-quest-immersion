@@ -78,7 +78,8 @@ def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatc
 
     assert response.status_code == 200
     assert response.url.path == "/alpha"
-    assert "Alpha production database" in response.text
+    assert "AN AZEROTHCORE WOTLK PRIVATE SERVER" in response.text
+    assert 'class="site-brand__realm"' in response.text
     assert "Work queue" in response.text
     assert "4 matching records" in response.text
 
@@ -632,7 +633,7 @@ def test_dashboard_requires_authentication(monkeypatch):
 
     assert unauthorized.status_code == 401
     assert authorized.status_code == 200
-    assert "Alpha production database" in authorized.text
+    assert "AN AZEROTHCORE WOTLK PRIVATE SERVER" in authorized.text
 
 
 def test_mutations_require_confirmation_header(monkeypatch):
