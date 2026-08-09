@@ -341,6 +341,16 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert page.text.count('class="reference-player delivery-player"') == 3
     assert "ElevenLabs usage cannot be refunded" in page.text
     assert "<audio controls" not in page.text
+    stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
+    assert (
+        ".alpha-body .delivery-sample-approve, .alpha-body .delivery-preview-delete { "
+        "flex: 0 0 30px; border-color: #66542e; background: #100f12; "
+        "color: var(--gold-bright); }" in stylesheet
+    )
+    assert ".delivery-sample-approve:hover" in stylesheet
+    assert "background: var(--success); color: #100f12; filter: none;" in stylesheet
+    assert ".delivery-preview-delete:hover" in stylesheet
+    assert "background: var(--danger); color: #100f12; filter: none;" in stylesheet
     assert deleted.status_code == 200
     assert deleted.json()["message"] == "Delivery sample was deleted from local storage."
     assert not preview_path.exists()
