@@ -227,8 +227,13 @@ dialog .actions { justify-content: flex-end; }
 .alpha-header nav, .scope-tabs { display: flex; gap: 6px; }
 .alpha-header nav a, .scope-tabs a { border-radius: 7px; padding: 9px 12px; color: #bdb6a8; text-decoration: none; }
 .alpha-header nav a:hover, .alpha-header nav a[aria-current="page"], .scope-tabs a:hover, .scope-tabs a[aria-current="page"] { background: #29252c; color: #fff6df; }
-.provider-state { justify-self: end; border: 1px solid #4c4651; border-radius: 999px; padding: 6px 10px; color: #aaa3ad; font-size: .76rem; }
+.provider-state-group { justify-self: end; display: flex; align-items: center; gap: 7px; }
+.provider-state { border: 1px solid #4c4651; border-radius: 999px; padding: 6px 10px; color: #aaa3ad; font-size: .76rem; white-space: nowrap; }
 .provider-state.is-ready { border-color: #40775d; color: #79c89e; }
+.provider-credit-indicator { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #4e4632; border-radius: 999px; padding: 6px 10px; background: #201c13; color: #e4c777; font-size: .76rem; text-decoration: none; white-space: nowrap; }
+.provider-credit-indicator:hover { border-color: #d5a84d; background: #2b2415; color: #fff1bd; }
+.provider-credit-indicator.is-warning { border-color: #b9872f; background: #2c2211; color: #f0c15e; }
+.provider-credit-indicator.is-critical { border-color: #a94c4c; background: #2c1718; color: #f08d8d; }
 .alpha-main { width: min(1480px, calc(100% - 36px)); margin: 0 auto; padding: 42px 0 80px; }
 .alpha-page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 28px; }
 .alpha-page-heading h1 { margin: 4px 0 5px; color: #fff3d3; font-family: Georgia, serif; font-size: clamp(2.2rem, 5vw, 4.5rem); line-height: 1; }
@@ -495,7 +500,7 @@ dialog .actions { justify-content: flex-end; }
 
 @media (max-width: 1050px) {
   .alpha-header { grid-template-columns: 1fr auto; }
-  .provider-state { display: none; }
+  .provider-state-group { grid-column: 1 / -1; }
   .filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .search-field { grid-column: span 2; }
   .alpha-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -508,6 +513,7 @@ dialog .actions { justify-content: flex-end; }
 
 @media (max-width: 760px) {
   .alpha-header { position: static; grid-template-columns: 1fr; gap: 10px; }
+  .provider-state-group { justify-self: start; flex-wrap: wrap; }
   .record-statuses { justify-content: flex-start; }
   .alpha-header nav { overflow-x: auto; }
   .alpha-main { width: min(100% - 24px, 1480px); padding-top: 26px; }

@@ -14,9 +14,9 @@
         <dl class="usage-facts">
           <div><dt>Connection</dt><dd data-provider-connection>Checking...</dd></div>
           <div><dt>Plan</dt><dd data-provider-tier>--</dd></div>
-          <div><dt>Usage</dt><dd data-provider-usage>--</dd></div>
-          <div><dt>Remaining</dt><dd data-provider-remaining>--</dd></div>
-          <div><dt>Next reset</dt><dd data-provider-reset>--</dd></div>
+          <div><dt>Credits used</dt><dd data-provider-usage>--</dd></div>
+          <div><dt>Credits remaining</dt><dd data-provider-remaining>--</dd></div>
+          <div><dt>Credit reset</dt><dd data-provider-reset>--</dd></div>
           <div><dt>Voice slots</dt><dd data-provider-voices>--</dd></div>
         </dl>
         <progress max="100" value="0" data-provider-progress></progress>
@@ -33,12 +33,12 @@
   <section class="alpha-panel">
     <div class="panel-heading"><div><span class="panel-step">Usage ledger</span><h2>Recent generation requests</h2><p>Recorded locally from provider responses; generated audio remains outside Git.</p></div><span>{{ provider_events|length }} shown</span></div>
     {% if provider_events %}
-      <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Request</th><th>Input</th><th>Provider reported</th><th>List-rate equivalent</th><th>Recorded</th></tr></thead><tbody>
+      <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Request</th><th>Input text</th><th>Credits spent</th><th>Subscription after request</th><th>Recorded</th></tr></thead><tbody>
       {% for event in provider_events %}<tr>
         <td>{% if event.action == 'dialogue_tts' %}<a href="/alpha/dialogue/{{ event.subject_id }}">Dialogue speech</a>{% elif event.action == 'voice_design' %}<a href="/alpha/voices/{{ event.subject_id }}#provider-creation">Voice Design</a>{% else %}<a href="/alpha/voices/{{ event.subject_id.split(':')[0] }}#provider-creation">Delivery sample</a>{% endif %}</td>
         <td>{{ "{:,}".format(event.input_character_count) }} characters</td>
-        <td>{% if event.character_cost is not none %}{{ "{:,}".format(event.character_cost) }} metered characters{% else %}Not returned{% endif %}</td>
-        <td>{% if event.character_cost is not none %}${{ "%.3f"|format(event.character_cost * 0.10 / 1000) }}{% else %}--{% endif %}</td>
+        <td>{% if event.character_cost is not none %}{{ "{:,}".format(event.character_cost) }} credits{% else %}Not returned{% endif %}</td>
+        <td>{% if event.subscription.get('character_count') is not none and event.subscription.get('character_limit') is not none %}{{ "{:,}".format(event.subscription.character_count) }} / {{ "{:,}".format(event.subscription.character_limit) }} credits used{% else %}Not returned{% endif %}</td>
         <td>{{ event.created_at[:19] | replace('T',' ') }} UTC</td>
       </tr>{% endfor %}
       </tbody></table></div>
@@ -72,12 +72,12 @@
     </section>
   </div>
   <section class="alpha-panel cost-guide">
-    <div class="panel-heading"><div><span class="panel-step">Preflight estimates</span><h2>What a paid action means</h2><p>Every speech button shows an estimate before it can contact ElevenLabs.</p></div></div>
+    <div class="panel-heading"><div><span class="panel-step">Credit guide</span><h2>How subscription credits work</h2><p>The alpha keeps your included subscription pool visible and records the provider's result after generation.</p></div></div>
     <div class="cost-guide-grid">
-      <article><strong>Meter</strong><p>Speech is metered by characters, not LLM tokens. The app shows the exact text length before a request and records the provider's <code>character-cost</code> afterward when available.</p></article>
-      <article><strong>Published API rate</strong><p>Eleven v3 and Multilingual v2 are estimated at $0.10 per 1,000 characters. Your included plan usage or contracted rate can make the actual cash impact different.</p></article>
+      <article><strong>Credits</strong><p>ElevenLabs calls its subscription units credits. Some provider API fields still use legacy character names; the alpha translates those fields into credits throughout the interface.</p></article>
+      <article><strong>Included pool</strong><p>The header shows the provider-reported credits used and available for the current billing period. The provider decides the reset date, rollover, and any overage allowance.</p></article>
       <article><strong>Audio duration</strong><p>Budget roughly one minute of finished speech per 1,000 characters. Delivery, pauses, audio tags, and punctuation can make the real file shorter or longer.</p></article>
-      <article><strong>Request wait</strong><p>The alpha allows up to three minutes for generation. Voice Design returns three candidates and charges the preview text once; saving one candidate uses a voice slot.</p></article>
+      <article><strong>Request wait</strong><p>The alpha allows up to three minutes for generation. Voice Design returns three candidates and charges the preview text once; saving one candidate uses a voice slot. Cash or overage charges are not estimated here.</p></article>
     </div>
   </section>
 {% endblock %}

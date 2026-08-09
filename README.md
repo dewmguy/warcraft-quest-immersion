@@ -138,22 +138,24 @@ The Alpha portal is the working production surface:
 7. Treat production export as a later handoff after the corpus and approval
    rules have been validated.
 
-All provider operations have a separate paid-action confirmation. If
-ElevenLabs is not configured, they remain disabled and no request can be sent.
+Provider generation actions begin when their button is clicked, while deletion
+and approval actions retain confirmation where appropriate. If ElevenLabs is
+not configured, provider actions remain disabled and no request can be sent.
 On the homelab, configure a newly created key without placing it in PowerShell
 history or Git by running `scripts\configure-elevenlabs.cmd`. It prompts with
 masked input, sends the value over SSH standard input, updates only the ignored
 server `.env`, and recreates only `warcraft-quest-immersion`. Alpha's Settings
 page then verifies the key and account usage through a read-only provider call.
 
-ElevenLabs speech is metered by characters rather than LLM tokens. The alpha
-uses the current published Multilingual v2/v3 list rate of $0.10 per 1,000
-characters for preflight context and roughly one minute per 1,000 characters
-for output-duration planning. These are estimates: the confirmation shows the
-exact input size before each request, the API's `character-cost` response header
-is recorded after speech generation, and the Settings page shows the account's
-reported usage and limit. Voice Design returns three previews while charging its
-preview text once; saving a chosen preview consumes a provider voice slot.
+ElevenLabs calls its subscription units credits, although the API still uses
+legacy `character_count`, `character_limit`, and `character-cost` field names.
+The sticky header shows the provider-reported credits used and available for the
+current billing period, then refreshes after every generation request. Preflight
+cards show input size, estimated credits, and roughly one minute of audio per
+1,000 characters; the provider-reported credit cost is recorded after generation.
+The alpha does not estimate cash or overage charges. Voice Design returns three
+previews while charging its preview text once; saving a chosen preview consumes
+a provider voice slot.
 
 For a public hostname, enable Pangolin SSO or set `WQI_ADMIN_PASSWORD`. When both are disabled, the control panel is intentionally open.
 

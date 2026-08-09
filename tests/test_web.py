@@ -24,6 +24,7 @@ class ConfiguredElevenLabs:
             "character_count": 2500,
             "character_limit": 10000,
             "next_character_count_reset_unix": 1_800_000_000,
+            "character_refresh_period": "monthly_period",
             "voice_limit": 30,
             "can_use_instant_voice_cloning": True,
         }
@@ -824,7 +825,9 @@ def test_settings_owns_provider_model_selection(monkeypatch):
 
     assert page.status_code == 200
     assert "What is reusable" in page.text
-    assert "characters, not LLM tokens" in page.text
+    assert "How subscription credits work" in page.text
+    assert "Cash or overage charges are not estimated here" in page.text
+    assert "List-rate equivalent" not in page.text
     assert "configure-elevenlabs.cmd" in page.text
     assert saved.status_code == 200
     assert saved.json()["settings"]["tts_model_id"] == "eleven_multilingual_v2"
@@ -840,9 +843,36 @@ def test_provider_status_verifies_account_without_a_paid_action(monkeypatch):
     payload = response.json()
     assert payload["configured"] is True
     assert payload["account"]["tier"] == "creator"
-    assert payload["account"]["remaining_characters"] == 7500
+    assert payload["account"]["credits_used"] == 2500
+    assert payload["account"]["credits_limit"] == 10000
+    assert payload["account"]["credits_remaining"] == 7500
     assert payload["account"]["percent_used"] == 25.0
+    assert payload["account"]["refresh_period"] == "monthly_period"
     assert "did not generate audio" in payload["message"]
+
+
+def test_alpha_header_keeps_subscription_credit_usage_at_eye_level(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(web, "elevenlabs", ConfiguredElevenLabs())
+    with TestClient(web.app) as client:
+        voice_id = web.alpha_store.list_voices("baseline")[0]["voice_id"]
+        page = client.get(f"/alpha/voices/{voice_id}")
+
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+    stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
+    template = (web.WEB_DIR / "templates" / "alpha-voice.html").read_text(encoding="utf-8")
+    assert page.status_code == 200
+    assert "data-provider-usage-indicator" in page.text
+    assert 'data-provider-url="/api/alpha/provider-status"' in page.text
+    assert "Checking credits..." in page.text
+    assert 'document.querySelector("[data-provider-usage-indicator]")' in script
+    assert "queueProviderUsageRefresh()" in script
+    assert "if (paid) queueProviderUsageRefresh();" in script
+    assert "account.credits_used" in script
+    assert "data-estimate-credits" in template
+    assert "data-estimate-dollars" not in template
+    assert "estimate.dollars" not in script
+    assert ".provider-state-group { grid-column: 1 / -1; }" in stylesheet
 
 
 def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):

@@ -3,9 +3,12 @@ const alphaMessageTitle = alphaMessage.querySelector("[data-alpha-message-title]
 const alphaMessageDetail = alphaMessage.querySelector("[data-alpha-message-detail]");
 const alphaMessageElapsed = alphaMessage.querySelector("[data-alpha-message-elapsed]");
 const alphaMessageProgress = alphaMessage.querySelector("[data-alpha-message-progress]");
+const providerUsageIndicator = document.querySelector("[data-provider-usage-indicator]");
 let alphaProviderTimer = null;
 const alphaProviderRequests = new Map();
 let alphaProviderRequestSequence = 0;
+let providerStatusRequest = null;
+let providerUsageRefreshTimer = null;
 
 function stopAlphaProviderTimer() {
   if (alphaProviderTimer !== null) window.clearInterval(alphaProviderTimer);
@@ -102,6 +105,75 @@ async function parseAlphaResponse(response) {
   return payload;
 }
 
+function providerStatusUrl() {
+  return providerUsageIndicator?.dataset.providerUrl
+    || document.querySelector("[data-provider-account]")?.dataset.providerUrl
+    || null;
+}
+
+async function loadProviderStatus() {
+  const url = providerStatusUrl();
+  if (!url) return null;
+  if (!providerStatusRequest) {
+    providerStatusRequest = fetch(url).then(parseAlphaResponse);
+  }
+  const request = providerStatusRequest;
+  try {
+    return await request;
+  } finally {
+    if (providerStatusRequest === request) providerStatusRequest = null;
+  }
+}
+
+function renderProviderUsageIndicator(account = {}) {
+  if (!providerUsageIndicator) return;
+  const output = providerUsageIndicator.querySelector("[data-provider-credit-usage]");
+  const used = Number(account.credits_used);
+  const limit = Number(account.credits_limit);
+  const hasUsage = account.credits_used != null && account.credits_limit != null
+    && Number.isFinite(used) && Number.isFinite(limit);
+  const percentUsed = Number(account.percent_used);
+  const reset = account.next_reset_at ? new Date(account.next_reset_at) : null;
+  const resetLabel = reset && !Number.isNaN(reset.getTime()) ? reset.toLocaleString() : null;
+  if (output) {
+    output.textContent = hasUsage
+      ? `${used.toLocaleString()} / ${limit.toLocaleString()} credits`
+      : "Credits unavailable";
+  }
+  const details = hasUsage
+    ? [`${used.toLocaleString()} of ${limit.toLocaleString()} ElevenLabs subscription credits used`]
+    : ["ElevenLabs subscription credit usage is unavailable"];
+  if (account.credits_remaining != null && Number.isFinite(Number(account.credits_remaining))) {
+    details.push(`${Number(account.credits_remaining).toLocaleString()} credits remaining`);
+  }
+  if (resetLabel) details.push(`resets ${resetLabel}`);
+  const label = details.join("; ");
+  providerUsageIndicator.title = label;
+  providerUsageIndicator.setAttribute("aria-label", label);
+  providerUsageIndicator.classList.toggle("is-warning", Number.isFinite(percentUsed) && percentUsed >= 75 && percentUsed < 90);
+  providerUsageIndicator.classList.toggle("is-critical", Number.isFinite(percentUsed) && percentUsed >= 90);
+}
+
+async function refreshProviderUsageIndicator() {
+  if (!providerUsageIndicator) return;
+  try {
+    const payload = await loadProviderStatus();
+    renderProviderUsageIndicator(payload?.account || {});
+  } catch (error) {
+    renderProviderUsageIndicator({});
+    providerUsageIndicator.title = error.message;
+  }
+}
+
+function queueProviderUsageRefresh() {
+  if (!providerUsageIndicator) return;
+  if (providerUsageRefreshTimer !== null) window.clearTimeout(providerUsageRefreshTimer);
+  providerUsageRefreshTimer = window.setTimeout(() => {
+    providerUsageRefreshTimer = null;
+    refreshProviderUsageIndicator();
+  }, 150);
+}
+
 function jsonFromForm(form) {
   const data = new FormData(form);
   const payload = {};
@@ -128,7 +200,7 @@ function meteringEstimate(element) {
   if (!Number.isFinite(characters) || characters <= 0) return null;
   return {
     characters,
-    dollars: characters * 0.10 / 1000,
+    credits: characters,
     seconds: characters * 60 / 1000,
     kind: element.dataset.metering || "speech",
   };
@@ -143,10 +215,10 @@ function syncMeteringCard(element) {
   const estimate = meteringEstimate(element);
   if (!estimate) return;
   const characters = element.querySelector("[data-estimate-characters]");
-  const dollars = element.querySelector("[data-estimate-dollars]");
+  const credits = element.querySelector("[data-estimate-credits]");
   const duration = element.querySelector("[data-estimate-duration]");
   if (characters) characters.textContent = estimate.characters.toLocaleString();
-  if (dollars) dollars.textContent = `$${estimate.dollars.toFixed(3)}`;
+  if (credits) credits.textContent = `~${estimate.credits.toLocaleString()}`;
   if (duration) duration.textContent = formatSeconds(estimate.seconds);
 }
 
@@ -165,6 +237,7 @@ async function runAlphaAction({ url, method = "POST", body = null, paid = false,
     });
     return await parseAlphaResponse(response);
   } finally {
+    if (paid) queueProviderUsageRefresh();
     if (providerRequestId) finishElevenLabsRequest(providerRequestId);
   }
 }
@@ -546,17 +619,17 @@ if (providerAccount) {
     if (refresh) refresh.disabled = true;
     let accountRequestId = startElevenLabsRequest("Checking ElevenLabs account", null, true);
     try {
-      const response = await fetch(providerAccount.dataset.providerUrl);
-      const payload = await parseAlphaResponse(response);
+      const payload = await loadProviderStatus();
       const account = payload.account || {};
+      renderProviderUsageIndicator(account);
       providerAccount.querySelector("[data-provider-connection]").textContent = "Verified";
       providerAccount.querySelector("[data-provider-tier]").textContent = `${account.tier || "Unknown"} / ${account.status || "unknown"}`;
-      providerAccount.querySelector("[data-provider-usage]").textContent = account.character_count == null || account.character_limit == null
+      providerAccount.querySelector("[data-provider-usage]").textContent = account.credits_used == null || account.credits_limit == null
         ? "Not reported by this account"
-        : `${Number(account.character_count).toLocaleString()} / ${Number(account.character_limit).toLocaleString()} characters`;
-      providerAccount.querySelector("[data-provider-remaining]").textContent = account.remaining_characters == null
+        : `${Number(account.credits_used).toLocaleString()} / ${Number(account.credits_limit).toLocaleString()} credits`;
+      providerAccount.querySelector("[data-provider-remaining]").textContent = account.credits_remaining == null
         ? "Not reported"
-        : `${Number(account.remaining_characters).toLocaleString()} characters`;
+        : `${Number(account.credits_remaining).toLocaleString()} credits`;
       providerAccount.querySelector("[data-provider-reset]").textContent = account.next_reset_at
         ? new Date(account.next_reset_at).toLocaleString()
         : "Not reported";
@@ -588,3 +661,5 @@ if (providerAccount) {
   if (refresh) refresh.addEventListener("click", readAccount);
   if (loading) readAccount();
 }
+
+if (providerUsageIndicator) refreshProviderUsageIndicator();

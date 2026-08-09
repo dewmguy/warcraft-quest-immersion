@@ -274,11 +274,14 @@ def _subscription_summary(payload: dict) -> dict:
     return {
         "tier": payload.get("tier") or payload.get("billing_period") or "unknown",
         "status": payload.get("status") or "active",
-        "character_count": used,
-        "character_limit": limit,
-        "remaining_characters": remaining,
+        "credits_used": used,
+        "credits_limit": limit,
+        "credits_remaining": remaining,
         "percent_used": percent_used,
         "next_reset_at": reset_at,
+        "refresh_period": payload.get("character_refresh_period") or payload.get("billing_period"),
+        "max_credit_limit_extension": payload.get("max_credit_limit_extension"),
+        "can_extend_credits": payload.get("can_extend_character_limit"),
         "voice_limit": payload.get("voice_limit"),
         "can_use_instant_voice_cloning": payload.get("can_use_instant_voice_cloning"),
     }
@@ -988,7 +991,7 @@ def api_design_voice(
         replaced_count = sum(preview["status"] != "selected" for preview in voice["previews"])
         selected_preserved = any(preview["status"] == "selected" for preview in voice["previews"])
         cost_note = (
-            f" ElevenLabs reported {result.character_cost:,} metered characters for the request."
+            f" ElevenLabs reported {result.character_cost:,} credits for the request."
             if result.character_cost is not None
             else ""
         )
@@ -1140,7 +1143,7 @@ def api_generate_dialogue(
             "message": (
                 "Generated one audio candidate for review."
                 + (
-                    f" ElevenLabs reported {result.character_cost:,} metered characters."
+                    f" ElevenLabs reported {result.character_cost:,} credits."
                     if result.character_cost is not None
                     else ""
                 )

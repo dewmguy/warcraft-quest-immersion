@@ -19,9 +19,17 @@
         <a href="/alpha/import-export" {% if active_nav == 'import_export' %}aria-current="page"{% endif %}>Import / Export</a>
         <a href="/alpha/settings" {% if active_nav == 'settings' %}aria-current="page"{% endif %}>Settings</a>
       </nav>
-      <span class="provider-state {{ 'is-ready' if provider_configured else 'is-offline' }}">
-        ElevenLabs {{ 'ready' if provider_configured else 'not configured' }}
-      </span>
+      <div class="provider-state-group">
+        <span class="provider-state {{ 'is-ready' if provider_configured else 'is-offline' }}">
+          ElevenLabs {{ 'ready' if provider_configured else 'not configured' }}
+        </span>
+        {% if provider_configured %}
+        <a class="provider-credit-indicator" href="/alpha/settings" data-provider-usage-indicator data-provider-url="/api/alpha/provider-status" aria-label="Checking ElevenLabs subscription credit usage">
+          <i class="fa-solid fa-coins" aria-hidden="true"></i>
+          <span data-provider-credit-usage>Checking credits...</span>
+        </a>
+        {% endif %}
+      </div>
     </header>
     <main class="alpha-main">
       <section class="corpus-progress" aria-label="Production progress">
