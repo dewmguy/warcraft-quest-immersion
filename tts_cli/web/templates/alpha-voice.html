@@ -5,7 +5,7 @@
   <nav class="breadcrumbs"><a href="/alpha/voices">Voices</a><span>›</span><span>{{ voice.name }}</span></nav>
   <section class="alpha-page-heading record-heading">
     <div><span class="alpha-kicker">{{ voice.scope | title }} voice profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} dialogue records · {{ voice.missing_dialogue_count }} missing audio</p></div>
-    <span class="work-status {{ 'status-approved' if voice.provider_voice_id else 'status-needs_voice' }}">{{ 'Reusable voice ready' if voice.provider_voice_id else 'Provider voice missing' }}</span>
+    {% if voice.provider_voice_id %}<span class="work-status status-approved">Reusable voice ready</span>{% else %}<a class="work-status status-needs_voice status-action" href="#provider-creation">Provider voice missing &rarr;</a>{% endif %}
   </section>
 
   <div class="record-grid voice-grid">
@@ -53,7 +53,7 @@
     </section>
   </div>
 
-  <section class="alpha-panel creation-workspace">
+  <section class="alpha-panel creation-workspace" id="provider-creation">
     <div class="panel-heading"><div><span class="panel-step">Provider creation</span><h2>Create the reusable voice</h2></div><span>{{ app_settings.voice_design_model_id }}</span></div>
     <div data-method-panel="unselected"><p class="empty-copy">Choose and save a creation path above. Only the controls required by that method will appear here.</p></div>
     <form data-json-form data-paid data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="designed">

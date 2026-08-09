@@ -1,0 +1,17 @@
+{% macro dialogue_status(row) -%}
+  {% set state = row.production_state %}
+  {% set label = state | replace('_',' ') | title %}
+  {% if state == 'needs_text' %}
+    <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
+  {% elif state == 'needs_voice' and row.voice_id %}
+    <a class="work-status status-{{ state }} status-action" href="/alpha/voices/{{ row.voice_id }}#provider-creation" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
+  {% elif state == 'needs_voice' %}
+    <a class="work-status status-{{ state }} status-action" href="/alpha/speakers/{{ row.entity_type }}/{{ row.entity_id }}#voice-approach" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
+  {% elif state == 'generation_failed' %}
+    <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#generation" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
+  {% elif state == 'audio_to_review' %}
+    <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#audio-review" aria-label="Open {{ label }}">{{ label }} &rarr;</a>
+  {% else %}
+    <span class="work-status status-{{ state }}">{{ label }}</span>
+  {% endif %}
+{%- endmacro %}

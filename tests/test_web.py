@@ -138,6 +138,27 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Instant Voice Clone" in page.text
     assert "Delivery presets" in page.text
     assert 'type="range"' in page.text
+    assert 'href="#provider-creation"' in page.text
+    assert 'id="provider-creation"' in page.text
+
+
+def test_actionable_statuses_link_to_the_work_that_resolves_them(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        row = web.alpha_store.list_dialogue(page_size=10)["rows"][0]
+        queue = client.get("/alpha")
+        dialogue = client.get(f"/alpha/dialogue/{row['dialogue_id']}")
+        speaker = client.get(f"/alpha/speakers/{row['entity_type']}/{row['entity_id']}")
+        voices = client.get("/alpha/voices")
+
+    spoken_text_target = f"/alpha/dialogue/{row['dialogue_id']}#spoken-text"
+    provider_target = f"/alpha/voices/{row['voice_id']}#provider-creation"
+    assert f'href="{spoken_text_target}"' in queue.text
+    assert 'href="#spoken-text"' not in dialogue.text
+    assert f'href="{spoken_text_target}"' in dialogue.text
+    assert 'id="spoken-text"' in dialogue.text
+    assert f'href="{provider_target}"' in speaker.text
+    assert f'href="{provider_target}"' in voices.text
 
 
 def test_settings_owns_provider_model_selection(monkeypatch):

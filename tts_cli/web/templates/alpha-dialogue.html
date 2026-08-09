@@ -1,4 +1,5 @@
 {% extends "alpha-base.html" %}
+{% from "alpha-status.html" import dialogue_status %}
 {% set active_nav = "dialogue" %}
 {% block title %}{{ dialogue.quest_title or dialogue.speaker_name }}{% endblock %}
 {% block content %}
@@ -9,7 +10,7 @@
       <h1>{{ dialogue.quest_title or dialogue.speaker_name }}</h1>
       <p>{{ dialogue.speaker_name }} · {{ dialogue.race_name | title }} · {{ dialogue.gender_name | title }}</p>
     </div>
-    <span class="work-status status-{{ dialogue.production_state }}">{{ dialogue.production_state | replace('_',' ') | title }}</span>
+    {{ dialogue_status(dialogue) }}
   </section>
 
   <div class="record-grid">
@@ -26,7 +27,7 @@
       {% if dialogue.metadata %}<details><summary>Additional source fields</summary><dl class="record-facts">{% for key, value in dialogue.metadata.items() %}<div><dt>{{ key | replace('_',' ') | title }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>{% endif %}
     </section>
 
-    <section class="alpha-panel spoken-copy">
+    <section class="alpha-panel spoken-copy" id="spoken-text">
       <div class="panel-heading"><div><span class="panel-step">Preparation</span><h2>Spoken text</h2></div>{% if dialogue.revision_id %}<span>Revision {{ dialogue.revision_number }}</span>{% endif %}</div>
       {% if not dialogue.revision_id %}
         <div class="empty-action"><p>No spoken text exists. Preparing it applies deterministic token and markup cleanup; it does not call an AI service.</p><button type="button" data-action data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/prepare-spoken-text" data-method="POST">Prepare spoken text</button></div>
@@ -42,17 +43,17 @@
   </div>
 
   <div class="record-grid">
-    <section class="alpha-panel">
+    <section class="alpha-panel" id="voice-assignment">
       <div class="panel-heading"><div><span class="panel-step">Speaker</span><h2>Voice and delivery</h2></div></div>
       <p><a href="/alpha/speakers/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a> currently uses <strong>{{ dialogue.voice_name or 'no assigned voice' }}</strong>.</p>
-      {% if dialogue.voice_id %}<p><a href="/alpha/voices/{{ dialogue.voice_id }}">Open voice record</a>{% if not dialogue.provider_voice_id %} · A provider voice still needs to be created or assigned.{% endif %}</p>{% endif %}
+      {% if dialogue.voice_id %}<p><a href="/alpha/voices/{{ dialogue.voice_id }}">Open voice record</a>{% if not dialogue.provider_voice_id %} · <a class="cell-action" href="/alpha/voices/{{ dialogue.voice_id }}#provider-creation">Create or assign the missing provider voice &rarr;</a>{% endif %}</p>{% endif %}
       <form data-json-form data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/delivery" data-method="PATCH" class="compact-form">
         <label><span>Line delivery</span><select name="delivery">{% for delivery in deliveries %}<option value="{{ delivery }}" {% if delivery == dialogue.delivery %}selected{% endif %}>{{ delivery | title }}</option>{% endfor %}</select></label>
         <button type="submit">Save delivery</button>
       </form>
     </section>
 
-    <section class="alpha-panel">
+    <section class="alpha-panel" id="generation">
       <div class="panel-heading"><div><span class="panel-step">Generation</span><h2>Create audio</h2></div><span>{{ dialogue.generation_text|length }} characters</span></div>
       {% if dialogue.revision_id %}<div class="api-input"><span>Exact speech input</span><p>{{ dialogue.generation_text }}</p></div>{% endif %}
       {% if not provider_configured %}<aside class="inline-warning">ElevenLabs is not configured on this deployment. The button remains guarded and no request can be sent.</aside>{% endif %}
@@ -61,7 +62,7 @@
     </section>
   </div>
 
-  <section class="alpha-panel">
+  <section class="alpha-panel" id="audio-review">
     <div class="panel-heading"><div><span class="panel-step">Review</span><h2>Audio candidates</h2></div><span>{{ dialogue.candidates|length }} generated</span></div>
     <div class="candidate-list">
       {% for candidate in dialogue.candidates %}

@@ -1,4 +1,5 @@
 {% extends "alpha-base.html" %}
+{% from "alpha-status.html" import dialogue_status %}
 {% set active_nav = "dialogue" %}
 {% set speaker = record.speaker %}
 {% block title %}{{ speaker.name }}{% endblock %}
@@ -23,14 +24,14 @@
         <button type="submit">Save reviewed context</button>
       </form>
     </section>
-    <section class="alpha-panel">
+    <section class="alpha-panel" id="voice-approach">
       <div class="panel-heading"><div><h2>Voice approach</h2></div></div>
-      {% if speaker.voice_id %}<p><strong>{{ speaker.voice_name }}</strong><br>{{ speaker.voice_scope | title }} · {{ speaker.voice_status | title }}</p><a class="button-link" href="/alpha/voices/{{ speaker.voice_id }}">Open voice profile</a>{% else %}<p>No voice profile is assigned.</p>{% endif %}
+      {% if speaker.voice_id %}<p><strong>{{ speaker.voice_name }}</strong><br>{{ speaker.voice_scope | title }} · {{ speaker.voice_status | title }}</p><a class="button-link" href="/alpha/voices/{{ speaker.voice_id }}">Open voice profile</a>{% if not speaker.provider_voice_id %}<a class="work-status status-needs_voice status-action" href="/alpha/voices/{{ speaker.voice_id }}#provider-creation">Provider voice missing &rarr;</a>{% endif %}{% else %}<p>No voice profile is assigned.</p>{% endif %}
       {% if speaker.voice_scope == 'unique' and record.baseline_voice %}<hr><h3>Return to the race/gender baseline</h3><p>This NPC will leave the active unique-voice queue and use <strong>{{ record.baseline_voice.name }}</strong>. The unique profile and its history will be retired, not deleted, and can be restored later.</p><button class="secondary" type="button" data-action data-url="/api/alpha/speakers/{{ speaker.speaker_id }}/baseline-voice" data-method="POST">Use {{ record.baseline_voice.name }} baseline</button>{% elif speaker.voice_scope != 'unique' %}<hr><h3>Distinctive enough for a unique voice?</h3><p>The baseline remains the default. Pivotal or globally important characters are candidates for an NPC-specific profile that inherits the baseline.</p><button type="button" data-action data-url="/api/alpha/speakers/{{ speaker.speaker_id }}/unique-voice" data-method="POST" data-go-to-voice>Create unique voice profile</button>{% endif %}
     </section>
   </div>
   <section class="alpha-panel">
     <div class="panel-heading"><div><h2>Dialogue delivered by {{ speaker.name }}</h2></div><span>{{ record.dialogue|length }} records</span></div>
-    <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Quest or gossip</th><th>Type</th><th>Spoken text</th><th>Status</th></tr></thead><tbody>{% for row in record.dialogue %}<tr><td><a href="/alpha/dialogue/{{ row.dialogue_id }}">{{ row.quest_title or row.original_text[:100] }}</a>{% if row.quest_id %}<span class="cell-detail">Quest {{ row.quest_id }}</span>{% endif %}</td><td>{{ row.source | title }}</td><td>{{ 'Prepared' if row.revision_id else 'Not prepared' }}</td><td><span class="work-status status-{{ row.production_state }}">{{ row.production_state | replace('_',' ') | title }}</span></td></tr>{% endfor %}</tbody></table></div>
+    <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Quest or gossip</th><th>Type</th><th>Spoken text</th><th>Status</th></tr></thead><tbody>{% for row in record.dialogue %}<tr><td><a href="/alpha/dialogue/{{ row.dialogue_id }}">{{ row.quest_title or row.original_text[:100] }}</a>{% if row.quest_id %}<span class="cell-detail">Quest {{ row.quest_id }}</span>{% endif %}</td><td>{{ row.source | title }}</td><td>{% if row.revision_id %}Prepared{% else %}<a class="cell-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text">Not prepared &rarr;</a>{% endif %}</td><td>{{ dialogue_status(row) }}</td></tr>{% endfor %}</tbody></table></div>
   </section>
 {% endblock %}

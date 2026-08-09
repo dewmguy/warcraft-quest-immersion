@@ -11,7 +11,7 @@
         <td>{{ voice.creation_method | replace('_',' ') | title }}<span class="cell-detail">{{ voice.clip_count }} reference clips</span></td>
         <td><strong>{{ voice.missing_dialogue_count }} missing audio</strong><span class="cell-detail">{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} records</span></td>
         <td>{{ voice.approved_delivery_count }} / 5 approved</td>
-        <td><span class="work-status {{ 'status-approved' if voice.provider_voice_id else 'status-needs_voice' }}">{{ 'Reusable voice ready' if voice.provider_voice_id else 'Voice not created' }}</span></td>
+        <td>{% if voice.provider_voice_id %}<span class="work-status status-approved">Reusable voice ready</span>{% else %}<a class="work-status status-needs_voice status-action" href="/alpha/voices/{{ voice.voice_id }}#provider-creation">Voice not created &rarr;</a>{% endif %}</td>
       </tr>{% endfor %}
     </tbody></table></div>
   </section>
