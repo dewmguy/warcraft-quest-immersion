@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -43,7 +44,18 @@ class ElevenLabsClient:
         session: requests.Session | None = None,
     ) -> None:
         self.settings = settings or load_settings()
-        self.session = session or requests.Session()
+        self._provided_session = session
+        self._thread_sessions = threading.local()
+
+    @property
+    def session(self) -> requests.Session:
+        if self._provided_session is not None:
+            return self._provided_session
+        session = getattr(self._thread_sessions, "session", None)
+        if session is None:
+            session = requests.Session()
+            self._thread_sessions.session = session
+        return session
 
     @property
     def configured(self) -> bool:

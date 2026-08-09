@@ -121,7 +121,10 @@
     <div class="panel-heading"><div><span class="panel-step">Race / gender delivery</span><h2>Delivery presets</h2><p>The selected candidate defines who is speaking. These presets verify how that same reusable voice performs common quest emotions.</p></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div>
     <div class="delivery-preset-explainer">
       <div><strong>One comparison per paid click</strong><span>Listen, adjust if necessary, then approve. Generate another take only when the first is not usable.</span></div>
-      <details><summary>Fixed comparison script</summary><blockquote>{{ delivery_sample_text }}</blockquote></details>
+      <div class="delivery-preset-batch-actions">
+        <details><summary>Fixed comparison script</summary><blockquote>{{ delivery_sample_text }}</blockquote></details>
+        <button type="button" data-delivery-batch data-paid data-provider-operation="Generating all delivery comparisons" {% if not provider_configured or not voice.provider_voice_id %}disabled{% endif %}>Generate all five comparisons</button>
+      </div>
     </div>
     <div class="delivery-preset-grid">{% for preset in voice.delivery_presets %}<article class="delivery-preset-card">
       <header class="delivery-preset-heading"><div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}">{{ preset.status | replace('_',' ') | title }}</span></div><p>{{ delivery_guidance[preset.delivery] }}</p></header>
@@ -138,12 +141,19 @@
       </form>
       <div class="delivery-preset-review">
       <span class="delivery-preset-section-label">Comparison</span>
-      <form data-json-form data-paid data-provider-operation="Generating a delivery comparison" data-metering="speech" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form">
+      <form data-json-form data-delivery-generation data-delivery-name="{{ preset.delivery | title }}" data-paid data-provider-operation="Generating {{ preset.delivery | title }} delivery comparison" data-metering="speech" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form">
         <input type="hidden" name="sample_text" data-metered-text value="{{ delivery_sample_text }}">
         <div class="metering-preview compact"><span><strong data-estimate-characters>--</strong> chars</span><span><strong data-estimate-dollars>--</strong></span><span><strong data-estimate-duration>--</strong></span></div>
         <button type="submit" {% if not provider_configured or not voice.provider_voice_id %}disabled{% endif %}>{{ 'Generate another comparison' if preset.previews else 'Generate one comparison' }}</button>
       </form>
-      <div class="delivery-preview-list">{% for preview in preset.previews[:2] %}<div><audio controls preload="none" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio><small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} metered chars{% endif %}</small>{% if preview.status == 'candidate' %}<button type="button" data-action data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST">Approve</button>{% endif %}</div>{% endfor %}</div>
+      <div class="delivery-preview-list">{% for preview in preset.previews[:2] %}<div>
+        <div class="reference-player delivery-player" data-compact-audio data-audio-name="{{ preset.delivery | title }} comparison {{ loop.index }}" data-duration="{{ preview.duration_seconds or 0 }}">
+          <button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play {{ preset.delivery }} comparison {{ loop.index }}" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button>
+          <input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ preview.duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for {{ preset.delivery }} comparison {{ loop.index }}">
+          <span class="reference-player-time" data-audio-time>0:00 / 0:00</span>
+          <audio hidden preload="metadata" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio>
+        </div>
+        <small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} metered chars{% endif %}</small>{% if preview.status == 'candidate' %}<button type="button" data-action data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST">Approve</button>{% endif %}</div>{% endfor %}</div>
       </div>
     </article>{% endfor %}</div>
     <p class="form-help">Approving a comparison approves these delivery settings for future dialogue. It does not create another reusable voice.</p>

@@ -391,8 +391,11 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preset-explainer details { flex: 0 0 auto; }
 .delivery-preset-explainer summary { color: #dec274; cursor: pointer; font-size: .76rem; font-weight: 700; }
 .delivery-preset-explainer blockquote { max-width: 720px; margin: 12px 0 0; color: #c8bca5; font-size: .82rem; }
+.delivery-preset-batch-actions { display: flex !important; align-items: center; justify-content: flex-end; gap: 12px !important; }
+.delivery-preset-batch-actions button { min-height: 36px; padding: 7px 11px; white-space: nowrap; }
 .delivery-preset-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .delivery-preset-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(275px, .34fr); grid-template-areas: "heading heading" "settings review"; align-items: start; column-gap: 24px; row-gap: 16px; border: 1px solid #39343d; border-radius: 8px; padding: 16px; background: #131216; }
+.delivery-preset-card.is-generating { border-color: #9b7835; box-shadow: 0 0 0 2px rgb(201 157 67 / 12%); }
 .delivery-preset-heading { grid-area: heading; display: grid; grid-template-columns: minmax(180px, auto) minmax(0, 1fr); align-items: center; gap: 18px; border-bottom: 1px solid #302c33; padding-bottom: 12px; }
 .delivery-preset-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .delivery-preset-heading > div > strong { color: #eee4ca; font-size: .92rem; }
@@ -408,7 +411,7 @@ dialog .actions { justify-content: flex-end; }
 .delivery-test-form { margin: 0; }
 .delivery-preview-list { display: grid; gap: 10px; margin-top: 10px; }
 .delivery-preview-list > div { display: grid; gap: 6px; padding: 9px; border: 1px solid #302c33; border-radius: 6px; background: #0e0d10; }
-.delivery-preview-list audio { width: 100%; min-width: 0; height: 34px; }
+.delivery-player { width: 100%; }
 .delivery-preview-list small { color: #aaa0ad; }
 .delivery-preview-list button { justify-self: start; }
 .reference-list { gap: 5px; }
@@ -484,6 +487,8 @@ dialog .actions { justify-content: flex-end; }
   .candidate-list article, .reference-list article { grid-template-columns: 1fr; }
   .compact-form { grid-template-columns: 1fr; }
   .delivery-preset-explainer { align-items: flex-start; flex-direction: column; }
+  .delivery-preset-batch-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .delivery-preset-batch-actions button { width: 100%; }
   .delivery-preset-heading, .alpha-panel .delivery-preset-settings { grid-template-columns: 1fr; }
   .delivery-preset-settings > .delivery-preset-section-label, .delivery-preset-settings > label:nth-of-type(3), .delivery-preset-settings > button { grid-column: auto; }
 }

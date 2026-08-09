@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+from tts_cli import alpha_store as alpha_module
 from tts_cli import web
 from tts_cli.alpha_store import AlphaStore
 
@@ -185,6 +186,9 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Generate one comparison" in page.text
     assert "Preset settings" in page.text
     assert "Comparison" in page.text
+    assert "Generate all five comparisons" in page.text
+    assert page.text.count("data-delivery-generation") == 5
+    assert "data-delivery-batch" in page.text
     assert 'type="range"' in page.text
     assert 'href="#provider-creation"' in page.text
     assert 'id="provider-creation"' in page.text
@@ -236,6 +240,47 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
     assert web.alpha_store.get_voice(voice_id)["previews"] == []
 
 
+def test_delivery_comparisons_use_the_compact_custom_player(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.5)
+    voice_id = "baseline--bloodelf-female"
+    with TestClient(web.app) as client:
+        voice = web.alpha_store.get_voice(voice_id)
+        web.alpha_store.update_voice(
+            voice_id,
+            {
+                "description": voice["description"],
+                "creation_method": "external",
+                "provider_voice_id": "provider-voice-test",
+                "status": "active",
+            },
+        )
+        request = web.alpha_store.delivery_preview_request(
+            voice_id,
+            "neutral",
+            "This fixed comparison passage is intentionally long enough to produce a useful "
+            "delivery test while keeping every generated preset directly comparable.",
+        )
+        preview = web.alpha_store.record_delivery_preview(
+            voice_id,
+            "neutral",
+            request,
+            content=b"delivery-audio",
+            provider_request_id="delivery-request-test",
+            subscription={"request_character_cost": 80},
+        )
+        page = client.get(f"/alpha/voices/{voice_id}")
+
+    assert page.status_code == 200
+    assert 'class="reference-player delivery-player"' in page.text
+    assert 'data-audio-name="Neutral comparison 1"' in page.text
+    assert (
+        f'<audio hidden preload="metadata" src="/api/alpha/delivery-previews/{preview["preview_id"]}/audio">'
+        in page.text
+    )
+    assert "<audio controls" not in page.text
+
+
 def test_paid_confirmation_includes_candidate_replacement_warning():
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
@@ -264,6 +309,11 @@ def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):
     )
     assert "function startElevenLabsRequest" in script
     assert "function finishElevenLabsRequest" in script
+    assert "const alphaProviderRequests = new Map()" in script
+    assert "const activeDeliveryGenerations = new Map()" in script
+    assert "for (const form of forms) launchDeliveryGeneration(form);" in script
+    assert "if (!activeDeliveryGenerations.size) finishDeliveryGenerationRun();" in script
+    assert "Completed audio is stored even if another request fails." in script
     assert "window.setInterval(renderElevenLabsProgress, 1000)" in script
     assert "the request remains active" in script
     assert 'startElevenLabsRequest("Checking ElevenLabs account", null, true)' in script

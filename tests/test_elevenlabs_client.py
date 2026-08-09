@@ -1,3 +1,5 @@
+import threading
+
 from tts_cli.config import Settings
 from tts_cli.elevenlabs_client import ElevenLabsClient
 
@@ -37,6 +39,34 @@ class FakeSession:
     def get(self, url, **kwargs):
         self.calls.append(("GET", url, kwargs))
         return FakeResponse(payload={"character_count": 50, "character_limit": 1000})
+
+
+def test_default_http_sessions_are_isolated_per_worker_thread(monkeypatch):
+    created_sessions = []
+
+    def create_session():
+        session = FakeSession()
+        created_sessions.append(session)
+        return session
+
+    monkeypatch.setattr("tts_cli.elevenlabs_client.requests.Session", create_session)
+    client = ElevenLabsClient(settings=Settings(elevenlabs_api_key="test-key"))
+    barrier = threading.Barrier(3)
+    sessions = []
+
+    def read_session():
+        barrier.wait()
+        sessions.append(client.session)
+
+    workers = [threading.Thread(target=read_session) for _ in range(2)]
+    for worker in workers:
+        worker.start()
+    barrier.wait()
+    for worker in workers:
+        worker.join()
+
+    assert len(created_sessions) == 2
+    assert len({id(session) for session in sessions}) == 2
 
 
 def test_tts_is_called_only_through_explicit_client_method():

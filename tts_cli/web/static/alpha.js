@@ -4,7 +4,8 @@ const alphaMessageDetail = alphaMessage.querySelector("[data-alpha-message-detai
 const alphaMessageElapsed = alphaMessage.querySelector("[data-alpha-message-elapsed]");
 const alphaMessageProgress = alphaMessage.querySelector("[data-alpha-message-progress]");
 let alphaProviderTimer = null;
-let alphaProviderRequest = null;
+const alphaProviderRequests = new Map();
+let alphaProviderRequestSequence = 0;
 
 function stopAlphaProviderTimer() {
   if (alphaProviderTimer !== null) window.clearInterval(alphaProviderTimer);
@@ -42,13 +43,21 @@ function providerProgressDetail(request, elapsedSeconds) {
 }
 
 function renderElevenLabsProgress() {
-  if (!alphaProviderRequest) return;
-  const elapsedSeconds = (Date.now() - alphaProviderRequest.startedAt) / 1000;
+  const requests = [...alphaProviderRequests.values()];
+  if (!requests.length) return;
+  const startedAt = Math.min(...requests.map((request) => request.startedAt));
+  const elapsedSeconds = (Date.now() - startedAt) / 1000;
   const elapsed = `Elapsed ${formatElapsedTime(elapsedSeconds)}`;
-  alphaMessageProgress.setAttribute("aria-valuetext", `${alphaProviderRequest.operation}; ${elapsed}`);
+  const operation = requests.length === 1
+    ? requests[0].operation
+    : `${requests.length} ElevenLabs requests in progress`;
+  const detail = requests.length === 1
+    ? providerProgressDetail(requests[0], elapsedSeconds)
+    : `Running independently: ${requests.map((request) => request.operation).join("; ")}. Completed audio is stored even if another request fails.`;
+  alphaMessageProgress.setAttribute("aria-valuetext", `${operation}; ${elapsed}`);
   renderAlphaMessage({
-    title: alphaProviderRequest.operation,
-    detail: providerProgressDetail(alphaProviderRequest, elapsedSeconds),
+    title: operation,
+    detail,
     state: "working",
     elapsed,
     provider: true,
@@ -56,37 +65,34 @@ function renderElevenLabsProgress() {
 }
 
 function startElevenLabsRequest(operation, estimate = null, readOnly = false) {
-  stopAlphaProviderTimer();
-  alphaProviderRequest = {
+  const requestId = `provider-request-${++alphaProviderRequestSequence}`;
+  alphaProviderRequests.set(requestId, {
     operation: operation || "Processing an ElevenLabs request",
     estimate,
     readOnly,
     startedAt: Date.now(),
-  };
-  renderElevenLabsProgress();
-  alphaProviderTimer = window.setInterval(renderElevenLabsProgress, 1000);
-}
-
-function finishElevenLabsRequest(text, state) {
-  const request = alphaProviderRequest;
-  const elapsedSeconds = request ? (Date.now() - request.startedAt) / 1000 : 0;
-  stopAlphaProviderTimer();
-  alphaProviderRequest = null;
-  renderAlphaMessage({
-    title: state === "complete" ? "ElevenLabs request complete" : "ElevenLabs request failed",
-    detail: text,
-    state,
-    elapsed: `${state === "complete" ? "Completed" : "Stopped"} in ${formatElapsedTime(elapsedSeconds)}`,
   });
+  renderElevenLabsProgress();
+  if (alphaProviderTimer === null) {
+    alphaProviderTimer = window.setInterval(renderElevenLabsProgress, 1000);
+  }
+  return requestId;
 }
 
-function showAlphaMessage(text, state = "working") {
-  if (alphaProviderRequest && state !== "working") {
-    finishElevenLabsRequest(text, state);
+function finishElevenLabsRequest(requestId) {
+  alphaProviderRequests.delete(requestId);
+  if (alphaProviderRequests.size) {
+    renderElevenLabsProgress();
     return;
   }
   stopAlphaProviderTimer();
-  alphaProviderRequest = null;
+}
+
+function showAlphaMessage(text, state = "working") {
+  if (alphaProviderRequests.size && state !== "working") {
+    renderElevenLabsProgress();
+    return;
+  }
   renderAlphaMessage({ title: text, state });
 }
 
@@ -155,23 +161,28 @@ function syncMeteringCard(element) {
   if (duration) duration.textContent = formatSeconds(estimate.seconds);
 }
 
-async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmRequired = false, confirmText = "", providerOperation = "", providerEstimate = null }) {
+async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmRequired = false, confirmText = "", providerOperation = "", providerEstimate = null, skipConfirmation = false }) {
   const shouldConfirm = paid || confirmRequired;
-  if (shouldConfirm && !window.confirm(confirmText || "This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
-  if (paid) startElevenLabsRequest(providerOperation, providerEstimate);
-  else showAlphaMessage("Saving…");
-  const headers = { "X-WQI-Action": "confirmed" };
-  if (paid) headers["X-WQI-Paid-Action"] = "confirmed";
-  if (body !== null && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: body === null ? null : body instanceof FormData ? body : JSON.stringify(body),
-  });
-  return parseAlphaResponse(response);
+  if (!skipConfirmation && shouldConfirm && !window.confirm(confirmText || "This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
+  const providerRequestId = paid ? startElevenLabsRequest(providerOperation, providerEstimate) : null;
+  if (!paid) showAlphaMessage("Saving…");
+  try {
+    const headers = { "X-WQI-Action": "confirmed" };
+    if (paid) headers["X-WQI-Paid-Action"] = "confirmed";
+    if (body !== null && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: body === null ? null : body instanceof FormData ? body : JSON.stringify(body),
+    });
+    return await parseAlphaResponse(response);
+  } finally {
+    if (providerRequestId) finishElevenLabsRequest(providerRequestId);
+  }
 }
 
 for (const form of document.querySelectorAll("[data-json-form]")) {
+  if (form.dataset.deliveryGeneration !== undefined) continue;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -191,6 +202,135 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
       showAlphaMessage(error.message, "failed");
     }
   });
+}
+
+const deliveryGenerationForms = [...document.querySelectorAll("[data-delivery-generation]")];
+const deliveryBatchButton = document.querySelector("[data-delivery-batch]");
+const activeDeliveryGenerations = new Map();
+let deliveryGenerationOutcomes = [];
+let deliveryReloadTimer = null;
+
+function setDeliveryGenerationState(form, running) {
+  const button = form.querySelector('button[type="submit"]');
+  const card = form.closest(".delivery-preset-card");
+  form.ariaBusy = String(running);
+  card?.classList.toggle("is-generating", running);
+  if (!button) return;
+  if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent.trim();
+  if (!button.dataset.serverDisabled) button.dataset.serverDisabled = button.disabled ? "true" : "false";
+  button.disabled = running || button.dataset.serverDisabled === "true";
+  button.textContent = running ? `Generating ${form.dataset.deliveryName}…` : button.dataset.idleLabel;
+}
+
+function availableDeliveryGenerationForms() {
+  return deliveryGenerationForms.filter((form) => {
+    const button = form.querySelector('button[type="submit"]');
+    return button && button.dataset.serverDisabled !== "true" && !activeDeliveryGenerations.has(form);
+  });
+}
+
+function syncDeliveryBatchButton() {
+  if (!deliveryBatchButton) return;
+  if (!deliveryBatchButton.dataset.serverDisabled) {
+    deliveryBatchButton.dataset.serverDisabled = deliveryBatchButton.disabled ? "true" : "false";
+  }
+  const available = availableDeliveryGenerationForms();
+  const serverDisabled = deliveryBatchButton.dataset.serverDisabled === "true";
+  deliveryBatchButton.disabled = serverDisabled || !available.length;
+  if (serverDisabled || !activeDeliveryGenerations.size) {
+    deliveryBatchButton.textContent = "Generate all five comparisons";
+  } else if (available.length) {
+    deliveryBatchButton.textContent = `Generate remaining ${available.length}`;
+  } else {
+    deliveryBatchButton.textContent = `${activeDeliveryGenerations.size} generations running…`;
+  }
+}
+
+function deliveryBatchConfirmation(forms) {
+  const estimates = forms.map(meteringEstimate).filter(Boolean);
+  const characters = estimates.reduce((total, estimate) => total + estimate.characters, 0);
+  const dollars = estimates.reduce((total, estimate) => total + estimate.dollars, 0);
+  const seconds = estimates.reduce((total, estimate) => total + estimate.seconds, 0);
+  return `This starts ${forms.length} independent preset comparison request${forms.length === 1 ? "" : "s"} at the same time. Each successful result is stored separately, even if another request fails.\n\nCombined preflight estimate:\n- ${characters.toLocaleString()} metered characters\n- about $${dollars.toFixed(3)} at the published v2/v3 API list rate\n- about ${formatSeconds(seconds)} of finished audio across all requests\n\nYour plan's concurrency limit may cause an individual request to fail without affecting the others. Continue?`;
+}
+
+function finishDeliveryGenerationRun() {
+  const successes = deliveryGenerationOutcomes.filter((outcome) => outcome.ok);
+  const failures = deliveryGenerationOutcomes.filter((outcome) => !outcome.ok);
+  const generated = `${successes.length} comparison${successes.length === 1 ? "" : "s"} generated`;
+  if (failures.length) {
+    const failureDetail = failures.map((outcome) => `${outcome.delivery}: ${outcome.message}`).join("; ");
+    showAlphaMessage(`${generated}; ${failures.length} failed. ${failureDetail}`, "failed");
+  } else {
+    showAlphaMessage(`${generated} successfully.`, "complete");
+  }
+  if (successes.length) {
+    deliveryReloadTimer = window.setTimeout(() => window.location.reload(), failures.length ? 1400 : 600);
+  }
+}
+
+function launchDeliveryGeneration(form) {
+  if (activeDeliveryGenerations.has(form)) return activeDeliveryGenerations.get(form);
+  if (!activeDeliveryGenerations.size) {
+    if (deliveryReloadTimer !== null) window.clearTimeout(deliveryReloadTimer);
+    deliveryReloadTimer = null;
+    deliveryGenerationOutcomes = [];
+  }
+  setDeliveryGenerationState(form, true);
+  const job = (async () => {
+    try {
+      const payload = await runAlphaAction({
+        url: form.dataset.url,
+        method: form.dataset.method || "POST",
+        body: jsonFromForm(form),
+        paid: true,
+        providerOperation: form.dataset.providerOperation,
+        providerEstimate: meteringEstimate(form),
+        skipConfirmation: true,
+      });
+      deliveryGenerationOutcomes.push({
+        ok: true,
+        delivery: form.dataset.deliveryName,
+        message: payload.message || "Generated",
+      });
+      return payload;
+    } catch (error) {
+      deliveryGenerationOutcomes.push({
+        ok: false,
+        delivery: form.dataset.deliveryName,
+        message: error.message,
+      });
+      return null;
+    } finally {
+      activeDeliveryGenerations.delete(form);
+      setDeliveryGenerationState(form, false);
+      syncDeliveryBatchButton();
+      if (!activeDeliveryGenerations.size) finishDeliveryGenerationRun();
+    }
+  })();
+  activeDeliveryGenerations.set(form, job);
+  syncDeliveryBatchButton();
+  return job;
+}
+
+for (const form of deliveryGenerationForms) {
+  setDeliveryGenerationState(form, false);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (activeDeliveryGenerations.has(form)) return;
+    if (!window.confirm(paidConfirmation(form))) return;
+    launchDeliveryGeneration(form);
+  });
+}
+
+if (deliveryBatchButton) {
+  deliveryBatchButton.addEventListener("click", () => {
+    const forms = availableDeliveryGenerationForms();
+    if (!forms.length) return;
+    if (!window.confirm(deliveryBatchConfirmation(forms))) return;
+    for (const form of forms) launchDeliveryGeneration(form);
+  });
+  syncDeliveryBatchButton();
 }
 
 for (const form of document.querySelectorAll("[data-upload-form]")) {
@@ -384,7 +524,7 @@ if (providerAccount) {
     result.hidden = true;
     if (errorBox) errorBox.hidden = true;
     if (refresh) refresh.disabled = true;
-    startElevenLabsRequest("Checking ElevenLabs account", null, true);
+    let accountRequestId = startElevenLabsRequest("Checking ElevenLabs account", null, true);
     try {
       const response = await fetch(providerAccount.dataset.providerUrl);
       const payload = await parseAlphaResponse(response);
@@ -407,14 +547,19 @@ if (providerAccount) {
       progress.value = account.percent_used || 0;
       providerAccount.querySelector("[data-provider-message]").textContent = payload.message;
       result.hidden = false;
+      finishElevenLabsRequest(accountRequestId);
+      accountRequestId = null;
       showAlphaMessage(payload.message || "ElevenLabs account status was refreshed.", "complete");
     } catch (error) {
       if (errorBox) {
         errorBox.textContent = error.message;
         errorBox.hidden = false;
       }
+      finishElevenLabsRequest(accountRequestId);
+      accountRequestId = null;
       showAlphaMessage(error.message, "failed");
     } finally {
+      if (accountRequestId) finishElevenLabsRequest(accountRequestId);
       loading.hidden = true;
       if (refresh) refresh.disabled = false;
     }
