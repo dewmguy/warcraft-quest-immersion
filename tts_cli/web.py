@@ -545,6 +545,23 @@ def api_create_unique_voice(
         raise _alpha_error(error) from error
 
 
+@app.post("/api/alpha/speakers/{speaker_id}/baseline-voice")
+def api_use_baseline_voice(
+    speaker_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        record = alpha_store.use_baseline_voice(speaker_id)
+        baseline = record["baseline_voice"]
+        return {
+            "message": f"Assigned {record['speaker']['name']} to {baseline['name']}.",
+            "speaker": record,
+        }
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
 @app.patch("/api/alpha/voices/{voice_id}")
 def api_update_voice(
     voice_id: str,

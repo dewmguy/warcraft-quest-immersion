@@ -44,6 +44,10 @@ angry, sorrowful, joyful, or proclaiming belongs to a dialogue line and is not a
 separate voice by default. A unique NPC voice inherits its current baseline as
 context but becomes an independently versioned record.
 
+Returning an NPC to its matching race/gender baseline retires an orphaned
+unique profile instead of deleting it. The profile leaves the active queue but
+keeps its versions, references, and provider identity so it can be restored.
+
 The owner-facing creation paths are description-only Voice Design,
 reference-guided Voice Design, and Instant Voice Cloning. All produce a reusable
 provider voice ID. Provider model selection lives in general settings, not in

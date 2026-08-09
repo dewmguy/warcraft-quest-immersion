@@ -255,6 +255,7 @@ dialog .actions { justify-content: flex-end; }
 .alpha-body button, .button-link { display: inline-flex; justify-content: center; align-items: center; min-height: 40px; border: 1px solid #c99d43; border-radius: 6px; padding: 9px 14px; background: #c99d43; color: #17130d; font-weight: 800; text-decoration: none; cursor: pointer; }
 .alpha-body button:hover, .button-link:hover { background: #e0b65f; }
 .alpha-body button:disabled { border-color: #4b4650; background: #312d34; color: #807a84; cursor: not-allowed; }
+.alpha-body button.secondary { background: transparent; color: #d8b86d; }
 .button-link.secondary { background: transparent; color: #d8b86d; }
 .text-link { padding: 10px 4px; color: #bfa86f; }
 .alpha-table-wrap { overflow-x: auto; }

@@ -160,6 +160,26 @@ def test_settings_owns_provider_model_selection(monkeypatch):
     assert saved.json()["settings"]["tts_model_id"] == "eleven_multilingual_v2"
 
 
+def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        speaker_id = "creature-90002"
+        unique = web.alpha_store.create_unique_voice(speaker_id)
+        page = client.get("/alpha/speakers/creature/90002")
+        reset = client.post(
+            f"/api/alpha/speakers/{speaker_id}/baseline-voice",
+            headers={"X-WQI-Action": "confirmed"},
+        )
+        unique_queue = client.get("/alpha/voices?scope=unique")
+
+    assert page.status_code == 200
+    assert "Return to the race/gender baseline" in page.text
+    assert "Use Night Elf" in page.text
+    assert reset.status_code == 200
+    assert reset.json()["speaker"]["speaker"]["voice_scope"] == "baseline"
+    assert unique["name"] not in unique_queue.text
+
+
 def test_failed_dwarf_poc_and_old_voice_page_redirect_to_alpha(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app, follow_redirects=False) as client:

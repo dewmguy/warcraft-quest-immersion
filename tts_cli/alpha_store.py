@@ -771,7 +771,8 @@ class AlphaStore:
                     "SELECT COUNT(*) FROM voices WHERE scope='baseline'"
                 ).fetchone()[0],
                 "unique_voices": connection.execute(
-                    "SELECT COUNT(*) FROM voices WHERE scope='unique'"
+                    "SELECT COUNT(*) FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id "
+                    "AND vv.is_current=1 WHERE v.scope='unique' AND vv.status<>'retired'"
                 ).fetchone()[0],
             }
             rows = connection.execute(
@@ -1082,10 +1083,17 @@ class AlphaStore:
             voices = connection.execute(
                 "SELECT v.voice_id, v.name, v.scope, vv.provider_voice_id, vv.status "
                 "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
-                "WHERE (v.scope='baseline' AND v.race_id=? AND v.gender_id=?) OR v.scope='unique' "
+                "WHERE vv.status<>'retired' AND ((v.scope='baseline' AND v.race_id=? "
+                "AND v.gender_id=?) OR (v.scope='unique' AND v.npc_speaker_id=?)) "
                 "ORDER BY v.scope, v.name",
-                (speaker["race_id"], speaker["gender_id"]),
+                (speaker["race_id"], speaker["gender_id"], speaker_id),
             ).fetchall()
+            baseline_voice = connection.execute(
+                "SELECT v.voice_id, v.name FROM voices v JOIN voice_versions vv "
+                "ON vv.voice_id=v.voice_id AND vv.is_current=1 WHERE v.scope='baseline' "
+                "AND v.race_id=? AND v.gender_id=? AND vv.status<>'retired'",
+                (speaker["race_id"], speaker["gender_id"]),
+            ).fetchone()
         speaker_payload = dict(speaker)
         speaker_payload["importance_score"] = IMPORTANCE_SCORES.get(
             speaker_payload["importance"], 0
@@ -1094,10 +1102,12 @@ class AlphaStore:
             "speaker": speaker_payload,
             "dialogue": [dict(row) for row in lines],
             "voices": [dict(row) for row in voices],
+            "baseline_voice": dict(baseline_voice) if baseline_voice else None,
         }
 
     def create_unique_voice(self, speaker_id: str) -> dict[str, Any]:
         now = utc_now()
+        existing_voice_id: str | None = None
         with self.connect() as connection:
             speaker = connection.execute(
                 "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
@@ -1113,42 +1123,110 @@ class AlphaStore:
                     "WHERE speaker_id=?",
                     (existing["voice_id"], now, speaker_id),
                 )
-                return self.get_voice(existing["voice_id"])
-            voice_id = f"unique--{speaker_id}"
-            parent_voice_id = speaker["voice_id"]
-            parent = connection.execute(
-                "SELECT description, settings_json FROM voice_versions WHERE voice_id=? AND is_current=1",
-                (parent_voice_id,),
+                existing_voice_id = str(existing["voice_id"])
+            else:
+                voice_id = f"unique--{speaker_id}"
+                parent_voice_id = speaker["voice_id"]
+                parent = connection.execute(
+                    "SELECT description, settings_json FROM voice_versions "
+                    "WHERE voice_id=? AND is_current=1",
+                    (parent_voice_id,),
+                ).fetchone()
+                description = f"Unique voice for {speaker['name']}. " + (
+                    parent["description"] if parent else "Context and direction need review."
+                )
+                settings = parent["settings_json"] if parent else _json({"stability": 0.5})
+                connection.execute(
+                    "INSERT INTO voices(voice_id, name, scope, race_id, gender_id, parent_voice_id, "
+                    "npc_speaker_id, created_at, updated_at) VALUES (?, ?, 'unique', ?, ?, ?, ?, ?, ?)",
+                    (
+                        voice_id,
+                        speaker["name"],
+                        speaker["race_id"],
+                        speaker["gender_id"],
+                        parent_voice_id,
+                        speaker_id,
+                        now,
+                        now,
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO voice_versions(voice_id, version_number, description, "
+                    "creation_method, settings_json, status, created_at) "
+                    "VALUES (?, 1, ?, 'unselected', ?, 'draft', ?)",
+                    (voice_id, description, settings, now),
+                )
+                self._seed_delivery_presets(connection, voice_id)
+                connection.execute(
+                    "UPDATE speakers SET voice_id=?, uniqueness='unique', updated_at=? "
+                    "WHERE speaker_id=?",
+                    (voice_id, now, speaker_id),
+                )
+        if not existing_voice_id:
+            return self.get_voice(voice_id)
+        voice = self.get_voice(existing_voice_id)
+        if voice["status"] != "retired":
+            return voice
+        return self.update_voice(
+            existing_voice_id,
+            {
+                "description": voice["description"],
+                "creation_method": voice["creation_method"],
+                "provider_voice_id": voice["provider_voice_id"] or "",
+                "model_id": voice["model_id"],
+                "status": "draft",
+                **voice["settings"],
+            },
+        )
+
+    def use_baseline_voice(self, speaker_id: str) -> dict[str, Any]:
+        old_unique_voice_id: str | None = None
+        with self.connect() as connection:
+            speaker = connection.execute(
+                "SELECT s.*, v.scope AS voice_scope FROM speakers s LEFT JOIN voices v "
+                "ON v.voice_id=s.voice_id WHERE s.speaker_id=?",
+                (speaker_id,),
             ).fetchone()
-            description = f"Unique voice for {speaker['name']}. " + (
-                parent["description"] if parent else "Context and direction need review."
-            )
-            settings = parent["settings_json"] if parent else _json({"stability": 0.5})
+            if not speaker:
+                raise AlphaError("Speaker was not found.")
+            baseline = connection.execute(
+                "SELECT v.voice_id FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id "
+                "AND vv.is_current=1 WHERE v.scope='baseline' AND v.race_id=? AND v.gender_id=? "
+                "AND vv.status<>'retired'",
+                (speaker["race_id"], speaker["gender_id"]),
+            ).fetchone()
+            if not baseline:
+                raise AlphaError("A matching race and gender baseline voice was not found.")
             connection.execute(
-                "INSERT INTO voices(voice_id, name, scope, race_id, gender_id, parent_voice_id, "
-                "npc_speaker_id, created_at, updated_at) VALUES (?, ?, 'unique', ?, ?, ?, ?, ?, ?)",
-                (
-                    voice_id,
-                    speaker["name"],
-                    speaker["race_id"],
-                    speaker["gender_id"],
-                    parent_voice_id,
-                    speaker_id,
-                    now,
-                    now,
-                ),
+                "UPDATE speakers SET voice_id=?, uniqueness='baseline', updated_at=? "
+                "WHERE speaker_id=?",
+                (baseline["voice_id"], utc_now(), speaker_id),
             )
-            connection.execute(
-                "INSERT INTO voice_versions(voice_id, version_number, description, creation_method, "
-                "settings_json, status, created_at) VALUES (?, 1, ?, 'unselected', ?, 'draft', ?)",
-                (voice_id, description, settings, now),
-            )
-            self._seed_delivery_presets(connection, voice_id)
-            connection.execute(
-                "UPDATE speakers SET voice_id=?, uniqueness='unique', updated_at=? WHERE speaker_id=?",
-                (voice_id, now, speaker_id),
-            )
-        return self.get_voice(voice_id)
+            if speaker["voice_scope"] == "unique" and speaker["voice_id"]:
+                remaining = connection.execute(
+                    "SELECT COUNT(*) FROM speakers WHERE voice_id=?",
+                    (speaker["voice_id"],),
+                ).fetchone()[0]
+                if not remaining:
+                    old_unique_voice_id = str(speaker["voice_id"])
+
+        if old_unique_voice_id:
+            voice = self.get_voice(old_unique_voice_id)
+            if voice["status"] != "retired":
+                self.update_voice(
+                    old_unique_voice_id,
+                    {
+                        "description": voice["description"],
+                        "creation_method": voice["creation_method"],
+                        "provider_voice_id": voice["provider_voice_id"] or "",
+                        "model_id": voice["model_id"],
+                        "status": "retired",
+                        **voice["settings"],
+                    },
+                )
+        record = self.get_speaker(speaker_id)
+        record["retired_voice_id"] = old_unique_voice_id
+        return record
 
     def get_app_settings(self) -> dict[str, Any]:
         with self.connect() as connection:
@@ -1385,14 +1463,19 @@ class AlphaStore:
             },
         )
 
-    def list_voices(self, scope: str = "") -> list[dict[str, Any]]:
+    def list_voices(
+        self, scope: str = "", *, include_retired: bool = False
+    ) -> list[dict[str, Any]]:
         parameters: list[Any] = []
-        where = ""
+        conditions = []
         if scope:
             if scope not in {"baseline", "unique"}:
                 raise AlphaError("Unknown voice scope.")
-            where = "WHERE v.scope=?"
+            conditions.append("v.scope=?")
             parameters.append(scope)
+        if not include_retired:
+            conditions.append("vv.status<>'retired'")
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         with self.connect() as connection:
             rows = connection.execute(
                 "SELECT v.*, vv.version_id, vv.version_number, vv.creation_method, vv.provider, "
@@ -1478,7 +1561,9 @@ class AlphaStore:
                 preview for preview in preview_payloads if preview["delivery"] == preset["delivery"]
             ]
             payload["delivery_presets"].append(preset)
-        summary = next(item for item in self.list_voices() if item["voice_id"] == voice_id)
+        summary = next(
+            item for item in self.list_voices(include_retired=True) if item["voice_id"] == voice_id
+        )
         payload.update(
             {
                 key: summary[key]

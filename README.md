@@ -126,7 +126,8 @@ The Alpha portal is the working production surface:
    NPC, quest, or text.
 3. Prepare spoken text on demand, then review or edit the revision.
 4. Review the inferred NPC role, affiliation, zone, story reach, and concise
-   context; assign a baseline or versioned unique voice.
+   context; assign a baseline or versioned unique voice. Returning an NPC to
+   baseline retires its unused unique profile without deleting its history.
 5. Create the reusable provider voice with description-only Voice Design,
    reference-guided Voice Design, or Instant Voice Cloning.
 6. Explicitly request one ElevenLabs candidate, review it, and approve the exact

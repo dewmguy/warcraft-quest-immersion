@@ -104,6 +104,31 @@ def test_unique_voice_inherits_baseline_and_is_assigned(store: AlphaStore):
     assert updated["uniqueness"] == "unique"
 
 
+def test_unique_voice_can_return_to_baseline_without_losing_history(store: AlphaStore):
+    row = next(
+        item
+        for item in store.list_dialogue(page_size=10)["rows"]
+        if item["speaker_name"] == "Sentinel Amara"
+    )
+    speaker = store.get_speaker(row["speaker_id"])["speaker"]
+    baseline_voice_id = speaker["voice_id"]
+    unique = store.create_unique_voice(speaker["speaker_id"])
+
+    reset = store.use_baseline_voice(speaker["speaker_id"])
+
+    assert reset["speaker"]["voice_id"] == baseline_voice_id
+    assert reset["speaker"]["uniqueness"] == "baseline"
+    assert reset["retired_voice_id"] == unique["voice_id"]
+    assert store.get_voice(unique["voice_id"])["status"] == "retired"
+    assert unique["voice_id"] not in {voice["voice_id"] for voice in store.list_voices("unique")}
+    assert store.dashboard()["counts"]["unique_voices"] == 0
+
+    restored = store.create_unique_voice(speaker["speaker_id"])
+    assert restored["voice_id"] == unique["voice_id"]
+    assert restored["status"] == "draft"
+    assert restored["version_number"] == unique["version_number"] + 2
+
+
 def test_speaker_context_is_inferred_but_remains_editable(store: AlphaStore):
     row = next(
         item
