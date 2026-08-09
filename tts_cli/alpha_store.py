@@ -69,7 +69,6 @@ VOICE_METHODS = (
     "instant_clone",
     "external",
 )
-VOICE_STATUSES = ("draft", "candidate", "active", "retired")
 DELIVERY_STATUSES = ("not_tested", "previewed", "approved")
 PRODUCTION_STATES = (
     "needs_text",
@@ -106,6 +105,53 @@ def _loads(value: str | None, fallback: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
+
+
+def _with_voice_lifecycle(voice: dict[str, Any]) -> dict[str, Any]:
+    """Derive workflow state from provider, preset, and production readiness."""
+    approved = int(voice.get("approved_delivery_count") or 0)
+    dialogue_count = int(voice.get("dialogue_count") or 0)
+    missing = int(voice.get("missing_dialogue_count") or 0)
+    deployed = max(dialogue_count - missing, 0)
+    stored_status = str(voice.get("stored_status") or "draft")
+
+    if voice.get("scope") == "unique" and stored_status == "retired":
+        status = "archived"
+        reason = "Archived because no speaker currently uses this unique voice."
+    elif not voice.get("provider_voice_id") or approved < len(DELIVERIES):
+        requirements = []
+        if not voice.get("provider_voice_id"):
+            requirements.append("connect a reusable ElevenLabs voice")
+        if approved < len(DELIVERIES):
+            requirements.append(
+                f"approve {len(DELIVERIES) - approved} remaining emotional delivery "
+                f"preset{'s' if len(DELIVERIES) - approved != 1 else ''}"
+            )
+        status = "draft"
+        reason = "Draft until you " + " and ".join(requirements) + "."
+    elif deployed == 0:
+        status = "candidate"
+        reason = (
+            "The reusable voice and all five emotional delivery presets are approved, "
+            "but no matching dialogue audio has been approved for production yet."
+        )
+    elif missing == 0:
+        status = "completed"
+        reason = (
+            f"All {dialogue_count} matching dialogue record"
+            f"{'s have' if dialogue_count != 1 else ' has'} approved production audio."
+        )
+    else:
+        status = "active"
+        reason = (
+            f"{deployed} of {dialogue_count} matching dialogue records have approved "
+            f"production audio; {missing} remain."
+        )
+
+    voice["status"] = status
+    voice["lifecycle_reason"] = reason
+    voice["deployed_dialogue_count"] = deployed
+    return voice
 
 
 def _normalize_voice_actor_notes(value: Any) -> str:
@@ -1191,21 +1237,32 @@ class AlphaStore:
             voices = connection.execute(
                 "SELECT v.voice_id, v.name, v.scope, vv.provider_voice_id, vv.status "
                 "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
-                "WHERE vv.status<>'retired' AND ((v.scope='baseline' AND v.race_id=? "
-                "AND v.gender_id=?) OR (v.scope='unique' AND v.npc_speaker_id=?)) "
+                "WHERE (v.scope='baseline' AND v.race_id=? AND v.gender_id=?) OR "
+                "(v.scope='unique' AND v.npc_speaker_id=? AND vv.status<>'retired') "
                 "ORDER BY v.scope, v.name",
                 (speaker["race_id"], speaker["gender_id"], speaker_id),
             ).fetchall()
             baseline_voice = connection.execute(
                 "SELECT v.voice_id, v.name FROM voices v JOIN voice_versions vv "
                 "ON vv.voice_id=v.voice_id AND vv.is_current=1 WHERE v.scope='baseline' "
-                "AND v.race_id=? AND v.gender_id=? AND vv.status<>'retired'",
+                "AND v.race_id=? AND v.gender_id=?",
                 (speaker["race_id"], speaker["gender_id"]),
             ).fetchone()
         speaker_payload = dict(speaker)
         speaker_payload["importance_score"] = IMPORTANCE_SCORES.get(
             speaker_payload["importance"], 0
         )
+        if speaker_payload.get("voice_id"):
+            voice_summary = next(
+                (
+                    voice
+                    for voice in self.list_voices(include_retired=True)
+                    if voice["voice_id"] == speaker_payload["voice_id"]
+                ),
+                None,
+            )
+            if voice_summary:
+                speaker_payload["voice_status"] = voice_summary["status"]
         return {
             "speaker": speaker_payload,
             "dialogue": [dict(row) for row in lines],
@@ -1273,19 +1330,9 @@ class AlphaStore:
         if not existing_voice_id:
             return self.get_voice(voice_id)
         voice = self.get_voice(existing_voice_id)
-        if voice["status"] != "retired":
+        if voice["stored_status"] != "retired":
             return voice
-        return self.update_voice(
-            existing_voice_id,
-            {
-                "description": voice["description"],
-                "creation_method": voice["creation_method"],
-                "provider_voice_id": voice["provider_voice_id"] or "",
-                "model_id": voice["model_id"],
-                "status": "draft",
-                **voice["settings"],
-            },
-        )
+        return self.update_voice(existing_voice_id, {}, _stored_status="draft")
 
     def use_baseline_voice(self, speaker_id: str) -> dict[str, Any]:
         old_unique_voice_id: str | None = None
@@ -1299,8 +1346,7 @@ class AlphaStore:
                 raise AlphaError("Speaker was not found.")
             baseline = connection.execute(
                 "SELECT v.voice_id FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id "
-                "AND vv.is_current=1 WHERE v.scope='baseline' AND v.race_id=? AND v.gender_id=? "
-                "AND vv.status<>'retired'",
+                "AND vv.is_current=1 WHERE v.scope='baseline' AND v.race_id=? AND v.gender_id=?",
                 (speaker["race_id"], speaker["gender_id"]),
             ).fetchone()
             if not baseline:
@@ -1320,18 +1366,8 @@ class AlphaStore:
 
         if old_unique_voice_id:
             voice = self.get_voice(old_unique_voice_id)
-            if voice["status"] != "retired":
-                self.update_voice(
-                    old_unique_voice_id,
-                    {
-                        "description": voice["description"],
-                        "creation_method": voice["creation_method"],
-                        "provider_voice_id": voice["provider_voice_id"] or "",
-                        "model_id": voice["model_id"],
-                        "status": "retired",
-                        **voice["settings"],
-                    },
-                )
+            if voice["stored_status"] != "retired":
+                self.update_voice(old_unique_voice_id, {}, _stored_status="retired")
         record = self.get_speaker(speaker_id)
         record["retired_voice_id"] = old_unique_voice_id
         return record
@@ -1656,7 +1692,6 @@ class AlphaStore:
                 "creation_method": row["creation_method"],
                 "provider_voice_id": row["provider_voice_id"] or "",
                 "model_id": row["model_id"],
-                "status": row["status"],
                 **_loads(row["settings_json"], {}),
             },
         )
@@ -1676,7 +1711,7 @@ class AlphaStore:
             conditions.append("v.scope=?")
             parameters.append(scope)
         if not include_retired:
-            conditions.append("vv.status<>'retired'")
+            conditions.append("(v.scope<>'unique' OR vv.status<>'retired')")
         if completion:
             if completion not in {"incomplete", "complete"}:
                 raise AlphaError("Unknown delivery completion filter.")
@@ -1690,34 +1725,33 @@ class AlphaStore:
         with self.connect() as connection:
             rows = connection.execute(
                 "SELECT v.*, vv.version_id, vv.version_number, vv.creation_method, vv.provider, "
-                "vv.provider_voice_id, vv.model_id, vv.status, "
+                "vv.provider_voice_id, vv.model_id, vv.status AS stored_status, "
                 "(SELECT COUNT(*) FROM speakers s WHERE s.voice_id=v.voice_id) AS speaker_count, "
                 "(SELECT COUNT(*) FROM reference_clips rc WHERE rc.voice_id=v.voice_id) AS clip_count, "
                 "(SELECT COUNT(*) FROM speakers ms WHERE "
                 "(v.scope='baseline' AND ms.race_id=v.race_id AND ms.gender_id=v.gender_id) OR "
                 "(v.scope='unique' AND ms.voice_id=v.voice_id)) AS matching_speaker_count, "
                 "(SELECT COUNT(*) FROM dialogue_entries md JOIN speakers ms ON ms.speaker_id=md.speaker_id "
-                "WHERE md.active=1 AND ((v.scope='baseline' AND ms.race_id=v.race_id AND "
-                "ms.gender_id=v.gender_id) OR (v.scope='unique' AND ms.voice_id=v.voice_id))) "
+                "WHERE md.active=1 AND ms.voice_id=v.voice_id) "
                 "AS dialogue_count, "
                 "(SELECT COUNT(*) FROM dialogue_entries md JOIN speakers ms ON ms.speaker_id=md.speaker_id "
                 "LEFT JOIN production_assets mpa ON mpa.dialogue_id=md.dialogue_id "
-                "WHERE md.active=1 AND mpa.dialogue_id IS NULL AND ((v.scope='baseline' AND "
-                "ms.race_id=v.race_id AND ms.gender_id=v.gender_id) OR "
-                "(v.scope='unique' AND ms.voice_id=v.voice_id))) AS missing_dialogue_count, "
+                "WHERE md.active=1 AND mpa.dialogue_id IS NULL AND ms.voice_id=v.voice_id) "
+                "AS missing_dialogue_count, "
                 "(SELECT COUNT(*) FROM voice_delivery_presets vdp WHERE vdp.voice_id=v.voice_id "
                 "AND vdp.status='approved') AS approved_delivery_count "
                 "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
                 f"{where} ORDER BY v.scope, v.name",
                 parameters,
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [_with_voice_lifecycle(dict(row)) for row in rows]
 
     def get_voice(self, voice_id: str) -> dict[str, Any]:
         with self.connect() as connection:
             voice = connection.execute(
                 "SELECT v.*, vv.version_id, vv.version_number, vv.description, vv.creation_method, "
-                "vv.provider, vv.provider_voice_id, vv.model_id, vv.settings_json, vv.status "
+                "vv.provider, vv.provider_voice_id, vv.model_id, vv.settings_json, "
+                "vv.status AS stored_status "
                 "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
                 "WHERE v.voice_id=?",
                 (voice_id,),
@@ -1785,6 +1819,9 @@ class AlphaStore:
                     "dialogue_count",
                     "missing_dialogue_count",
                     "approved_delivery_count",
+                    "deployed_dialogue_count",
+                    "status",
+                    "lifecycle_reason",
                 )
             }
         )
@@ -1798,7 +1835,6 @@ class AlphaStore:
             "creation_method": "Creation method",
             "provider_voice_id": "Provider voice",
             "model_id": "Speech model",
-            "status": "Lifecycle status",
         }
         for key, label in labels.items():
             if previous.get(key) != current.get(key):
@@ -1810,14 +1846,20 @@ class AlphaStore:
                 delta.append(key.replace("_", " ").title())
         return delta
 
-    def update_voice(self, voice_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def update_voice(
+        self,
+        voice_id: str,
+        payload: dict[str, Any],
+        *,
+        _stored_status: str | None = None,
+    ) -> dict[str, Any]:
         current = self.get_voice(voice_id)
+        if "status" in payload:
+            raise AlphaError("Voice lifecycle status is computed automatically.")
         method = str(payload.get("creation_method", current["creation_method"]))
-        status = str(payload.get("status", current["status"]))
         if method not in VOICE_METHODS:
             raise AlphaError("Unknown voice creation method.")
-        if status not in VOICE_STATUSES:
-            raise AlphaError("Unknown voice status.")
+        stored_status = _stored_status or current["stored_status"]
         description = str(payload.get("description", current["description"])).strip()
         if not 20 <= len(description) <= 5000:
             raise AlphaError("Voice description must contain 20–5,000 characters.")
@@ -1837,7 +1879,7 @@ class AlphaStore:
         unchanged = (
             description == current["description"]
             and method == current["creation_method"]
-            and status == current["status"]
+            and stored_status == current["stored_status"]
             and provider_voice_id == (current["provider_voice_id"] or "")
             and model_id == current["model_id"]
             and settings == current["settings"]
@@ -1866,7 +1908,7 @@ class AlphaStore:
                     provider_voice_id or None,
                     model_id,
                     _json(settings),
-                    status,
+                    stored_status,
                     now,
                 ),
             )
@@ -2069,7 +2111,6 @@ class AlphaStore:
                 "creation_method": current["creation_method"],
                 "provider_voice_id": provider_voice_id,
                 "model_id": "eleven_v3",
-                "status": "active",
             },
         )
         with self.connect() as connection:

@@ -6,9 +6,10 @@
   <nav class="scope-tabs"><a href="/alpha/voices" {% if not scope and not completion %}aria-current="page"{% endif %}>All</a><a href="/alpha/voices?scope=baseline" {% if scope == 'baseline' and not completion %}aria-current="page"{% endif %}>Baseline</a><a href="/alpha/voices?scope=baseline&completion=incomplete" {% if scope == 'baseline' and completion == 'incomplete' %}aria-current="page"{% endif %}>Incomplete baseline</a><a href="/alpha/voices?scope=unique" {% if scope == 'unique' %}aria-current="page"{% endif %}>Unique NPC</a></nav>
   <section class="alpha-panel">
     <div class="panel-heading"><div><h2>{{ 'Incomplete baseline profiles' if completion == 'incomplete' else 'Voice profiles' }}</h2></div><span>{{ voices|length }} profiles</span></div>
-    <div class="alpha-table-wrap"><table class="alpha-table voice-table"><thead><tr><th>Voice profile</th><th>Creation path</th><th>Matching work</th><th>Delivery presets</th><th>Provider state</th></tr></thead><tbody>
+    <div class="alpha-table-wrap"><table class="alpha-table voice-table"><thead><tr><th>Voice profile</th><th>Lifecycle</th><th>Creation path</th><th>Matching work</th><th>Delivery presets</th><th>Provider state</th></tr></thead><tbody>
       {% for voice in voices %}<tr>
         <td><a class="record-link" href="/alpha/voices/{{ voice.voice_id }}"><strong>{{ voice.name }}</strong><span>{{ voice.scope | title }} · version {{ voice.version_number }}</span></a></td>
+        <td><span class="work-status lifecycle-status lifecycle-{{ voice.status }}" title="{{ voice.lifecycle_reason }}">{{ voice.status | title }}</span></td>
         <td>{{ voice.creation_method | replace('_',' ') | title }}<span class="cell-detail">{{ voice.clip_count }} reference clips</span></td>
         <td><strong>{{ voice.missing_dialogue_count }} missing audio</strong><span class="cell-detail">{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} records</span></td>
         <td>{{ voice.approved_delivery_count }} / 5 approved</td>

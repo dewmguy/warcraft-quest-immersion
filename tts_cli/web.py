@@ -1079,7 +1079,6 @@ def api_clone_voice(
                 "description": voice["description"],
                 "creation_method": "instant_clone",
                 "provider_voice_id": provider_voice_id,
-                "status": "active",
             },
         )
         return {"message": f"Activated the instant clone for {voice['name']}.", "voice": updated}

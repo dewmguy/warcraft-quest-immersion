@@ -15,7 +15,7 @@
   <nav class="breadcrumbs"><a href="/alpha/voices">Voices</a><span>›</span><span>{{ voice.name }}</span></nav>
   <section class="alpha-page-heading record-heading">
     <div><span class="alpha-kicker">{{ voice.scope | title }} voice profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} dialogue records · {{ voice.missing_dialogue_count }} missing audio</p></div>
-    {% if voice.provider_voice_id %}<span class="work-status status-approved">Reusable voice ready</span>{% else %}<a class="work-status status-needs_voice status-action" href="#provider-creation">Provider voice missing &rarr;</a>{% endif %}
+    <div class="record-statuses"><span class="work-status lifecycle-status lifecycle-{{ voice.status }}" title="{{ voice.lifecycle_reason }}">Lifecycle · {{ voice.status | title }}</span>{% if voice.provider_voice_id %}<span class="work-status status-approved">Reusable voice ready</span>{% else %}<a class="work-status status-needs_voice status-action" href="#provider-creation">Provider voice missing &rarr;</a>{% endif %}</div>
   </section>
 
   <div class="record-grid voice-grid">
@@ -36,7 +36,7 @@
           <p data-method="instant_clone">ElevenLabs creates the reusable voice directly from clean, single-speaker reference material. Sample quality and consistency matter more than file count.</p>
         </div>
         <label><span>Context sent to Voice Design</span><textarea name="description" rows="11" minlength="20" required>{{ voice.description }}</textarea><small>This is the consolidated race, gender, accent, cadence, timbre, pacing, and guardrail context for this profile.</small></label>
-        <label><span>Lifecycle status</span><select name="status">{% for value in ['draft','candidate','active','retired'] %}<option value="{{ value }}" {% if voice.status == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></label>
+        <aside class="lifecycle-explanation"><span>Automatic lifecycle</span><strong>{{ voice.status | title }}</strong><p>{{ voice.lifecycle_reason }}</p></aside>
         {% if voice.provider_voice_id %}<div class="provider-id-card"><span>Reusable ElevenLabs voice</span><strong>Connected</strong><code>{{ voice.provider_voice_id }}</code></div>{% endif %}
         <fieldset class="voice-settings" data-tts-model="{{ app_settings.tts_model_id }}"><legend>Speech behavior · {{ 'Eleven v3' if app_settings.tts_model_id == 'eleven_v3' else 'Multilingual v2' }}</legend>
           {% if app_settings.tts_model_id == 'eleven_v3' %}
@@ -160,6 +160,6 @@
 
   <div class="record-grid">
     <section class="alpha-panel"><div class="panel-heading"><div><h2>Assigned speakers</h2></div><span>{{ voice.speakers|length }}</span></div><ul class="link-list">{% for speaker in voice.speakers %}<li><a href="/alpha/speakers/{{ speaker.entity_type }}/{{ speaker.entity_id }}">{{ speaker.name }}</a></li>{% else %}<li>No speakers directly assigned.</li>{% endfor %}</ul></section>
-    <section class="alpha-panel"><div class="panel-heading"><div><h2>Version history</h2><p>Each version lists its delta and can be restored as a new version.</p></div><span>{{ voice.versions|length }}</span></div><ol class="version-list detailed-versions">{% for version in voice.versions %}<li><div><strong>Version {{ version.version_number }}{% if version.is_current %} · current{% endif %}</strong><span>{{ version.creation_method | replace('_',' ') }} · {{ version.status }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</span>{% if version.delta %}<small>Changed: {{ version.delta | join(', ') }}</small>{% else %}<small>Initial definition</small>{% endif %}</div>{% if not version.is_current %}<button type="button" data-action data-url="/api/alpha/voices/{{ voice.voice_id }}/versions/{{ version.version_id }}/restore" data-method="POST">Restore</button>{% endif %}</li>{% endfor %}</ol></section>
+    <section class="alpha-panel"><div class="panel-heading"><div><h2>Version history</h2><p>Each version lists its settings delta and can be restored without changing the automatic lifecycle.</p></div><span>{{ voice.versions|length }}</span></div><ol class="version-list detailed-versions">{% for version in voice.versions %}<li><div><strong>Version {{ version.version_number }}{% if version.is_current %} · current{% endif %}</strong><span>{{ version.creation_method | replace('_',' ') }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</span>{% if version.delta %}<small>Changed: {{ version.delta | join(', ') }}</small>{% else %}<small>Initial definition</small>{% endif %}</div>{% if not version.is_current %}<button type="button" data-action data-url="/api/alpha/voices/{{ voice.voice_id }}/versions/{{ version.version_id }}/restore" data-method="POST">Restore</button>{% endif %}</li>{% endfor %}</ol></section>
   </div>
 {% endblock %}

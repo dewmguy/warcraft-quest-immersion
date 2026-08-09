@@ -170,6 +170,11 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
         page = client.get(f"/alpha/voices/{voice_id}")
 
     assert page.status_code == 200
+    assert "Lifecycle · Draft" in page.text
+    assert "Automatic lifecycle" in page.text
+    assert "Draft until you" in page.text
+    assert 'name="status"' not in page.text
+    assert "Lifecycle status</span><select" not in page.text
     assert "Provider voice missing" in page.text
     assert "ElevenLabs voice ID" not in page.text
     assert "Reference-guided Voice Design" in page.text
@@ -265,7 +270,6 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
                 "description": voice["description"],
                 "creation_method": "external",
                 "provider_voice_id": "provider-voice-test",
-                "status": "active",
             },
         )
         request = web.alpha_store.delivery_preview_request(
@@ -390,7 +394,6 @@ def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
             {
                 "description": current["description"],
                 "creation_method": "designed",
-                "status": "draft",
             },
         )
         former_id = web.alpha_store.record_voice_previews(
@@ -434,7 +437,6 @@ def test_selected_voice_candidate_is_protected_and_survives_regeneration(monkeyp
             {
                 "description": current["description"],
                 "creation_method": "designed",
-                "status": "draft",
             },
         )
         preview_ids = web.alpha_store.record_voice_previews(

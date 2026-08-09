@@ -97,7 +97,6 @@ def test_text_voice_generation_and_approval_are_separate_records(
             "description": voice["description"],
             "creation_method": "external",
             "provider_voice_id": "provider-voice-test",
-            "status": "active",
         },
     )
 
@@ -154,7 +153,9 @@ def test_unique_voice_can_return_to_baseline_without_losing_history(store: Alpha
     assert reset["speaker"]["voice_id"] == baseline_voice_id
     assert reset["speaker"]["uniqueness"] == "baseline"
     assert reset["retired_voice_id"] == unique["voice_id"]
-    assert store.get_voice(unique["voice_id"])["status"] == "retired"
+    archived = store.get_voice(unique["voice_id"])
+    assert archived["status"] == "archived"
+    assert archived["stored_status"] == "retired"
     assert unique["voice_id"] not in {voice["voice_id"] for voice in store.list_voices("unique")}
     assert store.dashboard()["counts"]["unique_voices"] == 0
 
@@ -162,6 +163,70 @@ def test_unique_voice_can_return_to_baseline_without_losing_history(store: Alpha
     assert restored["voice_id"] == unique["voice_id"]
     assert restored["status"] == "draft"
     assert restored["version_number"] == unique["version_number"] + 2
+
+
+def test_voice_lifecycle_is_derived_from_readiness_and_production(
+    store: AlphaStore, monkeypatch: pytest.MonkeyPatch
+):
+    dialogue = [
+        row
+        for row in store.list_dialogue(page_size=10)["rows"]
+        if row["speaker_name"] == "Marshal Rowan"
+    ]
+    voice_id = dialogue[0]["voice_id"]
+
+    draft = store.get_voice(voice_id)
+    assert draft["status"] == "draft"
+    assert "connect a reusable ElevenLabs voice" in draft["lifecycle_reason"]
+
+    store.update_voice(
+        voice_id,
+        {
+            "description": draft["description"],
+            "creation_method": "external",
+            "provider_voice_id": "provider-voice-test",
+        },
+    )
+    for delivery in alpha_module.DELIVERIES:
+        store.update_delivery_preset(voice_id, delivery, {"status": "approved"})
+
+    candidate = store.get_voice(voice_id)
+    assert candidate["status"] == "candidate"
+    assert candidate["deployed_dialogue_count"] == 0
+
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
+    for index, row in enumerate(dialogue, start=1):
+        store.prepare_spoken_text(row["dialogue_id"])
+        generation = store.begin_generation(row["dialogue_id"])
+        audio = store.complete_generation(
+            generation["generation_id"],
+            content=f"audio-{index}".encode(),
+            mime_type="audio/mpeg",
+            provider_request_id=None,
+            subscription=None,
+        )
+        store.approve_candidate(audio["candidate_id"])
+        lifecycle = store.get_voice(voice_id)
+        assert lifecycle["status"] == ("active" if index == 1 else "completed")
+
+    assert lifecycle["missing_dialogue_count"] == 0
+    assert lifecycle["deployed_dialogue_count"] == 2
+
+
+def test_voice_lifecycle_cannot_be_set_manually(store: AlphaStore):
+    voice = store.list_voices("baseline")[0]
+
+    with pytest.raises(AlphaError, match="computed automatically"):
+        store.update_voice(voice["voice_id"], {"status": "active"})
+
+    with store.connect() as connection:
+        connection.execute(
+            "UPDATE voice_versions SET status='retired' WHERE voice_id=? AND is_current=1",
+            (voice["voice_id"],),
+        )
+    reloaded = store.get_voice(voice["voice_id"])
+    assert reloaded["status"] == "draft"
+    assert voice["voice_id"] in {item["voice_id"] for item in store.list_voices("baseline")}
 
 
 def test_speaker_context_is_inferred_but_remains_editable(store: AlphaStore):
@@ -201,7 +266,6 @@ def test_voice_versions_only_change_on_delta_and_can_be_restored(store: AlphaSto
         {
             "description": current["description"],
             "creation_method": current["creation_method"],
-            "status": current["status"],
             **current["settings"],
         },
     )
@@ -210,14 +274,13 @@ def test_voice_versions_only_change_on_delta_and_can_be_restored(store: AlphaSto
         {
             "description": current["description"] + " Reviewed for Alpha.",
             "creation_method": "designed",
-            "status": "candidate",
         },
     )
     restored = store.restore_voice_version(voice["voice_id"], current["version_id"])
 
     assert unchanged["version_changed"] is False
     assert changed["version_number"] == current["version_number"] + 1
-    assert {"Voice description", "Creation method", "Lifecycle status"}.issubset(
+    assert {"Voice description", "Creation method"}.issubset(
         set(changed["versions"][0]["delta"])
     )
     assert restored["version_number"] == changed["version_number"] + 1
@@ -232,7 +295,6 @@ def test_baseline_context_revision_preserves_creation_work(store: AlphaStore, mo
         {
             "description": "Legacy baseline context that is long enough for an Alpha voice record.",
             "creation_method": "reference_design",
-            "status": "draft",
             "stability": 1,
         },
     )
@@ -414,7 +476,6 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
             "description": voice["description"],
             "creation_method": "external",
             "provider_voice_id": "provider-voice-test",
-            "status": "active",
         },
     )
     store.update_delivery_preset(
@@ -463,7 +524,6 @@ def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
             "description": voice["description"],
             "creation_method": "external",
             "provider_voice_id": "provider-voice-test",
-            "status": "active",
         },
     )
     sample_text = (
