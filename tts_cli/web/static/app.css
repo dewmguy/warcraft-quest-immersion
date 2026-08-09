@@ -317,7 +317,9 @@ dialog .actions { justify-content: flex-end; }
 .alpha-message[data-state="complete"] { border-color: #397356; background: #16251d; color: #8fd1aa; }
 .alpha-message[data-state="failed"] { border-color: #81473f; background: #2b1817; color: #efa096; }
 .corpus-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 28px; }
+.corpus-progress > .progress-link { min-width: 0; color: inherit; text-decoration: none; }
 .corpus-progress article { display: grid; gap: 9px; border: 1px solid #312d35; border-radius: 8px; padding: 12px 14px; background: #17151a; }
+.corpus-progress .progress-link:hover article, .corpus-progress .progress-link:focus-visible article { border-color: #c99d43; background: #1d1a1b; box-shadow: 0 0 0 2px rgb(201 157 67 / 14%); }
 .corpus-progress article > div { display: flex; justify-content: space-between; gap: 12px; font-size: .78rem; }
 .corpus-progress article span { color: #9f98a4; }
 .corpus-progress progress { width: 100%; height: 7px; border: 0; border-radius: 999px; overflow: hidden; background: #2e2a31; }

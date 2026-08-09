@@ -31,7 +31,7 @@
         <option value="{{ value }}" {% if filters.production_state == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select></label>
-      <label><span>Content</span><select name="source"><option value="">All</option>{% for value in ['accept','progress','complete','gossip'] %}<option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></label>
+      <label><span>Content</span><select name="source"><option value="">All</option>{% for value in ['quest','accept','progress','complete','gossip'] %}<option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ 'Quest · all stages' if value == 'quest' else value | title }}</option>{% endfor %}</select></label>
       <label><span>Expansion</span><select name="expansion"><option value="">All</option>{% for value in ['1.12.1','2.4.3','3.3.5','classic'] %}<option value="{{ value }}" {% if filters.expansion == value %}selected{% endif %}>{{ 'Current Classic' if value == 'classic' else value }}</option>{% endfor %}</select></label>
       <label><span>Race</span><select name="race_id"><option value="">All</option>{% for race in listing.races %}<option value="{{ race.race_id }}" {% if filters.race_id == race.race_id|string %}selected{% endif %}>{{ race.race_name | replace('nightelf','Night Elf') | title }}</option>{% endfor %}</select></label>
       <label><span>Gender</span><select name="gender_id"><option value="">All</option><option value="0" {% if filters.gender_id == '0' %}selected{% endif %}>Male</option><option value="1" {% if filters.gender_id == '1' %}selected{% endif %}>Female</option></select></label>

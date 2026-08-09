@@ -340,12 +340,17 @@ def alpha_voices(
     request: Request,
     _: Annotated[str, Depends(require_auth)],
     scope: str = "",
+    completion: str = "",
 ):
     try:
         return templates.TemplateResponse(
             request=request,
             name="alpha-voices.html",
-            context=_alpha_context(voices=alpha_store.list_voices(scope), scope=scope),
+            context=_alpha_context(
+                voices=alpha_store.list_voices(scope, completion),
+                scope=scope,
+                completion=completion,
+            ),
         )
     except AlphaError as error:
         raise _alpha_error(error) from error

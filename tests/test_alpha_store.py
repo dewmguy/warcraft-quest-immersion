@@ -29,9 +29,27 @@ def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore
     assert dashboard["states"] == {"needs_text": 4}
     assert all(row["revision_id"] is None for row in listing["rows"])
     assert store.progress() == {
-        "voices": {"label": "Baseline deliveries", "complete": 0, "total": 230, "percent": 0.0},
-        "quests": {"label": "Quest audio", "complete": 0, "total": 3, "percent": 0.0},
-        "gossip": {"label": "Gossip audio", "complete": 0, "total": 1, "percent": 0.0},
+        "voices": {
+            "label": "Baseline deliveries",
+            "complete": 0,
+            "total": 230,
+            "percent": 0.0,
+            "href": "/alpha/voices?scope=baseline&completion=incomplete",
+        },
+        "quests": {
+            "label": "Quest audio",
+            "complete": 0,
+            "total": 3,
+            "percent": 0.0,
+            "href": "/alpha?source=quest",
+        },
+        "gossip": {
+            "label": "Gossip audio",
+            "complete": 0,
+            "total": 1,
+            "percent": 0.0,
+            "href": "/alpha?source=gossip",
+        },
     }
 
 
@@ -204,6 +222,28 @@ def test_delivery_presets_are_voice_metadata_used_for_dialogue(store: AlphaStore
     assert store.progress()["voices"]["complete"] == 1
 
 
+def test_incomplete_baseline_filter_requires_all_five_delivery_presets(store: AlphaStore):
+    voice = store.get_voice(store.list_voices("baseline")[0]["voice_id"])
+    assert len(store.list_voices("baseline", "incomplete")) == 46
+
+    for preset in voice["delivery_presets"]:
+        store.update_delivery_preset(
+            voice["voice_id"],
+            preset["delivery"],
+            {
+                "prompt_tag": preset["prompt_tag"],
+                "stability": preset["stability"],
+                "status": "approved",
+                "notes": "Filter test",
+            },
+        )
+
+    assert len(store.list_voices("baseline", "incomplete")) == 45
+    assert [item["voice_id"] for item in store.list_voices("baseline", "complete")] == [
+        voice["voice_id"]
+    ]
+
+
 def test_delivery_progress_requires_an_approved_generated_comparison(
     store: AlphaStore, monkeypatch: pytest.MonkeyPatch
 ):
@@ -256,11 +296,16 @@ def test_filters_isolate_work_by_status_and_content(store: AlphaStore):
     store.prepare_spoken_text(row["dialogue_id"])
 
     needs_voice = store.list_dialogue(state="needs_voice", page_size=10)
+    quests = store.list_dialogue(source="quest", page_size=10)
     gossip = store.list_dialogue(source="gossip", page_size=10)
 
     assert needs_voice["total"] == 1
+    assert quests["total"] == 3
+    assert all(row["source"] != "gossip" for row in quests["rows"])
     assert gossip["total"] == 1
     assert gossip["rows"][0]["source"] == "gossip"
+    with pytest.raises(AlphaError, match="Unknown content filter"):
+        store.list_dialogue(source="not-a-source")
 
 
 def test_expansion_sources_coexist_in_one_production_database(tmp_path: Path):

@@ -3,8 +3,9 @@
 {% block title %}Voices{% endblock %}
 {% block content %}
   <section class="alpha-page-heading"><div><span class="alpha-kicker">Cast library</span><h1>Voices</h1><p>Maintain reusable race-and-gender profiles, their delivery presets, and NPC-specific voices independently from dialogue.</p></div></section>
-  <nav class="scope-tabs"><a href="/alpha/voices" {% if not scope %}aria-current="page"{% endif %}>All</a><a href="/alpha/voices?scope=baseline" {% if scope == 'baseline' %}aria-current="page"{% endif %}>Baseline</a><a href="/alpha/voices?scope=unique" {% if scope == 'unique' %}aria-current="page"{% endif %}>Unique NPC</a></nav>
+  <nav class="scope-tabs"><a href="/alpha/voices" {% if not scope and not completion %}aria-current="page"{% endif %}>All</a><a href="/alpha/voices?scope=baseline" {% if scope == 'baseline' and not completion %}aria-current="page"{% endif %}>Baseline</a><a href="/alpha/voices?scope=baseline&completion=incomplete" {% if scope == 'baseline' and completion == 'incomplete' %}aria-current="page"{% endif %}>Incomplete baseline</a><a href="/alpha/voices?scope=unique" {% if scope == 'unique' %}aria-current="page"{% endif %}>Unique NPC</a></nav>
   <section class="alpha-panel">
+    <div class="panel-heading"><div><h2>{{ 'Incomplete baseline profiles' if completion == 'incomplete' else 'Voice profiles' }}</h2></div><span>{{ voices|length }} profiles</span></div>
     <div class="alpha-table-wrap"><table class="alpha-table voice-table"><thead><tr><th>Voice profile</th><th>Creation path</th><th>Matching work</th><th>Delivery presets</th><th>Provider state</th></tr></thead><tbody>
       {% for voice in voices %}<tr>
         <td><a class="record-link" href="/alpha/voices/{{ voice.voice_id }}"><strong>{{ voice.name }}</strong><span>{{ voice.scope | title }} · version {{ voice.version_number }}</span></a></td>

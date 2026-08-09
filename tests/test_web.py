@@ -161,6 +161,24 @@ def test_actionable_statuses_link_to_the_work_that_resolves_them(monkeypatch):
     assert f'href="{provider_target}"' in voices.text
 
 
+def test_progress_cards_open_prefiltered_quest_gossip_and_baseline_queues(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        dashboard = client.get("/alpha")
+        quests = client.get("/alpha?source=quest")
+        gossip = client.get("/alpha?source=gossip")
+        baselines = client.get("/alpha/voices?scope=baseline&completion=incomplete")
+
+    assert 'href="/alpha?source=quest"' in dashboard.text
+    assert 'href="/alpha?source=gossip"' in dashboard.text
+    assert 'href="/alpha/voices?scope=baseline&amp;completion=incomplete"' in dashboard.text
+    assert "3 matching records" in quests.text
+    assert '<option value="quest" selected>Quest · all stages</option>' in quests.text
+    assert "1 matching records" in gossip.text
+    assert "Incomplete baseline profiles" in baselines.text
+    assert "46 profiles" in baselines.text
+
+
 def test_settings_owns_provider_model_selection(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:

@@ -12,7 +12,7 @@ from typing import Any
 from mutagen import File as MutagenFile
 
 from tts_cli.consts import GENDER_DICT, RACE_DICT
-from tts_cli.data_sources import REQUIRED_COLUMNS, load_dialogue_csv
+from tts_cli.data_sources import REQUIRED_COLUMNS, VALID_SOURCES, load_dialogue_csv
 from tts_cli.voice_profiles import load_phase2_review
 
 DELIVERIES = ("neutral", "angry", "sorrowful", "joyful", "proclaiming")
@@ -818,8 +818,13 @@ class AlphaStore:
             conditions.append("production_state = ?")
             parameters.append(state)
         if source:
-            conditions.append("source = ?")
-            parameters.append(source)
+            if source == "quest":
+                conditions.append("source <> 'gossip'")
+            elif source in VALID_SOURCES:
+                conditions.append("source = ?")
+                parameters.append(source)
+            else:
+                raise AlphaError("Unknown content filter.")
         if expansion:
             conditions.append("expansion = ?")
             parameters.append(expansion)
@@ -1280,7 +1285,7 @@ class AlphaStore:
                     f"ON pa.dialogue_id=d.dialogue_id WHERE d.active=1 AND {condition}"
                 ).fetchone()
 
-        def item(label: str, row: sqlite3.Row) -> dict[str, int | float | str]:
+        def item(label: str, row: sqlite3.Row, href: str) -> dict[str, int | float | str]:
             total = int(row["total"] or 0)
             complete = int(row["complete"] or 0)
             return {
@@ -1288,12 +1293,17 @@ class AlphaStore:
                 "complete": complete,
                 "total": total,
                 "percent": round((complete / total * 100) if total else 0, 1),
+                "href": href,
             }
 
         return {
-            "voices": item("Baseline deliveries", voice),
-            "quests": item("Quest audio", dialogue["quests"]),
-            "gossip": item("Gossip audio", dialogue["gossip"]),
+            "voices": item(
+                "Baseline deliveries",
+                voice,
+                "/alpha/voices?scope=baseline&completion=incomplete",
+            ),
+            "quests": item("Quest audio", dialogue["quests"], "/alpha?source=quest"),
+            "gossip": item("Gossip audio", dialogue["gossip"], "/alpha?source=gossip"),
         }
 
     def update_delivery_preset(
@@ -1464,7 +1474,11 @@ class AlphaStore:
         )
 
     def list_voices(
-        self, scope: str = "", *, include_retired: bool = False
+        self,
+        scope: str = "",
+        completion: str = "",
+        *,
+        include_retired: bool = False,
     ) -> list[dict[str, Any]]:
         parameters: list[Any] = []
         conditions = []
@@ -1475,6 +1489,15 @@ class AlphaStore:
             parameters.append(scope)
         if not include_retired:
             conditions.append("vv.status<>'retired'")
+        if completion:
+            if completion not in {"incomplete", "complete"}:
+                raise AlphaError("Unknown delivery completion filter.")
+            operator = "<" if completion == "incomplete" else "="
+            conditions.append(
+                "(SELECT COUNT(*) FROM voice_delivery_presets cvdp "
+                "WHERE cvdp.voice_id=v.voice_id AND cvdp.status='approved') "
+                f"{operator} 5"
+            )
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         with self.connect() as connection:
             rows = connection.execute(
