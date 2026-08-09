@@ -356,8 +356,24 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preview-list audio { width: 100%; min-width: 0; height: 34px; }
 .delivery-preview-list small { color: #aaa0ad; }
 .delivery-preview-list button { justify-self: start; }
-.reference-list audio { width: 100%; }
-.reference-list article { grid-template-columns: minmax(230px, 340px) 1fr auto; }
+.reference-list { gap: 5px; }
+.reference-clip { overflow: hidden; border: 1px solid #39343d; border-radius: 6px; background: #151318; }
+.reference-clip summary { display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; align-items: center; gap: 7px; min-height: 38px; padding: 5px 8px; cursor: pointer; list-style: none; }
+.reference-clip summary::-webkit-details-marker { display: none; }
+.reference-clip summary:hover { background: #1e1b21; }
+.reference-clip-icon { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 4px; background: #28232b; color: #d8b86d; font-size: .8rem; }
+.reference-clip-summary { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
+.reference-clip-summary strong { overflow: hidden; color: #eee4ca; font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+.reference-clip-summary small { flex: none; color: #8f8793; font-size: .68rem; text-transform: uppercase; }
+.reference-clip-chevron { color: #8f8793; font-size: .68rem; text-align: center; transition: transform .16s ease; }
+.reference-clip[open] .reference-clip-chevron { transform: rotate(180deg); }
+.reference-clip-body { display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; gap: 6px 8px; border-top: 1px solid #302c33; padding: 7px 8px 8px; background: #111014; }
+.reference-clip-body audio { width: 100%; height: 30px; }
+.alpha-body .icon-button { width: 30px; min-height: 30px; padding: 0; }
+.reference-delete { color: #d78787 !important; border-color: #704446 !important; }
+.reference-clip-provenance { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; color: #8f8793; font-size: .7rem; }
+.reference-clip-provenance > span { color: #b5a77f; font-size: .65rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.reference-clip-provenance p { overflow-wrap: anywhere; margin: 0; }
 .reference-library-separator { display: flex; align-items: center; gap: 12px; margin: 24px 0 14px; color: #9f98a4; font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .reference-library-separator::before, .reference-library-separator::after { content: ""; height: 1px; background: #49434f; }
 .reference-library-separator::before { width: 24px; }

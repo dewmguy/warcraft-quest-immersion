@@ -130,9 +130,9 @@ The Alpha portal is the working production surface:
    baseline retires its unused unique profile without deleting its history.
 5. Create the reusable provider voice with description-only Voice Design,
    reference-guided Voice Design, or Instant Voice Cloning.
-   Reference uploads accept batches of MP3, WAV, M4A, OGG, or FLAC files. New
-   clips are stored outside Git as mono 192 kbps MP3 files and can be deleted
-   individually from the voice record before provider submission.
+   Reference uploads accept batches of MP3, WAV, M4A, OGG, or FLAC files. The
+   original files are preserved byte-for-byte outside Git and can be reviewed
+   from compact, collapsible rows or deleted individually before provider submission.
 6. Explicitly request one ElevenLabs candidate, review it, and approve the exact
    file for production.
 7. Treat production export as a later handoff after the corpus and approval

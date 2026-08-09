@@ -1753,7 +1753,7 @@ class AlphaStore:
         clip_id = uuid.uuid4().hex
         folder = self.storage_root / "reference-clips" / voice_id
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"{clip_id}.mp3"
+        path = folder / f"{clip_id}-{_safe_filename(original_name)}"
         path.write_bytes(content)
         duration = _audio_duration(path)
         with self.connect() as connection:

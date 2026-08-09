@@ -158,15 +158,12 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "multiple" in page.text
     assert "MP3, WAV, M4A, OGG, or FLAC" in page.text
     assert "Stored reference clips" in page.text
+    assert "https://kit.fontawesome.com/666b0b7246.js" in page.text
+    assert "Files are preserved exactly as uploaded" in page.text
 
 
 def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
-    monkeypatch.setattr(
-        web,
-        "compress_reference_audio",
-        lambda content, _original_name: b"compressed-" + content,
-    )
     with TestClient(web.app) as client:
         voice_id = web.alpha_store.list_voices("baseline")[0]["voice_id"]
         response = client.post(
@@ -179,6 +176,8 @@ def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
             ],
         )
         clips = web.alpha_store.get_voice(voice_id)["clips"]
+        stored_content = {Path(clip["storage_path"]).read_bytes() for clip in clips}
+        page = client.get(f"/alpha/voices/{voice_id}")
         deleted_path = Path(clips[0]["storage_path"])
         deleted = client.delete(
             f"/api/alpha/reference-clips/{clips[0]['clip_id']}",
@@ -189,7 +188,10 @@ def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
     assert response.json()["message"] == "Stored 2 reference clips outside Git."
     assert {clip["original_name"] for clip in clips} == {"sample-one.mp3", "sample-two.wav"}
     assert all(clip["provenance"].startswith("Two clean") for clip in clips)
-    assert all(Path(clip["storage_path"]).suffix == ".mp3" for clip in clips)
+    assert {Path(clip["storage_path"]).suffix for clip in clips} == {".mp3", ".wav"}
+    assert stored_content == {b"first-audio", b"second-audio"}
+    assert page.text.count('class="reference-clip"') == 2
+    assert 'class="fa-solid fa-trash-can"' in page.text
     assert deleted.status_code == 200
     assert deleted.json()["message"] == "Reference clip was deleted from local storage."
     assert not deleted_path.exists()

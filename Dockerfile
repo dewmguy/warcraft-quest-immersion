@@ -7,10 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --gid 1000 app \
+RUN groupadd --gid 1000 app \
     && useradd --uid 1000 --gid app --create-home app
 
 COPY --chown=app:app . /app
