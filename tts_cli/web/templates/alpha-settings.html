@@ -1,0 +1,33 @@
+{% extends "alpha-base.html" %}
+{% set active_nav = "settings" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+  <section class="alpha-page-heading"><div><span class="alpha-kicker">Generation defaults</span><h1>Settings</h1><p>Provider models belong here so individual voice records only show decisions specific to that voice.</p></div></section>
+  <div class="record-grid settings-grid">
+    <section class="alpha-panel">
+      <div class="panel-heading"><div><h2>ElevenLabs models</h2><p>These defaults are recorded with each future request.</p></div></div>
+      <form data-json-form data-url="/api/alpha/settings" data-method="PATCH">
+        <label><span>Dialogue speech model</span><select name="tts_model_id">
+          <option value="eleven_v3" {% if app_settings.tts_model_id == 'eleven_v3' %}selected{% endif %}>Eleven v3 · recommended for expressive Warcraft dialogue</option>
+          <option value="eleven_multilingual_v2" {% if app_settings.tts_model_id == 'eleven_multilingual_v2' %}selected{% endif %}>Multilingual v2 · stable fallback for long-form output</option>
+        </select></label>
+        <label><span>Voice Design model</span><select name="voice_design_model_id">
+          <option value="eleven_ttv_v3" {% if app_settings.voice_design_model_id == 'eleven_ttv_v3' %}selected{% endif %}>Voice Design v3 · recommended; supports reference-guided design</option>
+          <option value="eleven_multilingual_ttv_v2" {% if app_settings.voice_design_model_id == 'eleven_multilingual_ttv_v2' %}selected{% endif %}>Multilingual Voice Design v2 · description only</option>
+        </select></label>
+        <label><span>Audio output</span><select name="output_format"><option value="mp3_44100_128" selected>MP3 · 44.1 kHz · 128 kbps</option></select></label>
+        <button type="submit">Save generation defaults</button>
+      </form>
+    </section>
+    <section class="alpha-panel provider-explainer">
+      <div class="panel-heading"><div><h2>What is reusable</h2></div></div>
+      <dl class="record-facts">
+        <div><dt>Voice profile</dt><dd>Our race/gender or unique-NPC definition, history, references, and delivery presets.</dd></div>
+        <div><dt>Provider voice ID</dt><dd>The reusable ElevenLabs voice created from an approved design preview or clone. It is shown only after it exists.</dd></div>
+        <div><dt>Design seed</dt><dd>An optional API integer for repeating a Voice Design attempt; it is not the reusable voice itself.</dd></div>
+        <div><dt>TTS seed</dt><dd>An optional best-effort repeatability value for one speech request; determinism is not guaranteed.</dd></div>
+      </dl>
+      <aside class="inline-warning">Eleven v3 is the active default. It uses audio tags and stability for delivery; similarity, style, speaker boost, and numeric speed are not exposed when the selected model does not support them.</aside>
+    </section>
+  </div>
+{% endblock %}

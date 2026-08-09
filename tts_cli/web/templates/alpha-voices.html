@@ -2,11 +2,17 @@
 {% set active_nav = "voices" %}
 {% block title %}Voices{% endblock %}
 {% block content %}
-  <section class="alpha-page-heading"><div><span class="alpha-kicker">Cast library</span><h1>Voices</h1><p>Maintain reusable race-and-gender voices and NPC-specific voices independently from dialogue.</p></div></section>
+  <section class="alpha-page-heading"><div><span class="alpha-kicker">Cast library</span><h1>Voices</h1><p>Maintain reusable race-and-gender profiles, their delivery presets, and NPC-specific voices independently from dialogue.</p></div></section>
   <nav class="scope-tabs"><a href="/alpha/voices" {% if not scope %}aria-current="page"{% endif %}>All</a><a href="/alpha/voices?scope=baseline" {% if scope == 'baseline' %}aria-current="page"{% endif %}>Baseline</a><a href="/alpha/voices?scope=unique" {% if scope == 'unique' %}aria-current="page"{% endif %}>Unique NPC</a></nav>
   <section class="alpha-panel">
-    <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Voice</th><th>Type</th><th>Creation</th><th>Provider</th><th>Usage</th><th>Status</th></tr></thead><tbody>
-      {% for voice in voices %}<tr><td><a class="record-link" href="/alpha/voices/{{ voice.voice_id }}"><strong>{{ voice.name }}</strong><span>Version {{ voice.version_number }}</span></a></td><td>{{ voice.scope | title }}</td><td>{{ voice.creation_method | replace('_',' ') | title }}</td><td>{{ 'Connected' if voice.provider_voice_id else 'Not created' }}</td><td>{{ voice.speaker_count }} speakers · {{ voice.clip_count }} references</td><td><span class="work-status">{{ voice.status | title }}</span></td></tr>{% endfor %}
+    <div class="alpha-table-wrap"><table class="alpha-table voice-table"><thead><tr><th>Voice profile</th><th>Creation path</th><th>Matching work</th><th>Delivery presets</th><th>Provider state</th></tr></thead><tbody>
+      {% for voice in voices %}<tr>
+        <td><a class="record-link" href="/alpha/voices/{{ voice.voice_id }}"><strong>{{ voice.name }}</strong><span>{{ voice.scope | title }} · version {{ voice.version_number }}</span></a></td>
+        <td>{{ voice.creation_method | replace('_',' ') | title }}<span class="cell-detail">{{ voice.clip_count }} reference clips</span></td>
+        <td><strong>{{ voice.missing_dialogue_count }} missing audio</strong><span class="cell-detail">{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} records</span></td>
+        <td>{{ voice.approved_delivery_count }} / 5 approved</td>
+        <td><span class="work-status {{ 'status-approved' if voice.provider_voice_id else 'status-needs_voice' }}">{{ 'Reusable voice ready' if voice.provider_voice_id else 'Voice not created' }}</span></td>
+      </tr>{% endfor %}
     </tbody></table></div>
   </section>
 {% endblock %}

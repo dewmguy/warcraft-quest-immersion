@@ -28,6 +28,11 @@ def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore
     assert dashboard["counts"]["baseline_voices"] == 46
     assert dashboard["states"] == {"needs_text": 4}
     assert all(row["revision_id"] is None for row in listing["rows"])
+    assert store.progress() == {
+        "voices": {"label": "Baseline deliveries", "complete": 0, "total": 230, "percent": 0.0},
+        "quests": {"label": "Quest audio", "complete": 0, "total": 3, "percent": 0.0},
+        "gossip": {"label": "Gossip audio", "complete": 0, "total": 1, "percent": 0.0},
+    }
 
 
 def test_spoken_text_is_created_only_by_explicit_action(store: AlphaStore):
@@ -97,6 +102,128 @@ def test_unique_voice_inherits_baseline_and_is_assigned(store: AlphaStore):
     assert unique["parent_voice_id"] == speaker["voice_id"]
     assert updated["voice_id"] == unique["voice_id"]
     assert updated["uniqueness"] == "unique"
+
+
+def test_speaker_context_is_inferred_but_remains_editable(store: AlphaStore):
+    row = next(
+        item
+        for item in store.list_dialogue(page_size=10)["rows"]
+        if item["speaker_name"] == "Marshal Rowan"
+    )
+    record = store.get_speaker(row["speaker_id"])
+
+    assert record["speaker"]["role"] == "officer"
+    assert record["speaker"]["importance"] == "stepping_stone"
+    assert record["speaker"]["importance_score"] == 25
+    assert "2 spoken record(s)" in record["speaker"]["context_summary"]
+
+    updated = store.update_speaker(
+        row["speaker_id"],
+        {
+            "role": "soldier",
+            "faction": "alliance",
+            "zone": "Elwynn Forest",
+            "importance": "zone",
+            "context_summary": "Reviewed context.",
+            "voice_id": record["speaker"]["voice_id"],
+        },
+    )
+    assert updated["speaker"]["role"] == "soldier"
+    assert updated["speaker"]["importance_score"] == 55
+
+
+def test_voice_versions_only_change_on_delta_and_can_be_restored(store: AlphaStore):
+    voice = store.list_voices("baseline")[0]
+    current = store.get_voice(voice["voice_id"])
+
+    unchanged = store.update_voice(
+        voice["voice_id"],
+        {
+            "description": current["description"],
+            "creation_method": current["creation_method"],
+            "status": current["status"],
+            **current["settings"],
+        },
+    )
+    changed = store.update_voice(
+        voice["voice_id"],
+        {
+            "description": current["description"] + " Reviewed for Alpha.",
+            "creation_method": "designed",
+            "status": "candidate",
+        },
+    )
+    restored = store.restore_voice_version(voice["voice_id"], current["version_id"])
+
+    assert unchanged["version_changed"] is False
+    assert changed["version_number"] == current["version_number"] + 1
+    assert {"Voice description", "Creation method", "Lifecycle status"}.issubset(
+        set(changed["versions"][0]["delta"])
+    )
+    assert restored["version_number"] == changed["version_number"] + 1
+    assert restored["description"] == current["description"]
+
+
+def test_delivery_presets_are_voice_metadata_used_for_dialogue(store: AlphaStore):
+    row = _first_dialogue(store)
+    prepared = store.prepare_spoken_text(row["dialogue_id"])
+    store.set_delivery(row["dialogue_id"], "angry")
+    store.update_delivery_preset(
+        prepared["voice_id"],
+        "angry",
+        {"prompt_tag": "[furious]", "stability": 0, "status": "approved", "notes": "Tested"},
+    )
+
+    dialogue = store.get_dialogue(row["dialogue_id"])
+    assert dialogue["generation_text"].startswith("[furious]")
+    assert store.progress()["voices"]["complete"] == 1
+
+
+def test_delivery_progress_requires_an_approved_generated_comparison(
+    store: AlphaStore, monkeypatch: pytest.MonkeyPatch
+):
+    voice = store.get_voice(store.list_voices("baseline")[0]["voice_id"])
+    store.update_voice(
+        voice["voice_id"],
+        {
+            "description": voice["description"],
+            "creation_method": "external",
+            "provider_voice_id": "provider-voice-test",
+            "status": "active",
+        },
+    )
+    store.update_delivery_preset(
+        voice["voice_id"],
+        "angry",
+        {"prompt_tag": "[angry]", "stability": 0, "notes": "Comparison candidate"},
+    )
+    sample_text = (
+        "The road ahead is dangerous, but our purpose remains clear. Stay close, listen "
+        "carefully, and remember why we began this journey."
+    )
+
+    request = store.delivery_preview_request(voice["voice_id"], "angry", sample_text)
+    assert request["text"].startswith("[angry]")
+    assert request["voice_settings"] == {"stability": 0.0}
+    assert store.progress()["voices"]["complete"] == 0
+
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
+    preview = store.record_delivery_preview(
+        voice["voice_id"],
+        "angry",
+        request,
+        content=b"test-audio",
+        provider_request_id="request-test",
+        subscription={"character_count": len(request["text"])},
+    )
+    assert store.delivery_preview_path(preview["preview_id"]).is_file()
+    assert store.progress()["voices"]["complete"] == 0
+
+    approved = store.approve_delivery_preview(preview["preview_id"])
+    angry = next(item for item in approved["delivery_presets"] if item["delivery"] == "angry")
+    assert angry["status"] == "approved"
+    assert angry["previews"][0]["status"] == "approved"
+    assert store.progress()["voices"]["complete"] == 1
 
 
 def test_filters_isolate_work_by_status_and_content(store: AlphaStore):

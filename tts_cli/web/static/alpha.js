@@ -31,8 +31,8 @@ function jsonFromForm(form) {
   return payload;
 }
 
-async function runAlphaAction({ url, method = "POST", body = null, paid = false }) {
-  if (paid && !window.confirm("This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
+async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmText = "" }) {
+  if (paid && !window.confirm(confirmText || "This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
   showAlphaMessage(paid ? "Sending the confirmed ElevenLabs request…" : "Saving…");
   const headers = { "X-WQI-Action": "confirmed" };
   if (paid) headers["X-WQI-Paid-Action"] = "confirmed";
@@ -54,6 +54,7 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
         method: form.dataset.method || "PATCH",
         body: jsonFromForm(form),
         paid: form.dataset.paid !== undefined,
+        confirmText: form.dataset.confirm || "",
       });
       if (!payload) return;
       showAlphaMessage(payload.message || "Saved.", "complete");
@@ -88,6 +89,7 @@ for (const button of document.querySelectorAll("[data-action]")) {
         url: button.dataset.url,
         method: button.dataset.method || "POST",
         paid: button.dataset.paid !== undefined,
+        confirmText: button.dataset.confirm || "",
       });
       if (!payload) return;
       showAlphaMessage(payload.message || "Saved.", "complete");
@@ -100,4 +102,43 @@ for (const button of document.querySelectorAll("[data-action]")) {
       showAlphaMessage(error.message, "failed");
     }
   });
+}
+
+for (const input of document.querySelectorAll('input[type="range"]')) {
+  const output = input.closest("label")?.querySelector("[data-range-output]");
+  if (!output) continue;
+  const sync = () => { output.value = input.value; output.textContent = input.value; };
+  input.addEventListener("input", sync);
+  sync();
+}
+
+const methodController = document.querySelector("[data-method-controller]");
+if (methodController) {
+  const selector = methodController.querySelector('[name="creation_method"]');
+  const savedMethod = methodController.dataset.savedMethod;
+  const panels = [...document.querySelectorAll("[data-method-panel]")];
+  for (const panel of panels) {
+    for (const button of panel.querySelectorAll("button")) {
+      button.dataset.serverDisabled = button.disabled ? "true" : "false";
+    }
+  }
+  const syncMethod = () => {
+    const selected = selector.value;
+    for (const copy of document.querySelectorAll("[data-method-copy] [data-method]")) {
+      copy.hidden = copy.dataset.method !== selected;
+    }
+    for (const panel of panels) {
+      const active = panel.dataset.methodPanel === selected;
+      panel.hidden = !active;
+      for (const field of panel.querySelectorAll("input, select, textarea, button")) {
+        if (field.tagName === "BUTTON") {
+          field.disabled = field.dataset.serverDisabled === "true" || selected !== savedMethod;
+        } else {
+          field.disabled = !active;
+        }
+      }
+    }
+  };
+  selector.addEventListener("change", syncMethod);
+  syncMethod();
 }

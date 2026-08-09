@@ -6,23 +6,27 @@
   <nav class="breadcrumbs"><a href="/alpha">Dialogue</a><span>›</span><span>{{ speaker.name }}</span></nav>
   <section class="alpha-page-heading record-heading">
     <div><span class="alpha-kicker">{{ speaker.entity_type | title }} {{ speaker.entity_id }}</span><h1>{{ speaker.name }}</h1><p>{{ speaker.race_name | title }} · {{ speaker.gender_name | title }} · {{ record.dialogue|length }} dialogue records</p></div>
-    <span class="work-status">{{ speaker.uniqueness | replace('_',' ') | title }}</span>
+    <span class="work-status">{{ speaker.importance | replace('_',' ') | title }} · {{ speaker.importance_score }}</span>
   </section>
   <div class="record-grid speaker-grid">
     <section class="alpha-panel">
-      <div class="panel-heading"><div><h2>Speaker context</h2><p>This context supports voice selection and line delivery.</p></div></div>
+      <div class="panel-heading"><div><h2>Speaker context</h2><p>Initially inferred from joined database fields, naming, and quest coverage; every value remains reviewable.</p></div></div>
       <form data-json-form data-url="/api/alpha/speakers/{{ speaker.speaker_id }}" data-method="PATCH">
-        <div class="form-grid"><label><span>Role or occupation</span><input name="role" value="{{ speaker.role }}"></label><label><span>Faction or affiliation</span><input name="faction" value="{{ speaker.faction }}"></label><label><span>Zone</span><input name="zone" value="{{ speaker.zone }}"></label><label><span>Story importance</span><select name="importance">{% for value in ['unassessed','minor','supporting','major'] %}<option value="{{ value }}" {% if speaker.importance == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></label></div>
-        <label><span>Character context</span><textarea name="context_summary" rows="6" placeholder="Known personality, background, affiliations, or story function">{{ speaker.context_summary }}</textarea></label>
-        <label><span>Voice treatment</span><select name="uniqueness">{% for value,label in [('unassessed','Unassessed'),('baseline','Use baseline'),('unique_candidate','Consider unique voice'),('unique','Unique voice')] %}<option value="{{ value }}" {% if speaker.uniqueness == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-        <label><span>Assigned voice</span><select name="voice_id"><option value="">Unassigned</option>{% for voice in record.voices %}<option value="{{ voice.voice_id }}" {% if speaker.voice_id == voice.voice_id %}selected{% endif %}>{{ voice.name }} · {{ voice.scope }}{% if not voice.provider_voice_id %} · needs provider voice{% endif %}</option>{% endfor %}</select></label>
-        <button type="submit">Save speaker</button>
+        <div class="form-grid">
+          <label><span>Role or occupation</span><select name="role">{% for value in role_options %}<option value="{{ value }}" {% if speaker.role == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select></label>
+          <label><span>Affiliation</span><select name="faction">{% for value in affiliation_options %}<option value="{{ value }}" {% if speaker.faction == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select><small>Political or organizational context such as Alliance, Horde, Kirin Tor, or Scourge.</small></label>
+          <label><span>Zone</span><input name="zone" value="{{ speaker.zone }}" placeholder="Inferred when source area data exists"></label>
+          <label><span>Story reach</span><select name="importance">{% for value,score in importance_scores.items() %}<option value="{{ value }}" {% if speaker.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select><small>The qualitative category maps to an internal 10–100 story-reach score.</small></label>
+        </div>
+        <label><span>Character context</span><textarea name="context_summary" rows="6">{{ speaker.context_summary }}</textarea><small>The initial summary is deliberately conservative and should become richer as the full source is joined.</small></label>
+        <label><span>Assigned voice profile</span><select name="voice_id"><option value="">Unassigned</option>{% for voice in record.voices %}<option value="{{ voice.voice_id }}" {% if speaker.voice_id == voice.voice_id %}selected{% endif %}>{{ voice.name }} · {{ voice.scope }}{% if not voice.provider_voice_id %} · provider voice missing{% endif %}</option>{% endfor %}</select></label>
+        <button type="submit">Save reviewed context</button>
       </form>
     </section>
     <section class="alpha-panel">
-      <div class="panel-heading"><div><h2>Voice</h2></div></div>
-      {% if speaker.voice_id %}<p><strong>{{ speaker.voice_name }}</strong><br>{{ speaker.voice_scope | title }} · {{ speaker.voice_status | title }}</p><a class="button-link" href="/alpha/voices/{{ speaker.voice_id }}">Open voice</a>{% else %}<p>No voice is assigned.</p>{% endif %}
-      {% if speaker.voice_scope != 'unique' %}<hr><h3>Does this NPC need a unique voice?</h3><p>Create an NPC-specific voice that inherits this speaker’s current baseline as its starting context.</p><button type="button" data-action data-url="/api/alpha/speakers/{{ speaker.speaker_id }}/unique-voice" data-method="POST" data-go-to-voice>Create unique voice record</button>{% endif %}
+      <div class="panel-heading"><div><h2>Voice approach</h2></div></div>
+      {% if speaker.voice_id %}<p><strong>{{ speaker.voice_name }}</strong><br>{{ speaker.voice_scope | title }} · {{ speaker.voice_status | title }}</p><a class="button-link" href="/alpha/voices/{{ speaker.voice_id }}">Open voice profile</a>{% else %}<p>No voice profile is assigned.</p>{% endif %}
+      {% if speaker.voice_scope != 'unique' %}<hr><h3>Distinctive enough for a unique voice?</h3><p>The baseline remains the default. Pivotal or globally important characters are candidates for an NPC-specific profile that inherits the baseline.</p><button type="button" data-action data-url="/api/alpha/speakers/{{ speaker.speaker_id }}/unique-voice" data-method="POST" data-go-to-voice>Create unique voice profile</button>{% endif %}
     </section>
   </div>
   <section class="alpha-panel">

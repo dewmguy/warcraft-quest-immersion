@@ -1,9 +1,0 @@
-{% extends "alpha-base.html" %}
-{% set active_nav = "export" %}
-{% set provider_configured = false %}
-{% block title %}Production export{% endblock %}
-{% block content %}
-  <section class="alpha-page-heading"><div><span class="alpha-kicker">Addon handoff</span><h1>Production export</h1><p>Download approved audio and a deterministic manifest for the existing addon packaging process.</p></div></section>
-  <section class="alpha-panel export-summary"><strong>{{ manifest.asset_count }}</strong><span>approved production assets</span><div class="actions"><a class="button-link" href="/api/alpha/export.json">Download manifest</a><a class="button-link secondary" href="/api/alpha/export.zip">Download approved audio ZIP</a></div></section>
-  <section class="alpha-panel"><div class="panel-heading"><div><h2>Approved files</h2></div></div><div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Package path</th><th>Speaker</th><th>Quest or gossip</th><th>Duration</th></tr></thead><tbody>{% for asset in manifest.assets %}<tr><td><code>{{ asset.package_path }}</code></td><td>{{ asset.speaker_name }}</td><td>{% if asset.quest_id %}#{{ asset.quest_id }} · {{ asset.quest_title }}{% else %}{{ asset.source | title }}{% endif %}</td><td>{{ "%.2f"|format(asset.duration_seconds) }} sec</td></tr>{% else %}<tr><td colspan="4" class="empty-cell">No audio candidates have been approved yet.</td></tr>{% endfor %}</tbody></table></div></section>
-{% endblock %}

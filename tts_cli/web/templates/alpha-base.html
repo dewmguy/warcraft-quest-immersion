@@ -15,13 +15,22 @@
       <nav aria-label="Alpha workspaces">
         <a href="/alpha" {% if active_nav == 'dialogue' %}aria-current="page"{% endif %}>Dialogue</a>
         <a href="/alpha/voices" {% if active_nav == 'voices' %}aria-current="page"{% endif %}>Voices</a>
-        <a href="/alpha/export" {% if active_nav == 'export' %}aria-current="page"{% endif %}>Production export</a>
+        <a href="/alpha/import-export" {% if active_nav == 'import_export' %}aria-current="page"{% endif %}>Import / Export</a>
+        <a href="/alpha/settings" {% if active_nav == 'settings' %}aria-current="page"{% endif %}>Settings</a>
       </nav>
       <span class="provider-state {{ 'is-ready' if provider_configured else 'is-offline' }}">
         ElevenLabs {{ 'ready' if provider_configured else 'not configured' }}
       </span>
     </header>
     <main class="alpha-main">
+      <section class="corpus-progress" aria-label="Production progress">
+        {% for item in [progress.voices, progress.quests, progress.gossip] %}
+        <article>
+          <div><strong>{{ item.label }}</strong><span>{{ item.complete }} / {{ item.total }} · {{ item.percent }}%</span></div>
+          <progress value="{{ item.complete }}" max="{{ item.total or 1 }}">{{ item.percent }}%</progress>
+        </article>
+        {% endfor %}
+      </section>
       {% block content %}{% endblock %}
     </main>
     <div id="alpha-message" class="alpha-message" role="status" hidden></div>

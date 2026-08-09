@@ -42,7 +42,7 @@ def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatc
     assert response.url.path == "/alpha"
     assert "Alpha production database" in response.text
     assert "Work queue" in response.text
-    assert "4 active dialogue records" in response.text
+    assert "4 matching records" in response.text
 
 
 def test_alpha_starts_with_empty_spoken_text_and_prepares_only_on_click(monkeypatch):
@@ -108,6 +108,56 @@ def test_upload_adds_an_expansion_without_replacing_other_sources(monkeypatch):
     assert dashboard["counts"]["dialogue"] == 8
     assert len(dashboard["snapshots"]) == 2
     assert "4 matching records" in vanilla.text
+
+
+def test_import_export_explains_demo_data_and_exact_schema(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        page = client.get("/alpha/import-export")
+        old_export = client.get("/alpha/export", follow_redirects=False)
+
+    assert page.status_code == 200
+    assert "demonstration rows" in page.text
+    assert "3.3.5 AzerothCore" in page.text
+    assert "Exact CSV contract" in page.text
+    assert all(column in page.text for column in web.REQUIRED_COLUMNS)
+    assert old_export.status_code == 307
+    assert old_export.headers["location"] == "/alpha/import-export"
+
+
+def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        voice_id = web.alpha_store.list_voices("baseline")[0]["voice_id"]
+        page = client.get(f"/alpha/voices/{voice_id}")
+
+    assert page.status_code == 200
+    assert "Provider voice missing" in page.text
+    assert "ElevenLabs voice ID" not in page.text
+    assert "Reference-guided Voice Design" in page.text
+    assert "Instant Voice Clone" in page.text
+    assert "Delivery presets" in page.text
+    assert 'type="range"' in page.text
+
+
+def test_settings_owns_provider_model_selection(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        page = client.get("/alpha/settings")
+        saved = client.patch(
+            "/api/alpha/settings",
+            headers={"X-WQI-Action": "confirmed"},
+            json={
+                "tts_model_id": "eleven_multilingual_v2",
+                "voice_design_model_id": "eleven_multilingual_ttv_v2",
+                "output_format": "mp3_44100_128",
+            },
+        )
+
+    assert page.status_code == 200
+    assert "What is reusable" in page.text
+    assert saved.status_code == 200
+    assert saved.json()["settings"]["tts_model_id"] == "eleven_multilingual_v2"
 
 
 def test_failed_dwarf_poc_and_old_voice_page_redirect_to_alpha(monkeypatch):

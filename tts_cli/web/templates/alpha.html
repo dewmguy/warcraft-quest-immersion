@@ -10,25 +10,6 @@
     </div>
   </section>
 
-  {% if dashboard.snapshot %}
-  <section class="source-banner {{ 'source-sample' if dashboard.counts.dialogue < 100 else '' }}" id="source">
-    <div>
-      <strong>{{ "{:,}".format(dashboard.counts.dialogue) }} active dialogue records</strong>
-      <span>{{ dashboard.snapshots|length }} source {{ 'snapshot' if dashboard.snapshots|length == 1 else 'snapshots' }} loaded · latest: {{ dashboard.snapshot.source_name }}</span>
-      {% if dashboard.counts.dialogue < 100 %}<p>The current source is a small sample. Upload the complete validated export to populate the full corpus.</p>{% endif %}
-    </div>
-    <details>
-      <summary>Replace source data</summary>
-      <form data-upload-form data-url="/api/data" class="inline-upload">
-        <label><span>Expansion</span><select name="expansion"><option>1.12.1</option><option>2.4.3</option><option selected>3.3.5</option><option value="classic">Current Classic</option></select></label>
-        <label><span>Locale</span><input name="locale" value="enUS" pattern="[A-Za-z]{4}" required></label>
-        <label><span>Validated dialogue CSV</span><input name="file" type="file" accept=".csv,text/csv" required></label>
-        <button type="submit">Upload and import</button>
-      </form>
-    </details>
-  </section>
-  {% endif %}
-
   <section class="alpha-metrics" aria-label="Database summary">
     <article><strong>{{ "{:,}".format(dashboard.counts.dialogue) }}</strong><span>Dialogue records</span></article>
     <article><strong>{{ "{:,}".format(dashboard.counts.speakers) }}</strong><span>Speakers</span></article>

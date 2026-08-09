@@ -25,11 +25,14 @@ separate user action.
 
 - **Source snapshot:** content-addressed input, expansion, locale, and import count.
 - **Dialogue:** immutable source text and stable addon identity.
-- **Speaker:** NPC context, importance, uniqueness, and voice assignment.
+- **Speaker:** inferred and reviewable role, affiliation, zone, story reach,
+  concise context, and voice assignment.
 - **Spoken-text revision:** separately created and never overwrites the source.
 - **Voice:** logical baseline or NPC-specific speaker.
-- **Voice version:** exact description, creation method, provider ID, model, and settings.
-- **Reference clip:** ignored audio with provenance and provider-eligibility metadata.
+- **Voice version:** exact description, creation method, provider ID, model, settings, and delta.
+- **Delivery preset:** one reviewed audio tag, stability value, and status for a
+  race/gender/emotion combination.
+- **Reference clip:** ignored audio with provenance that remains locally previewable.
 - **Generation:** one explicit provider request and its exact inputs and usage snapshot.
 - **Audio candidate:** one returned file with hash and duration.
 - **Production asset:** the exact approved candidate and addon filename.
@@ -41,9 +44,18 @@ angry, sorrowful, joyful, or proclaiming belongs to a dialogue line and is not a
 separate voice by default. A unique NPC voice inherits its current baseline as
 context but becomes an independently versioned record.
 
-Supported creation methods are an existing provider/library voice, text Voice
-Design, reference-assisted Voice Design, eligible Instant Voice Cloning, and an
-external/manual provider voice.
+The owner-facing creation paths are description-only Voice Design,
+reference-guided Voice Design, and Instant Voice Cloning. All produce a reusable
+provider voice ID. Provider model selection lives in general settings, not in
+individual voice records.
+
+The ElevenLabs API also calls an integer repeatability input a seed. That value
+is not the reusable voice. This project uses **voice profile** for its versioned
+race/gender or NPC record, **provider voice ID** for the created ElevenLabs
+voice, and **delivery preset** for emotion-specific tags and stability.
+
+Unchanged voice saves do not create versions. Historical versions list their
+deltas and may be restored by creating a new current version.
 
 ## Storage boundary
 

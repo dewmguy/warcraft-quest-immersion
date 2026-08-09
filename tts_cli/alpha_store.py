@@ -16,6 +16,51 @@ from tts_cli.data_sources import REQUIRED_COLUMNS, load_dialogue_csv
 from tts_cli.voice_profiles import load_phase2_review
 
 DELIVERIES = ("neutral", "angry", "sorrowful", "joyful", "proclaiming")
+DELIVERY_DEFAULTS = {
+    "neutral": {"prompt_tag": "", "stability": 0.5},
+    "angry": {"prompt_tag": "[angry]", "stability": 0.5},
+    "sorrowful": {"prompt_tag": "[sad]", "stability": 0.5},
+    "joyful": {"prompt_tag": "[cheerfully]", "stability": 0.5},
+    "proclaiming": {"prompt_tag": "[projecting]", "stability": 0.5},
+}
+ROLE_OPTIONS = (
+    "default",
+    "peasant",
+    "artisan",
+    "merchant",
+    "innkeeper",
+    "scholar",
+    "spiritual_leader",
+    "soldier",
+    "officer",
+    "highborn",
+    "royalty",
+    "outlaw",
+    "other",
+)
+AFFILIATION_OPTIONS = (
+    "unspecified",
+    "alliance",
+    "horde",
+    "neutral",
+    "kirin_tor",
+    "argent_crusade",
+    "cenarion_circle",
+    "steamwheedle_cartel",
+    "scarlet_crusade",
+    "scourge",
+    "burning_legion",
+    "other",
+)
+IMPORTANCE_SCORES = {
+    "pivotal": 100,
+    "global": 85,
+    "inter_zone": 70,
+    "zone": 55,
+    "subzone": 40,
+    "stepping_stone": 25,
+    "one_off": 10,
+}
 VOICE_METHODS = (
     "unselected",
     "library",
@@ -25,6 +70,7 @@ VOICE_METHODS = (
     "external",
 )
 VOICE_STATUSES = ("draft", "candidate", "active", "retired")
+DELIVERY_STATUSES = ("not_tested", "previewed", "approved")
 PRODUCTION_STATES = (
     "needs_text",
     "needs_voice",
@@ -72,6 +118,78 @@ def _audio_duration(path: Path) -> float | None:
 def _safe_filename(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-.")
     return cleaned[:120] or "audio.mp3"
+
+
+def _first_metadata(metadata: dict[str, Any], *keys: str) -> str:
+    lowered = {str(key).lower(): value for key, value in metadata.items()}
+    for key in keys:
+        value = str(lowered.get(key.lower(), "")).strip()
+        if value and value.lower() not in {"none", "nan", "0"}:
+            return value
+    return ""
+
+
+def _infer_role(name: str, metadata: dict[str, Any], entity_type: str) -> str:
+    haystack = " ".join(
+        [name, _first_metadata(metadata, "role", "occupation", "rank", "subname")]
+    ).lower()
+    groups = (
+        ("royalty", ("king", "queen", "prince", "princess", "emperor", "empress", "warchief")),
+        (
+            "officer",
+            ("captain", "commander", "general", "marshal", "sergeant", "lieutenant", "overlord"),
+        ),
+        ("soldier", ("guard", "sentinel", "soldier", "trooper", "grunt", "watcher", "defender")),
+        ("highborn", ("lord", "lady", "baron", "duke", "noble", "highborn")),
+        ("merchant", ("merchant", "vendor", "trader", "supplier", "dealer")),
+        ("innkeeper", ("innkeeper", "barkeep", "bartender")),
+        (
+            "artisan",
+            (
+                "smith",
+                "blacksmith",
+                "alchemist",
+                "engineer",
+                "tailor",
+                "leatherworker",
+                "carpenter",
+            ),
+        ),
+        ("scholar", ("scholar", "historian", "archivist", "librarian", "researcher", "mage")),
+        ("spiritual_leader", ("priest", "shaman", "druid", "oracle", "seer", "bishop")),
+        ("outlaw", ("bandit", "pirate", "thief", "assassin", "smuggler")),
+        ("peasant", ("peasant", "farmer", "laborer", "worker", "villager")),
+    )
+    for role, terms in groups:
+        if any(term in haystack for term in terms):
+            return role
+    return "other" if entity_type != "creature" else "default"
+
+
+def _infer_affiliation(metadata: dict[str, Any]) -> str:
+    value = _first_metadata(
+        metadata,
+        "affiliation",
+        "faction_name",
+        "faction",
+        "organization",
+        "team",
+    )
+    if not value:
+        return "unspecified"
+    normalized = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    aliases = {
+        "argent_dawn": "argent_crusade",
+        "argent_crusade": "argent_crusade",
+        "kirin_tor": "kirin_tor",
+        "cenarion_circle": "cenarion_circle",
+        "steamwheedle_cartel": "steamwheedle_cartel",
+        "scarlet_crusade": "scarlet_crusade",
+        "burning_legion": "burning_legion",
+    }
+    if normalized in AFFILIATION_OPTIONS:
+        return normalized
+    return aliases.get(normalized, "other")
 
 
 class AlphaStore:
@@ -131,6 +249,21 @@ class AlphaStore:
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS one_current_voice_version
                     ON voice_versions(voice_id) WHERE is_current = 1;
+                CREATE TABLE IF NOT EXISTS voice_delivery_presets (
+                    voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
+                    delivery TEXT NOT NULL,
+                    prompt_tag TEXT NOT NULL DEFAULT '',
+                    stability REAL NOT NULL DEFAULT 0.5,
+                    status TEXT NOT NULL DEFAULT 'not_tested',
+                    notes TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(voice_id, delivery)
+                );
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    setting_key TEXT PRIMARY KEY,
+                    value_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS speakers (
                     speaker_id TEXT PRIMARY KEY,
                     entity_type TEXT NOT NULL,
@@ -212,6 +345,21 @@ class AlphaStore:
                     status TEXT NOT NULL DEFAULT 'candidate',
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS voice_delivery_previews (
+                    preview_id TEXT PRIMARY KEY,
+                    voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
+                    delivery TEXT NOT NULL,
+                    storage_path TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    duration_seconds REAL NOT NULL,
+                    sample_text TEXT NOT NULL,
+                    request_json TEXT NOT NULL,
+                    provider_request_id TEXT,
+                    subscription_json TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL DEFAULT 'candidate',
+                    created_at TEXT NOT NULL,
+                    reviewed_at TEXT
+                );
                 CREATE TABLE IF NOT EXISTS generations (
                     generation_id TEXT PRIMARY KEY,
                     dialogue_id TEXT NOT NULL REFERENCES dialogue_entries(dialogue_id),
@@ -255,6 +403,7 @@ class AlphaStore:
                 """
             )
             self._ensure_columns(connection)
+            self._seed_app_settings(connection)
             self._seed_baseline_voices(connection)
 
     @staticmethod
@@ -313,6 +462,32 @@ class AlphaStore:
                 "'unselected', ?, 'draft', ?)",
                 (voice_id, description, _json(default_settings), now),
             )
+            self._seed_delivery_presets(connection, voice_id)
+
+    @staticmethod
+    def _seed_app_settings(connection: sqlite3.Connection) -> None:
+        now = utc_now()
+        defaults = {
+            "tts_model_id": "eleven_v3",
+            "voice_design_model_id": "eleven_ttv_v3",
+            "output_format": "mp3_44100_128",
+        }
+        for key, value in defaults.items():
+            connection.execute(
+                "INSERT OR IGNORE INTO app_settings(setting_key, value_json, updated_at) "
+                "VALUES (?, ?, ?)",
+                (key, _json(value), now),
+            )
+
+    @staticmethod
+    def _seed_delivery_presets(connection: sqlite3.Connection, voice_id: str) -> None:
+        now = utc_now()
+        for delivery, defaults in DELIVERY_DEFAULTS.items():
+            connection.execute(
+                "INSERT OR IGNORE INTO voice_delivery_presets(voice_id, delivery, prompt_tag, "
+                "stability, status, updated_at) VALUES (?, ?, ?, ?, 'not_tested', ?)",
+                (voice_id, delivery, defaults["prompt_tag"], defaults["stability"], now),
+            )
 
     @staticmethod
     def _dialogue_id(row: dict[str, Any], expansion: str, locale: str) -> str:
@@ -358,6 +533,7 @@ class AlphaStore:
         snapshot_id = source_hash[:24]
         now = utc_now()
         imported_ids: set[str] = set()
+        imported_speaker_ids: set[str] = set()
         with self.connect() as connection:
             connection.execute(
                 "UPDATE source_snapshots SET is_active=0 WHERE expansion=? AND locale=?",
@@ -387,9 +563,15 @@ class AlphaStore:
                     key: value.item() if hasattr(value, "item") else value
                     for key, value in row.items()
                 }
+                metadata = {
+                    key: value
+                    for key, value in row.items()
+                    if key not in REQUIRED_COLUMNS and str(value).strip()
+                }
                 entity_type = str(row["type"])
                 entity_id = int(row["id"])
                 speaker_id = f"{entity_type}-{entity_id}"
+                imported_speaker_ids.add(speaker_id)
                 race_id = int(row["DisplayRaceID"])
                 gender_id = int(row["DisplaySexID"])
                 race_name = RACE_DICT.get(race_id, f"race-{race_id}")
@@ -398,13 +580,22 @@ class AlphaStore:
                 baseline_exists = connection.execute(
                     "SELECT 1 FROM voices WHERE voice_id = ?", (profile_id,)
                 ).fetchone()
+                inferred_role = _infer_role(str(row["name"]), metadata, entity_type)
+                inferred_affiliation = _infer_affiliation(metadata)
+                inferred_zone = _first_metadata(
+                    metadata, "zone_name", "zone", "area_name", "area", "map_name"
+                )
                 connection.execute(
                     "INSERT INTO speakers(speaker_id, entity_type, entity_id, name, race_id, "
-                    "gender_id, race_name, gender_name, voice_id, source_snapshot_id, created_at, "
-                    "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "gender_id, race_name, gender_name, voice_id, role, faction, zone, "
+                    "source_snapshot_id, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(speaker_id) DO UPDATE SET name=excluded.name, race_id=excluded.race_id, "
                     "gender_id=excluded.gender_id, race_name=excluded.race_name, "
                     "gender_name=excluded.gender_name, source_snapshot_id=excluded.source_snapshot_id, "
+                    "role=CASE WHEN speakers.role='' THEN excluded.role ELSE speakers.role END, "
+                    "faction=CASE WHEN speakers.faction='' THEN excluded.faction ELSE speakers.faction END, "
+                    "zone=CASE WHEN speakers.zone='' THEN excluded.zone ELSE speakers.zone END, "
                     "updated_at=excluded.updated_at",
                     (
                         speaker_id,
@@ -416,6 +607,9 @@ class AlphaStore:
                         race_name,
                         gender_name,
                         profile_id if baseline_exists else None,
+                        inferred_role,
+                        inferred_affiliation,
+                        inferred_zone,
                         snapshot_id,
                         now,
                         now,
@@ -438,11 +632,6 @@ class AlphaStore:
                     ),
                     "",
                 )
-                metadata = {
-                    key: value
-                    for key, value in row.items()
-                    if key not in REQUIRED_COLUMNS and str(value).strip()
-                }
                 connection.execute(
                     "INSERT INTO dialogue_entries(dialogue_id, source_snapshot_id, expansion, "
                     "locale, source_record_id, source, quest_id, quest_title, speaker_id, original_text, "
@@ -470,12 +659,60 @@ class AlphaStore:
                         now,
                     ),
                 )
+            for speaker_id in imported_speaker_ids:
+                self._refresh_speaker_inference(connection, speaker_id)
         return {
             "snapshot_id": snapshot_id,
             "source_hash": source_hash,
             "rows_received": len(dataframe),
             "dialogue_records": len(imported_ids),
         }
+
+    @staticmethod
+    def _refresh_speaker_inference(connection: sqlite3.Connection, speaker_id: str) -> None:
+        speaker = connection.execute(
+            "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
+        ).fetchone()
+        if not speaker:
+            return
+        totals = connection.execute(
+            "SELECT COUNT(*) AS line_count, COUNT(DISTINCT quest_id) AS quest_count, "
+            "SUM(CASE WHEN source='gossip' THEN 1 ELSE 0 END) AS gossip_count "
+            "FROM dialogue_entries WHERE speaker_id=? AND active=1",
+            (speaker_id,),
+        ).fetchone()
+        line_count = int(totals["line_count"] or 0)
+        quest_count = int(totals["quest_count"] or 0)
+        name = str(speaker["name"]).lower()
+        if any(term in name for term in ("king", "queen", "warchief", "lich king", "thrall")):
+            importance = "pivotal"
+        elif quest_count >= 10:
+            importance = "global"
+        elif quest_count >= 6:
+            importance = "inter_zone"
+        elif quest_count >= 3:
+            importance = "zone"
+        elif quest_count >= 2 or line_count >= 4:
+            importance = "subzone"
+        elif quest_count == 1:
+            importance = "stepping_stone"
+        else:
+            importance = "one_off"
+        context = (
+            f"{speaker['name']} is a {speaker['race_name']} {speaker['gender_name']} "
+            f"{str(speaker['role']).replace('_', ' ')}"
+        )
+        if speaker["faction"] and speaker["faction"] != "unspecified":
+            context += f" associated with {str(speaker['faction']).replace('_', ' ')}"
+        if speaker["zone"]:
+            context += f" in {speaker['zone']}"
+        context += f". This source currently assigns {line_count} spoken record(s) to this speaker."
+        connection.execute(
+            "UPDATE speakers SET importance=CASE WHEN importance='unassessed' THEN ? ELSE importance END, "
+            "context_summary=CASE WHEN context_summary='' THEN ? ELSE context_summary END "
+            "WHERE speaker_id=?",
+            (importance, context, speaker_id),
+        )
 
     @staticmethod
     def _status_expression() -> str:
@@ -779,13 +1016,25 @@ class AlphaStore:
                 raise AlphaError("Dialogue record was not found.")
 
     def update_speaker(self, speaker_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        importance = str(payload.get("importance", "unassessed"))
-        uniqueness = str(payload.get("uniqueness", "unassessed"))
-        if importance not in {"unassessed", "minor", "supporting", "major"}:
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
+            ).fetchone()
+        if not existing:
+            raise AlphaError("Speaker was not found.")
+        importance = str(payload.get("importance", existing["importance"]))
+        uniqueness = str(payload.get("uniqueness", existing["uniqueness"]))
+        role = str(payload.get("role", existing["role"]))
+        faction = str(payload.get("faction", existing["faction"]))
+        if importance not in IMPORTANCE_SCORES:
             raise AlphaError("Unknown story importance.")
         if uniqueness not in {"unassessed", "baseline", "unique_candidate", "unique"}:
             raise AlphaError("Unknown uniqueness selection.")
-        voice_id = str(payload.get("voice_id", "")).strip() or None
+        if role not in ROLE_OPTIONS:
+            raise AlphaError("Unknown role or occupation.")
+        if faction not in AFFILIATION_OPTIONS:
+            raise AlphaError("Unknown affiliation.")
+        voice_id = str(payload.get("voice_id", existing["voice_id"] or "")).strip() or None
         with self.connect() as connection:
             if (
                 voice_id
@@ -798,10 +1047,10 @@ class AlphaStore:
                 "UPDATE speakers SET role=?, faction=?, zone=?, context_summary=?, importance=?, "
                 "uniqueness=?, voice_id=?, updated_at=? WHERE speaker_id=?",
                 (
-                    str(payload.get("role", ""))[:200].strip(),
-                    str(payload.get("faction", ""))[:200].strip(),
-                    str(payload.get("zone", ""))[:200].strip(),
-                    str(payload.get("context_summary", ""))[:4000].strip(),
+                    role,
+                    faction,
+                    str(payload.get("zone", existing["zone"]))[:200].strip(),
+                    str(payload.get("context_summary", existing["context_summary"]))[:4000].strip(),
                     importance,
                     uniqueness,
                     voice_id,
@@ -833,10 +1082,16 @@ class AlphaStore:
             voices = connection.execute(
                 "SELECT v.voice_id, v.name, v.scope, vv.provider_voice_id, vv.status "
                 "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
-                "ORDER BY v.scope, v.name"
+                "WHERE (v.scope='baseline' AND v.race_id=? AND v.gender_id=?) OR v.scope='unique' "
+                "ORDER BY v.scope, v.name",
+                (speaker["race_id"], speaker["gender_id"]),
             ).fetchall()
+        speaker_payload = dict(speaker)
+        speaker_payload["importance_score"] = IMPORTANCE_SCORES.get(
+            speaker_payload["importance"], 0
+        )
         return {
-            "speaker": dict(speaker),
+            "speaker": speaker_payload,
             "dialogue": [dict(row) for row in lines],
             "voices": [dict(row) for row in voices],
         }
@@ -888,11 +1143,247 @@ class AlphaStore:
                 "settings_json, status, created_at) VALUES (?, 1, ?, 'unselected', ?, 'draft', ?)",
                 (voice_id, description, settings, now),
             )
+            self._seed_delivery_presets(connection, voice_id)
             connection.execute(
                 "UPDATE speakers SET voice_id=?, uniqueness='unique', updated_at=? WHERE speaker_id=?",
                 (voice_id, now, speaker_id),
             )
         return self.get_voice(voice_id)
+
+    def get_app_settings(self) -> dict[str, Any]:
+        with self.connect() as connection:
+            rows = connection.execute("SELECT * FROM app_settings").fetchall()
+        return {row["setting_key"]: _loads(row["value_json"], None) for row in rows}
+
+    def update_app_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        current = self.get_app_settings()
+        updated = {
+            "tts_model_id": str(payload.get("tts_model_id", current["tts_model_id"])),
+            "voice_design_model_id": str(
+                payload.get("voice_design_model_id", current["voice_design_model_id"])
+            ),
+            "output_format": str(payload.get("output_format", current["output_format"])),
+        }
+        if updated["tts_model_id"] not in {"eleven_v3", "eleven_multilingual_v2"}:
+            raise AlphaError("Unknown speech model.")
+        if updated["voice_design_model_id"] not in {
+            "eleven_ttv_v3",
+            "eleven_multilingual_ttv_v2",
+        }:
+            raise AlphaError("Unknown Voice Design model.")
+        if updated["output_format"] != "mp3_44100_128":
+            raise AlphaError("The Alpha currently supports MP3 44.1 kHz / 128 kbps output.")
+        now = utc_now()
+        with self.connect() as connection:
+            for key, value in updated.items():
+                connection.execute(
+                    "INSERT INTO app_settings(setting_key, value_json, updated_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(setting_key) DO UPDATE SET value_json=excluded.value_json, "
+                    "updated_at=excluded.updated_at",
+                    (key, _json(value), now),
+                )
+        return self.get_app_settings()
+
+    def progress(self) -> dict[str, dict[str, int | float | str]]:
+        with self.connect() as connection:
+            voice = connection.execute(
+                "SELECT COUNT(*) AS total, SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) "
+                "AS complete FROM voice_delivery_presets vdp JOIN voices v ON v.voice_id=vdp.voice_id "
+                "WHERE v.scope='baseline'"
+            ).fetchone()
+            dialogue = {}
+            for key, condition in (
+                ("quests", "d.source<>'gossip'"),
+                ("gossip", "d.source='gossip'"),
+            ):
+                dialogue[key] = connection.execute(
+                    "SELECT COUNT(*) AS total, SUM(CASE WHEN pa.dialogue_id IS NOT NULL THEN 1 ELSE 0 "
+                    f"END) AS complete FROM dialogue_entries d LEFT JOIN production_assets pa "
+                    f"ON pa.dialogue_id=d.dialogue_id WHERE d.active=1 AND {condition}"
+                ).fetchone()
+
+        def item(label: str, row: sqlite3.Row) -> dict[str, int | float | str]:
+            total = int(row["total"] or 0)
+            complete = int(row["complete"] or 0)
+            return {
+                "label": label,
+                "complete": complete,
+                "total": total,
+                "percent": round((complete / total * 100) if total else 0, 1),
+            }
+
+        return {
+            "voices": item("Baseline deliveries", voice),
+            "quests": item("Quest audio", dialogue["quests"]),
+            "gossip": item("Gossip audio", dialogue["gossip"]),
+        }
+
+    def update_delivery_preset(
+        self, voice_id: str, delivery: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        if delivery not in DELIVERIES:
+            raise AlphaError("Unknown delivery preset.")
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT * FROM voice_delivery_presets WHERE voice_id=? AND delivery=?",
+                (voice_id, delivery),
+            ).fetchone()
+        if not existing:
+            raise AlphaError("Delivery preset was not found.")
+        status = str(payload.get("status", existing["status"]))
+        if status not in DELIVERY_STATUSES:
+            raise AlphaError("Unknown delivery status.")
+        prompt_tag = str(payload.get("prompt_tag", "")).strip()[:80]
+        stability = float(payload.get("stability", 0.5))
+        if not 0 <= stability <= 1:
+            raise AlphaError("Delivery stability must be between 0 and 1.")
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "UPDATE voice_delivery_presets SET prompt_tag=?, stability=?, status=?, notes=?, "
+                "updated_at=? WHERE voice_id=? AND delivery=?",
+                (
+                    prompt_tag,
+                    stability,
+                    status,
+                    str(payload.get("notes", existing["notes"])).strip()[:1000],
+                    utc_now(),
+                    voice_id,
+                    delivery,
+                ),
+            )
+            if not cursor.rowcount:
+                raise AlphaError("Delivery preset was not found.")
+        return self.get_voice(voice_id)
+
+    def delivery_preview_request(
+        self, voice_id: str, delivery: str, sample_text: str
+    ) -> dict[str, Any]:
+        if delivery not in DELIVERIES:
+            raise AlphaError("Unknown delivery preset.")
+        text = sample_text.strip()
+        if not 100 <= len(text) <= 1000:
+            raise AlphaError("Delivery comparison text must contain 100–1,000 characters.")
+        voice = self.get_voice(voice_id)
+        if not voice.get("provider_voice_id"):
+            raise AlphaError("Create the reusable provider voice before testing delivery presets.")
+        preset = next(item for item in voice["delivery_presets"] if item["delivery"] == delivery)
+        request_text = f"{preset['prompt_tag']} {text}".strip()
+        model_id = self.get_app_settings()["tts_model_id"]
+        settings = voice["settings"].copy()
+        if model_id == "eleven_v3":
+            settings = {"stability": float(preset["stability"])}
+        return {
+            "voice_id": voice["provider_voice_id"],
+            "text": request_text,
+            "model_id": model_id,
+            "voice_settings": settings,
+            "sample_text": text,
+        }
+
+    def record_delivery_preview(
+        self,
+        voice_id: str,
+        delivery: str,
+        request: dict[str, Any],
+        *,
+        content: bytes,
+        provider_request_id: str | None,
+        subscription: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        preview_id = uuid.uuid4().hex
+        folder = self.storage_root / "delivery-previews" / voice_id / delivery
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{preview_id}.mp3"
+        path.write_bytes(content)
+        duration = _audio_duration(path)
+        if duration is None or duration <= 0:
+            path.unlink(missing_ok=True)
+            raise AlphaError("ElevenLabs returned audio whose duration could not be validated.")
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO voice_delivery_previews(preview_id, voice_id, delivery, storage_path, "
+                "sha256, duration_seconds, sample_text, request_json, provider_request_id, "
+                "subscription_json, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                "'candidate', ?)",
+                (
+                    preview_id,
+                    voice_id,
+                    delivery,
+                    str(path),
+                    sha256_bytes(content),
+                    duration,
+                    request["sample_text"],
+                    _json(request),
+                    provider_request_id,
+                    _json(subscription or {}),
+                    now,
+                ),
+            )
+            connection.execute(
+                "UPDATE voice_delivery_presets SET status='previewed', updated_at=? "
+                "WHERE voice_id=? AND delivery=? AND status<>'approved'",
+                (now, voice_id, delivery),
+            )
+        return {"preview_id": preview_id, "duration_seconds": duration}
+
+    def approve_delivery_preview(self, preview_id: str) -> dict[str, Any]:
+        now = utc_now()
+        with self.connect() as connection:
+            preview = connection.execute(
+                "SELECT * FROM voice_delivery_previews WHERE preview_id=?", (preview_id,)
+            ).fetchone()
+            if not preview:
+                raise AlphaError("Delivery preview was not found.")
+            connection.execute(
+                "UPDATE voice_delivery_previews SET status='rejected', reviewed_at=? "
+                "WHERE voice_id=? AND delivery=? AND preview_id<>? AND status='candidate'",
+                (now, preview["voice_id"], preview["delivery"], preview_id),
+            )
+            connection.execute(
+                "UPDATE voice_delivery_previews SET status='approved', reviewed_at=? "
+                "WHERE preview_id=?",
+                (now, preview_id),
+            )
+            connection.execute(
+                "UPDATE voice_delivery_presets SET status='approved', updated_at=? "
+                "WHERE voice_id=? AND delivery=?",
+                (now, preview["voice_id"], preview["delivery"]),
+            )
+        return self.get_voice(preview["voice_id"])
+
+    def delivery_preview_path(self, preview_id: str) -> Path:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT storage_path FROM voice_delivery_previews WHERE preview_id=?",
+                (preview_id,),
+            ).fetchone()
+        if not row:
+            raise AlphaError("Delivery preview was not found.")
+        path = Path(row["storage_path"]).resolve()
+        if self.storage_root not in path.parents or not path.is_file():
+            raise AlphaError("Delivery preview file is unavailable.")
+        return path
+
+    def restore_voice_version(self, voice_id: str, version_id: int) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM voice_versions WHERE voice_id=? AND version_id=?",
+                (voice_id, version_id),
+            ).fetchone()
+        if not row:
+            raise AlphaError("Voice version was not found.")
+        return self.update_voice(
+            voice_id,
+            {
+                "description": row["description"],
+                "creation_method": row["creation_method"],
+                "provider_voice_id": row["provider_voice_id"] or "",
+                "model_id": row["model_id"],
+                "status": row["status"],
+                **_loads(row["settings_json"], {}),
+            },
+        )
 
     def list_voices(self, scope: str = "") -> list[dict[str, Any]]:
         parameters: list[Any] = []
@@ -907,7 +1398,21 @@ class AlphaStore:
                 "SELECT v.*, vv.version_id, vv.version_number, vv.creation_method, vv.provider, "
                 "vv.provider_voice_id, vv.model_id, vv.status, "
                 "(SELECT COUNT(*) FROM speakers s WHERE s.voice_id=v.voice_id) AS speaker_count, "
-                "(SELECT COUNT(*) FROM reference_clips rc WHERE rc.voice_id=v.voice_id) AS clip_count "
+                "(SELECT COUNT(*) FROM reference_clips rc WHERE rc.voice_id=v.voice_id) AS clip_count, "
+                "(SELECT COUNT(*) FROM speakers ms WHERE "
+                "(v.scope='baseline' AND ms.race_id=v.race_id AND ms.gender_id=v.gender_id) OR "
+                "(v.scope='unique' AND ms.voice_id=v.voice_id)) AS matching_speaker_count, "
+                "(SELECT COUNT(*) FROM dialogue_entries md JOIN speakers ms ON ms.speaker_id=md.speaker_id "
+                "WHERE md.active=1 AND ((v.scope='baseline' AND ms.race_id=v.race_id AND "
+                "ms.gender_id=v.gender_id) OR (v.scope='unique' AND ms.voice_id=v.voice_id))) "
+                "AS dialogue_count, "
+                "(SELECT COUNT(*) FROM dialogue_entries md JOIN speakers ms ON ms.speaker_id=md.speaker_id "
+                "LEFT JOIN production_assets mpa ON mpa.dialogue_id=md.dialogue_id "
+                "WHERE md.active=1 AND mpa.dialogue_id IS NULL AND ((v.scope='baseline' AND "
+                "ms.race_id=v.race_id AND ms.gender_id=v.gender_id) OR "
+                "(v.scope='unique' AND ms.voice_id=v.voice_id))) AS missing_dialogue_count, "
+                "(SELECT COUNT(*) FROM voice_delivery_presets vdp WHERE vdp.voice_id=v.voice_id "
+                "AND vdp.status='approved') AS approved_delivery_count "
                 "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
                 f"{where} ORDER BY v.scope, v.name",
                 parameters,
@@ -942,13 +1447,70 @@ class AlphaStore:
                 "ORDER BY name",
                 (voice_id,),
             ).fetchall()
+            delivery_presets = connection.execute(
+                "SELECT * FROM voice_delivery_presets WHERE voice_id=? "
+                "ORDER BY CASE delivery WHEN 'neutral' THEN 0 WHEN 'angry' THEN 1 "
+                "WHEN 'sorrowful' THEN 2 WHEN 'joyful' THEN 3 ELSE 4 END",
+                (voice_id,),
+            ).fetchall()
+            delivery_previews = connection.execute(
+                "SELECT * FROM voice_delivery_previews WHERE voice_id=? ORDER BY created_at DESC",
+                (voice_id,),
+            ).fetchall()
         payload = dict(voice)
         payload["settings"] = _loads(payload["settings_json"], {})
-        payload["versions"] = [dict(row) for row in versions]
+        version_payloads = [dict(row) for row in versions]
+        ascending = list(reversed(version_payloads))
+        for index, version in enumerate(ascending):
+            version["settings"] = _loads(version["settings_json"], {})
+            version["delta"] = (
+                self._voice_version_delta(ascending[index - 1], version) if index else []
+            )
+        payload["versions"] = list(reversed(ascending))
         payload["clips"] = [dict(row) for row in clips]
         payload["previews"] = [dict(row) for row in previews]
         payload["speakers"] = [dict(row) for row in speakers]
+        preview_payloads = [dict(row) for row in delivery_previews]
+        payload["delivery_presets"] = []
+        for row in delivery_presets:
+            preset = dict(row)
+            preset["previews"] = [
+                preview for preview in preview_payloads if preview["delivery"] == preset["delivery"]
+            ]
+            payload["delivery_presets"].append(preset)
+        summary = next(item for item in self.list_voices() if item["voice_id"] == voice_id)
+        payload.update(
+            {
+                key: summary[key]
+                for key in (
+                    "matching_speaker_count",
+                    "dialogue_count",
+                    "missing_dialogue_count",
+                    "approved_delivery_count",
+                )
+            }
+        )
         return payload
+
+    @staticmethod
+    def _voice_version_delta(previous: dict[str, Any], current: dict[str, Any]) -> list[str]:
+        delta = []
+        labels = {
+            "description": "Voice description",
+            "creation_method": "Creation method",
+            "provider_voice_id": "Provider voice",
+            "model_id": "Speech model",
+            "status": "Lifecycle status",
+        }
+        for key, label in labels.items():
+            if previous.get(key) != current.get(key):
+                delta.append(label)
+        previous_settings = previous.get("settings") or _loads(previous.get("settings_json"), {})
+        current_settings = current.get("settings") or _loads(current.get("settings_json"), {})
+        for key in sorted(set(previous_settings) | set(current_settings)):
+            if previous_settings.get(key) != current_settings.get(key):
+                delta.append(key.replace("_", " ").title())
+        return delta
 
     def update_voice(self, voice_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         current = self.get_voice(voice_id)
@@ -961,7 +1523,10 @@ class AlphaStore:
         description = str(payload.get("description", current["description"])).strip()
         if not 20 <= len(description) <= 5000:
             raise AlphaError("Voice description must contain 20–5,000 characters.")
-        model_id = str(payload.get("model_id", current["model_id"])).strip() or "eleven_v3"
+        model_id = (
+            str(payload.get("model_id", self.get_app_settings()["tts_model_id"])).strip()
+            or "eleven_v3"
+        )
         provider_voice_id = str(
             payload.get("provider_voice_id", current["provider_voice_id"] or "")
         ).strip()
@@ -969,9 +1534,19 @@ class AlphaStore:
         for key in ("stability", "similarity_boost", "style", "speed"):
             if key in payload:
                 settings[key] = float(payload[key])
-        settings["use_speaker_boost"] = bool(
-            payload.get("use_speaker_boost", settings.get("use_speaker_boost", True))
+        if "use_speaker_boost" in payload:
+            settings["use_speaker_boost"] = bool(payload["use_speaker_boost"])
+        unchanged = (
+            description == current["description"]
+            and method == current["creation_method"]
+            and status == current["status"]
+            and provider_voice_id == (current["provider_voice_id"] or "")
+            and model_id == current["model_id"]
+            and settings == current["settings"]
         )
+        if unchanged:
+            current["version_changed"] = False
+            return current
         now = utc_now()
         with self.connect() as connection:
             next_version = connection.execute(
@@ -998,7 +1573,9 @@ class AlphaStore:
                 ),
             )
             connection.execute("UPDATE voices SET updated_at=? WHERE voice_id=?", (now, voice_id))
-        return self.get_voice(voice_id)
+        updated = self.get_voice(voice_id)
+        updated["version_changed"] = True
+        return updated
 
     def save_reference_clip(
         self,
@@ -1087,6 +1664,9 @@ class AlphaStore:
         payload["path"] = path
         return payload
 
+    def reference_path(self, clip_id: str) -> Path:
+        return self.get_reference_clip(clip_id)["path"]
+
     def get_voice_preview(self, preview_id: str) -> dict[str, Any]:
         with self.connect() as connection:
             row = connection.execute(
@@ -1102,11 +1682,12 @@ class AlphaStore:
 
     def activate_voice_preview(self, preview_id: str, provider_voice_id: str) -> dict[str, Any]:
         preview = self.get_voice_preview(preview_id)
+        current = self.get_voice(preview["voice_id"])
         updated = self.update_voice(
             preview["voice_id"],
             {
                 "description": preview["description"],
-                "creation_method": "designed",
+                "creation_method": current["creation_method"],
                 "provider_voice_id": provider_voice_id,
                 "model_id": "eleven_v3",
                 "status": "active",
@@ -1123,11 +1704,17 @@ class AlphaStore:
             )
         return updated
 
-    @staticmethod
-    def generation_text(dialogue: dict[str, Any]) -> str:
+    def generation_text(self, dialogue: dict[str, Any]) -> str:
         text = str(dialogue.get("spoken_text") or "")
         delivery = str(dialogue.get("delivery") or "neutral")
-        return text if delivery == "neutral" else f"[{delivery}] {text}"
+        voice_id = str(dialogue.get("voice_id") or "")
+        with self.connect() as connection:
+            preset = connection.execute(
+                "SELECT prompt_tag FROM voice_delivery_presets WHERE voice_id=? AND delivery=?",
+                (voice_id, delivery),
+            ).fetchone()
+        prompt_tag = str(preset["prompt_tag"] if preset else "").strip()
+        return f"{prompt_tag} {text}".strip()
 
     def begin_generation(self, dialogue_id: str) -> dict[str, Any]:
         dialogue = self.get_dialogue(dialogue_id)
@@ -1138,11 +1725,21 @@ class AlphaStore:
         if not dialogue.get("voice_id") or not dialogue.get("provider_voice_id"):
             raise AlphaError("Assign an active provider voice before generating audio.")
         request_text = self.generation_text(dialogue)
+        app_settings = self.get_app_settings()
+        model_id = app_settings["tts_model_id"]
+        voice_settings = dialogue["voice_settings"].copy()
+        if model_id == "eleven_v3":
+            with self.connect() as connection:
+                preset = connection.execute(
+                    "SELECT stability FROM voice_delivery_presets WHERE voice_id=? AND delivery=?",
+                    (dialogue["voice_id"], dialogue["delivery"]),
+                ).fetchone()
+            voice_settings = {"stability": float(preset["stability"] if preset else 0.5)}
         request_payload = {
             "text": request_text,
             "voice_id": dialogue["provider_voice_id"],
-            "model_id": dialogue["model_id"],
-            "voice_settings": dialogue["voice_settings"],
+            "model_id": model_id,
+            "voice_settings": voice_settings,
         }
         generation_id = uuid.uuid4().hex
         with self.connect() as connection:
@@ -1157,7 +1754,7 @@ class AlphaStore:
                     dialogue["revision_id"],
                     dialogue["voice_id"],
                     dialogue["voice_version_id"],
-                    dialogue["model_id"],
+                    model_id,
                     dialogue["delivery"],
                     request_text,
                     _json(request_payload),

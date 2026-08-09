@@ -69,8 +69,8 @@ generated CSV and manifest artifacts with:
 The web application now opens at `/alpha`. Its persistent production database
 provides a filterable queue for every imported quest and gossip record, NPC
 context, baseline-or-unique voice assignment, on-demand spoken-text revisions,
-versioned voices and reference clips, guarded ElevenLabs actions, audio review,
-production approval, and deterministic exports.
+versioned voices and reference clips, guarded ElevenLabs actions, delivery
+presets, audio review, and production approval.
 
 The bundled CSV contains only four safe demonstration rows. Upload complete
 validated exports through Alpha to populate the full corpus. Sources for
@@ -120,17 +120,19 @@ Invoke-RestMethod http://localhost:8090/health
 
 The Alpha portal is the working production surface:
 
-1. Upload a validated expansion/locale dialogue source.
+1. Construct a joined dialogue source from the AzerothCore quest, gossip, NPC,
+   faction, and area data, then validate it through **Import / Export**.
 2. Filter the complete queue by expansion, status, content type, race, gender,
    NPC, quest, or text.
 3. Prepare spoken text on demand, then review or edit the revision.
-4. Record NPC context and assign a baseline or versioned unique voice.
-5. Store eligible reference audio outside Git and configure the exact provider
-   voice/version.
+4. Review the inferred NPC role, affiliation, zone, story reach, and concise
+   context; assign a baseline or versioned unique voice.
+5. Create the reusable provider voice with description-only Voice Design,
+   reference-guided Voice Design, or Instant Voice Cloning.
 6. Explicitly request one ElevenLabs candidate, review it, and approve the exact
    file for production.
-7. Export a manifest and expansion-separated audio package for the existing
-   addon packaging workflow.
+7. Treat production export as a later handoff after the corpus and approval
+   rules have been validated.
 
 All provider operations have a separate paid-action confirmation. If
 ElevenLabs is not configured, they remain disabled and no request can be sent.
@@ -153,6 +155,11 @@ The expected CSV columns are:
 | `original_text` | Original template text used for stable audio hashes |
 
 ## Full database workflow
+
+The current optional MySQL query path reflects the inherited vMaNGOS source and
+is not the intended final 3.3.5 source of truth. The Phase 2 target is a
+dedicated read-only AzerothCore extractor that emits the documented CSV transfer
+contract with joined identifiers and NPC context fields.
 
 Start the optional database container only when the full vMaNGOS source needs to be rebuilt:
 

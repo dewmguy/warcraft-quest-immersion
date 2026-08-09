@@ -33,10 +33,17 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from tts_cli.alpha_store import DELIVERIES, AlphaError, AlphaStore
+from tts_cli.alpha_store import (
+    AFFILIATION_OPTIONS,
+    DELIVERIES,
+    IMPORTANCE_SCORES,
+    ROLE_OPTIONS,
+    AlphaError,
+    AlphaStore,
+)
 from tts_cli.config import load_settings
 from tts_cli.consts import GENDER_DICT, RACE_DICT
-from tts_cli.data_sources import DataSourceError, load_dialogue_csv
+from tts_cli.data_sources import REQUIRED_COLUMNS, DataSourceError, load_dialogue_csv
 from tts_cli.elevenlabs_client import ElevenLabsClient, ElevenLabsError
 from tts_cli.paths import OUTPUT_DIR, PROJECT_ROOT, SAMPLE_DATA_PATH
 from tts_cli.sql_queries import make_connection
@@ -238,6 +245,15 @@ def _alpha_error(error: AlphaError, status_code: int = 422) -> HTTPException:
     return HTTPException(status_code=status_code, detail=str(error))
 
 
+def _alpha_context(**values) -> dict:
+    return {
+        "provider_configured": elevenlabs.configured,
+        "progress": alpha_store.progress(),
+        "app_settings": alpha_store.get_app_settings(),
+        **values,
+    }
+
+
 @app.get("/alpha", response_class=HTMLResponse)
 def alpha_dashboard(
     request: Request,
@@ -254,9 +270,9 @@ def alpha_dashboard(
         return templates.TemplateResponse(
             request=request,
             name="alpha.html",
-            context={
-                "dashboard": alpha_store.dashboard(),
-                "listing": alpha_store.list_dialogue(
+            context=_alpha_context(
+                dashboard=alpha_store.dashboard(),
+                listing=alpha_store.list_dialogue(
                     query=q,
                     state=production_state,
                     source=source,
@@ -265,7 +281,7 @@ def alpha_dashboard(
                     gender_id=gender_id,
                     page=max(page, 1),
                 ),
-                "filters": {
+                filters={
                     "q": q,
                     "production_state": production_state,
                     "source": source,
@@ -273,8 +289,7 @@ def alpha_dashboard(
                     "race_id": race_id,
                     "gender_id": gender_id,
                 },
-                "provider_configured": elevenlabs.configured,
-            },
+            ),
         )
     except AlphaError as error:
         raise _alpha_error(error) from error
@@ -290,11 +305,9 @@ def alpha_dialogue(
         return templates.TemplateResponse(
             request=request,
             name="alpha-dialogue.html",
-            context={
-                "dialogue": alpha_store.get_dialogue(dialogue_id),
-                "deliveries": DELIVERIES,
-                "provider_configured": elevenlabs.configured,
-            },
+            context=_alpha_context(
+                dialogue=alpha_store.get_dialogue(dialogue_id), deliveries=DELIVERIES
+            ),
         )
     except AlphaError as error:
         raise _alpha_error(error, 404) from error
@@ -311,10 +324,12 @@ def alpha_speaker(
         return templates.TemplateResponse(
             request=request,
             name="alpha-speaker.html",
-            context={
-                "record": alpha_store.get_speaker(f"{entity_type}-{entity_id}"),
-                "provider_configured": elevenlabs.configured,
-            },
+            context=_alpha_context(
+                record=alpha_store.get_speaker(f"{entity_type}-{entity_id}"),
+                role_options=ROLE_OPTIONS,
+                affiliation_options=AFFILIATION_OPTIONS,
+                importance_scores=IMPORTANCE_SCORES,
+            ),
         )
     except AlphaError as error:
         raise _alpha_error(error, 404) from error
@@ -330,11 +345,7 @@ def alpha_voices(
         return templates.TemplateResponse(
             request=request,
             name="alpha-voices.html",
-            context={
-                "voices": alpha_store.list_voices(scope),
-                "scope": scope,
-                "provider_configured": elevenlabs.configured,
-            },
+            context=_alpha_context(voices=alpha_store.list_voices(scope), scope=scope),
         )
     except AlphaError as error:
         raise _alpha_error(error) from error
@@ -350,21 +361,36 @@ def alpha_voice(
         return templates.TemplateResponse(
             request=request,
             name="alpha-voice.html",
-            context={
-                "voice": alpha_store.get_voice(voice_id),
-                "provider_configured": elevenlabs.configured,
-            },
+            context=_alpha_context(voice=alpha_store.get_voice(voice_id)),
         )
     except AlphaError as error:
         raise _alpha_error(error, 404) from error
 
 
-@app.get("/alpha/export", response_class=HTMLResponse)
-def alpha_export(request: Request, _: Annotated[str, Depends(require_auth)]):
+@app.get("/alpha/import-export", response_class=HTMLResponse)
+def alpha_import_export(request: Request, _: Annotated[str, Depends(require_auth)]):
     return templates.TemplateResponse(
         request=request,
-        name="alpha-export.html",
-        context={"manifest": alpha_store.export_manifest()},
+        name="alpha-import-export.html",
+        context=_alpha_context(
+            dashboard=alpha_store.dashboard(),
+            manifest=alpha_store.export_manifest(),
+            required_columns=REQUIRED_COLUMNS,
+        ),
+    )
+
+
+@app.get("/alpha/export", response_class=RedirectResponse)
+def retired_alpha_export(_: Annotated[str, Depends(require_auth)]):
+    return RedirectResponse("/alpha/import-export", status_code=307)
+
+
+@app.get("/alpha/settings", response_class=HTMLResponse)
+def alpha_settings(request: Request, _: Annotated[str, Depends(require_auth)]):
+    return templates.TemplateResponse(
+        request=request,
+        name="alpha-settings.html",
+        context=_alpha_context(),
     )
 
 
@@ -411,6 +437,17 @@ async def upload_data(
         "rows": len(dataframe),
         "snapshot_id": imported["snapshot_id"],
     }
+
+
+@app.get("/api/alpha/import-template.csv")
+def api_alpha_import_template(
+    _: Annotated[str, Depends(require_auth)],
+) -> FileResponse:
+    return FileResponse(
+        SAMPLE_DATA_PATH,
+        media_type="text/csv",
+        filename="warcraft-dialogue-import-template.csv",
+    )
 
 
 @app.get("/api/alpha")
@@ -517,10 +554,128 @@ def api_update_voice(
 ) -> dict:
     try:
         voice = alpha_store.update_voice(voice_id, payload)
+        message = (
+            f"Saved {voice['name']} as version {voice['version_number']}."
+            if voice.get("version_changed")
+            else "No settings changed, so no new version was created."
+        )
         return {
-            "message": f"Saved {voice['name']} as version {voice['version_number']}.",
+            "message": message,
             "voice": voice,
         }
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
+@app.post("/api/alpha/voices/{voice_id}/versions/{version_id}/restore")
+def api_restore_voice_version(
+    voice_id: str,
+    version_id: int,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        voice = alpha_store.restore_voice_version(voice_id, version_id)
+        return {
+            "message": (
+                f"Restored the selected settings as version {voice['version_number']}."
+                if voice.get("version_changed")
+                else "That version already matches the current settings."
+            ),
+            "voice": voice,
+        }
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
+@app.patch("/api/alpha/voices/{voice_id}/deliveries/{delivery}")
+def api_update_delivery_preset(
+    voice_id: str,
+    delivery: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        voice = alpha_store.update_delivery_preset(voice_id, delivery, payload)
+        return {
+            "message": f"Saved the {delivery.replace('_', ' ')} delivery preset.",
+            "voice": voice,
+        }
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
+@app.post("/api/alpha/voices/{voice_id}/deliveries/{delivery}/generate")
+def api_generate_delivery_preview(
+    voice_id: str,
+    delivery: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+    ___: Annotated[None, Depends(require_paid_action_header)],
+) -> dict:
+    _require_elevenlabs()
+    try:
+        request = alpha_store.delivery_preview_request(
+            voice_id, delivery, str(payload.get("sample_text", ""))
+        )
+        result = elevenlabs.text_to_speech(
+            voice_id=request["voice_id"],
+            text=request["text"],
+            model_id=request["model_id"],
+            settings=request["voice_settings"],
+        )
+        try:
+            subscription = elevenlabs.subscription()
+        except ElevenLabsError:
+            subscription = {}
+        preview = alpha_store.record_delivery_preview(
+            voice_id,
+            delivery,
+            request,
+            content=result.content,
+            provider_request_id=result.request_id,
+            subscription=subscription,
+        )
+        return {"message": f"Generated one {delivery} comparison for review.", **preview}
+    except (AlphaError, ElevenLabsError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/alpha/delivery-previews/{preview_id}/approve")
+def api_approve_delivery_preview(
+    preview_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        voice = alpha_store.approve_delivery_preview(preview_id)
+        return {"message": "Approved this delivery comparison.", "voice": voice}
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
+@app.get("/api/alpha/delivery-previews/{preview_id}/audio")
+def api_delivery_preview_audio(
+    preview_id: str,
+    _: Annotated[str, Depends(require_auth)],
+) -> FileResponse:
+    try:
+        return FileResponse(alpha_store.delivery_preview_path(preview_id), media_type="audio/mpeg")
+    except AlphaError as error:
+        raise _alpha_error(error, 404) from error
+
+
+@app.patch("/api/alpha/settings")
+def api_update_alpha_settings(
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        settings = alpha_store.update_app_settings(payload)
+        return {"message": "Generation defaults were saved.", "settings": settings}
     except AlphaError as error:
         raise _alpha_error(error) from error
 
@@ -532,7 +687,6 @@ async def api_upload_reference_clip(
     __: Annotated[None, Depends(require_action_header)],
     file: Annotated[UploadFile, File()],
     provenance: Annotated[str, Form()] = "",
-    provider_eligible: Annotated[bool, Form()] = False,
 ) -> dict:
     suffix = Path(file.filename or "").suffix.lower()
     if not (file.content_type or "").startswith("audio/") and suffix not in {
@@ -551,11 +705,22 @@ async def api_upload_reference_clip(
             original_name=file.filename or "reference-audio",
             content=content,
             provenance=provenance,
-            provider_eligible=provider_eligible,
+            provider_eligible=True,
         )
         return {"message": "Reference audio was stored outside Git.", "voice": voice}
     except AlphaError as error:
         raise _alpha_error(error) from error
+
+
+@app.get("/api/alpha/reference-clips/{clip_id}/audio")
+def api_reference_clip_audio(
+    clip_id: str,
+    _: Annotated[str, Depends(require_auth)],
+) -> FileResponse:
+    try:
+        return FileResponse(alpha_store.reference_path(clip_id))
+    except AlphaError as error:
+        raise _alpha_error(error, 404) from error
 
 
 def _require_elevenlabs() -> None:
@@ -577,21 +742,29 @@ def api_design_voice(
     _require_elevenlabs()
     try:
         voice = alpha_store.get_voice(voice_id)
+        if voice["creation_method"] not in {"designed", "reference_design"}:
+            raise AlphaError("Select a Voice Design method before generating design candidates.")
         preview_text = str(payload.get("preview_text", "")).strip()
         if not 100 <= len(preview_text) <= 1000:
             raise AlphaError("Voice preview text must contain 100–1,000 characters.")
         reference_audio = None
         clip_id = str(payload.get("reference_clip_id", "")).strip()
-        if clip_id:
+        if voice["creation_method"] == "reference_design" and not clip_id:
+            raise AlphaError("Reference-guided Voice Design requires one reference clip.")
+        if voice["creation_method"] == "reference_design":
             clip = alpha_store.get_reference_clip(clip_id)
             if clip["voice_id"] != voice_id:
                 raise AlphaError("The reference clip belongs to another voice.")
             if not clip["provider_eligible"]:
                 raise AlphaError("The selected reference clip is not marked provider eligible.")
             reference_audio = clip["path"].read_bytes()
+        design_model = alpha_store.get_app_settings()["voice_design_model_id"]
+        if reference_audio is not None and design_model != "eleven_ttv_v3":
+            raise AlphaError("Reference-guided Voice Design requires the v3 design model.")
         result = elevenlabs.design_voice(
             description=voice["description"],
             preview_text=preview_text,
+            model_id=design_model,
             reference_audio=reference_audio,
             prompt_strength=float(payload.get("prompt_strength", 0.5)),
         )
@@ -609,7 +782,7 @@ def api_design_voice(
             voice_id,
             prompt=voice["description"],
             preview_text=preview_text,
-            model_id="eleven_ttv_v3",
+            model_id=design_model,
             previews=previews,
         )
         return {
@@ -653,13 +826,10 @@ def api_clone_voice(
     ___: Annotated[None, Depends(require_paid_action_header)],
 ) -> dict:
     _require_elevenlabs()
-    if payload.get("rights_confirmed") is not True:
-        raise HTTPException(
-            status_code=422,
-            detail="Confirm provider eligibility and required voice rights before cloning.",
-        )
     try:
         voice = alpha_store.get_voice(voice_id)
+        if voice["creation_method"] != "instant_clone":
+            raise AlphaError("Select Instant Voice Clone before creating a clone.")
         clip_ids = payload.get("clip_ids", [])
         if not isinstance(clip_ids, list) or not clip_ids:
             raise AlphaError("Select at least one eligible reference clip.")
