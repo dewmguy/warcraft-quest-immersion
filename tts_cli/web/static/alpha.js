@@ -31,6 +31,44 @@ function jsonFromForm(form) {
   return payload;
 }
 
+function meteringEstimate(element) {
+  const field = element.querySelector?.("[data-metered-text]");
+  const rawCharacters = field ? field.value.trim().length : element.dataset.meteredCharacters;
+  const characters = Number(rawCharacters);
+  if (!Number.isFinite(characters) || characters <= 0) return null;
+  return {
+    characters,
+    dollars: characters * 0.10 / 1000,
+    seconds: characters * 60 / 1000,
+    kind: element.dataset.metering || "speech",
+  };
+}
+
+function formatSeconds(seconds) {
+  if (seconds < 60) return `${Math.max(seconds, 1).toFixed(seconds < 10 ? 1 : 0)} seconds`;
+  return `${(seconds / 60).toFixed(1)} minutes`;
+}
+
+function paidConfirmation(element) {
+  const estimate = meteringEstimate(element);
+  if (!estimate) return element.dataset.confirm || "";
+  const action = estimate.kind === "voice-design"
+    ? "This creates three Voice Design candidates; ElevenLabs charges the preview text once."
+    : "This creates one speech candidate.";
+  return `${action}\n\nPreflight estimate:\n- ${estimate.characters.toLocaleString()} metered characters\n- about $${estimate.dollars.toFixed(3)} at the published v2/v3 API list rate\n- about ${formatSeconds(estimate.seconds)} of audio per candidate\n\nYour plan and the provider response determine exact usage. Continue?`;
+}
+
+function syncMeteringCard(element) {
+  const estimate = meteringEstimate(element);
+  if (!estimate) return;
+  const characters = element.querySelector("[data-estimate-characters]");
+  const dollars = element.querySelector("[data-estimate-dollars]");
+  const duration = element.querySelector("[data-estimate-duration]");
+  if (characters) characters.textContent = estimate.characters.toLocaleString();
+  if (dollars) dollars.textContent = `$${estimate.dollars.toFixed(3)}`;
+  if (duration) duration.textContent = formatSeconds(estimate.seconds);
+}
+
 async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmText = "" }) {
   if (paid && !window.confirm(confirmText || "This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
   showAlphaMessage(paid ? "Sending the confirmed ElevenLabs request…" : "Saving…");
@@ -54,7 +92,7 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
         method: form.dataset.method || "PATCH",
         body: jsonFromForm(form),
         paid: form.dataset.paid !== undefined,
-        confirmText: form.dataset.confirm || "",
+        confirmText: paidConfirmation(form),
       });
       if (!payload) return;
       showAlphaMessage(payload.message || "Saved.", "complete");
@@ -89,7 +127,7 @@ for (const button of document.querySelectorAll("[data-action]")) {
         url: button.dataset.url,
         method: button.dataset.method || "POST",
         paid: button.dataset.paid !== undefined,
-        confirmText: button.dataset.confirm || "",
+        confirmText: paidConfirmation(button),
       });
       if (!payload) return;
       showAlphaMessage(payload.message || "Saved.", "complete");
@@ -141,4 +179,60 @@ if (methodController) {
   };
   selector.addEventListener("change", syncMethod);
   syncMethod();
+}
+
+for (const element of document.querySelectorAll("[data-metering]")) {
+  const field = element.querySelector("[data-metered-text]");
+  if (field) field.addEventListener("input", () => syncMeteringCard(element));
+  syncMeteringCard(element);
+}
+
+const providerAccount = document.querySelector("[data-provider-account]");
+if (providerAccount) {
+  const loading = providerAccount.querySelector("[data-provider-loading]");
+  const result = providerAccount.querySelector("[data-provider-result]");
+  const errorBox = providerAccount.querySelector("[data-provider-error]");
+  const refresh = providerAccount.querySelector("[data-provider-refresh]");
+
+  const readAccount = async () => {
+    if (!loading || !result) return;
+    loading.hidden = false;
+    result.hidden = true;
+    if (errorBox) errorBox.hidden = true;
+    if (refresh) refresh.disabled = true;
+    try {
+      const response = await fetch(providerAccount.dataset.providerUrl);
+      const payload = await parseAlphaResponse(response);
+      const account = payload.account || {};
+      providerAccount.querySelector("[data-provider-connection]").textContent = "Verified";
+      providerAccount.querySelector("[data-provider-tier]").textContent = `${account.tier || "Unknown"} / ${account.status || "unknown"}`;
+      providerAccount.querySelector("[data-provider-usage]").textContent = account.character_count == null || account.character_limit == null
+        ? "Not reported by this account"
+        : `${Number(account.character_count).toLocaleString()} / ${Number(account.character_limit).toLocaleString()} characters`;
+      providerAccount.querySelector("[data-provider-remaining]").textContent = account.remaining_characters == null
+        ? "Not reported"
+        : `${Number(account.remaining_characters).toLocaleString()} characters`;
+      providerAccount.querySelector("[data-provider-reset]").textContent = account.next_reset_at
+        ? new Date(account.next_reset_at).toLocaleString()
+        : "Not reported";
+      providerAccount.querySelector("[data-provider-voices]").textContent = account.voice_limit == null
+        ? "Not reported"
+        : `${Number(account.voice_limit).toLocaleString()} maximum${account.can_use_instant_voice_cloning === false ? " / cloning unavailable" : ""}`;
+      const progress = providerAccount.querySelector("[data-provider-progress]");
+      progress.value = account.percent_used || 0;
+      providerAccount.querySelector("[data-provider-message]").textContent = payload.message;
+      result.hidden = false;
+    } catch (error) {
+      if (errorBox) {
+        errorBox.textContent = error.message;
+        errorBox.hidden = false;
+      }
+    } finally {
+      loading.hidden = true;
+      if (refresh) refresh.disabled = false;
+    }
+  };
+
+  if (refresh) refresh.addEventListener("click", readAccount);
+  if (loading) readAccount();
 }

@@ -20,6 +20,16 @@ class AudioResponse:
     content: bytes
     content_type: str
     request_id: str | None
+    trace_id: str | None
+    character_cost: int | None
+
+
+@dataclass(frozen=True)
+class VoiceDesignResponse:
+    payload: dict[str, Any]
+    request_id: str | None
+    trace_id: str | None
+    character_cost: int | None
 
 
 class ElevenLabsClient:
@@ -57,6 +67,16 @@ class ElevenLabsClient:
             detail = detail.get("message") or detail.get("detail") or str(detail)
         return f"ElevenLabs returned HTTP {response.status_code}: {detail}"
 
+    @staticmethod
+    def _character_cost(response: requests.Response) -> int | None:
+        value = response.headers.get("character-cost")
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
     def subscription(self) -> dict[str, Any]:
         try:
             response = self.session.get(
@@ -78,7 +98,7 @@ class ElevenLabsClient:
         model_id: str = "eleven_ttv_v3",
         reference_audio: bytes | None = None,
         prompt_strength: float = 0.5,
-    ) -> dict[str, Any]:
+    ) -> VoiceDesignResponse:
         payload: dict[str, Any] = {
             "voice_description": description,
             "text": preview_text,
@@ -100,7 +120,12 @@ class ElevenLabsClient:
             raise ElevenLabsError(f"Could not design the voice: {error}") from error
         if not response.ok:
             raise ElevenLabsError(self._error_message(response))
-        return response.json()
+        return VoiceDesignResponse(
+            payload=response.json(),
+            request_id=response.headers.get("request-id") or response.headers.get("x-request-id"),
+            trace_id=response.headers.get("x-trace-id"),
+            character_cost=self._character_cost(response),
+        )
 
     def create_designed_voice(
         self, *, name: str, description: str, generated_voice_id: str
@@ -186,4 +211,6 @@ class ElevenLabsClient:
             content=response.content,
             content_type=content_type,
             request_id=response.headers.get("request-id") or response.headers.get("x-request-id"),
+            trace_id=response.headers.get("x-trace-id"),
+            character_cost=self._character_cost(response),
         )

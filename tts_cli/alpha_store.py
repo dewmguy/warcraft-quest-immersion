@@ -380,6 +380,17 @@ class AlphaStore:
                     completed_at TEXT
                 );
                 CREATE INDEX IF NOT EXISTS generations_dialogue_idx ON generations(dialogue_id);
+                CREATE TABLE IF NOT EXISTS provider_usage_events (
+                    event_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    subject_id TEXT NOT NULL,
+                    input_character_count INTEGER NOT NULL DEFAULT 0,
+                    character_cost INTEGER,
+                    provider_request_id TEXT,
+                    subscription_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS audio_candidates (
                     candidate_id TEXT PRIMARY KEY,
                     generation_id TEXT NOT NULL REFERENCES generations(generation_id),
@@ -1267,6 +1278,46 @@ class AlphaStore:
                 )
         return self.get_app_settings()
 
+    def record_provider_usage(
+        self,
+        *,
+        action: str,
+        subject_id: str,
+        input_character_count: int,
+        character_cost: int | None,
+        provider_request_id: str | None,
+        subscription: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        event_id = uuid.uuid4().hex
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO provider_usage_events(event_id, provider, action, subject_id, "
+                "input_character_count, character_cost, provider_request_id, subscription_json, "
+                "created_at) VALUES (?, 'elevenlabs', ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    event_id,
+                    action[:80],
+                    subject_id[:255],
+                    max(int(input_character_count), 0),
+                    character_cost,
+                    provider_request_id,
+                    _json(subscription or {}),
+                    utc_now(),
+                ),
+            )
+        return self.list_provider_usage(limit=1)[0]
+
+    def list_provider_usage(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM provider_usage_events ORDER BY created_at DESC LIMIT ?",
+                (max(1, min(int(limit), 100)),),
+            ).fetchall()
+        events = [dict(row) for row in rows]
+        for event in events:
+            event["subscription"] = _loads(event.get("subscription_json"), {})
+        return events
+
     def progress(self) -> dict[str, dict[str, int | float | str]]:
         with self.connect() as connection:
             voice = connection.execute(
@@ -1577,6 +1628,8 @@ class AlphaStore:
         payload["previews"] = [dict(row) for row in previews]
         payload["speakers"] = [dict(row) for row in speakers]
         preview_payloads = [dict(row) for row in delivery_previews]
+        for preview in preview_payloads:
+            preview["subscription"] = _loads(preview.get("subscription_json"), {})
         payload["delivery_presets"] = []
         for row in delivery_presets:
             preset = dict(row)

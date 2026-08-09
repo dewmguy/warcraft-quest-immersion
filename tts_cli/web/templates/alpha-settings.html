@@ -3,6 +3,47 @@
 {% block title %}Settings{% endblock %}
 {% block content %}
   <section class="alpha-page-heading"><div><span class="alpha-kicker">Generation defaults</span><h1>Settings</h1><p>Provider models belong here so individual voice records only show decisions specific to that voice.</p></div></section>
+  <section class="alpha-panel provider-account" data-provider-account data-provider-url="/api/alpha/provider-status">
+    <div class="panel-heading">
+      <div><span class="panel-step">Provider connection</span><h2>ElevenLabs account</h2><p>The account check is read-only and never generates audio or consumes speech usage.</p></div>
+      <button type="button" class="secondary" data-provider-refresh {% if not provider_configured %}disabled{% endif %}>Check account</button>
+    </div>
+    {% if provider_configured %}
+      <div class="provider-account-state" data-provider-loading>Checking the configured key and current usage...</div>
+      <div class="provider-account-state" data-provider-result hidden>
+        <dl class="usage-facts">
+          <div><dt>Connection</dt><dd data-provider-connection>Checking...</dd></div>
+          <div><dt>Plan</dt><dd data-provider-tier>--</dd></div>
+          <div><dt>Usage</dt><dd data-provider-usage>--</dd></div>
+          <div><dt>Remaining</dt><dd data-provider-remaining>--</dd></div>
+          <div><dt>Next reset</dt><dd data-provider-reset>--</dd></div>
+          <div><dt>Voice slots</dt><dd data-provider-voices>--</dd></div>
+        </dl>
+        <progress max="100" value="0" data-provider-progress></progress>
+        <p class="form-help" data-provider-message></p>
+      </div>
+      <aside class="inline-warning" data-provider-error hidden></aside>
+    {% else %}
+      <div class="empty-action">
+        <p>The application is ready, but the server does not yet have an ElevenLabs key. Use the masked setup helper from the project computer; the key remains in the server's ignored <code>.env</code> file and is never stored in Git.</p>
+        <code>.\scripts\configure-elevenlabs.ps1</code>
+      </div>
+    {% endif %}
+  </section>
+  <section class="alpha-panel">
+    <div class="panel-heading"><div><span class="panel-step">Usage ledger</span><h2>Recent generation requests</h2><p>Recorded locally from provider responses; generated audio remains outside Git.</p></div><span>{{ provider_events|length }} shown</span></div>
+    {% if provider_events %}
+      <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Request</th><th>Input</th><th>Provider reported</th><th>List-rate equivalent</th><th>Recorded</th></tr></thead><tbody>
+      {% for event in provider_events %}<tr>
+        <td>{% if event.action == 'dialogue_tts' %}<a href="/alpha/dialogue/{{ event.subject_id }}">Dialogue speech</a>{% elif event.action == 'voice_design' %}<a href="/alpha/voices/{{ event.subject_id }}#provider-creation">Voice Design</a>{% else %}<a href="/alpha/voices/{{ event.subject_id.split(':')[0] }}#provider-creation">Delivery comparison</a>{% endif %}</td>
+        <td>{{ "{:,}".format(event.input_character_count) }} characters</td>
+        <td>{% if event.character_cost is not none %}{{ "{:,}".format(event.character_cost) }} metered characters{% else %}Not returned{% endif %}</td>
+        <td>{% if event.character_cost is not none %}${{ "%.3f"|format(event.character_cost * 0.10 / 1000) }}{% else %}--{% endif %}</td>
+        <td>{{ event.created_at[:19] | replace('T',' ') }} UTC</td>
+      </tr>{% endfor %}
+      </tbody></table></div>
+    {% else %}<p class="empty-copy">No ElevenLabs generation has been requested through this alpha yet.</p>{% endif %}
+  </section>
   <div class="record-grid settings-grid">
     <section class="alpha-panel">
       <div class="panel-heading"><div><h2>ElevenLabs models</h2><p>These defaults are recorded with each future request.</p></div></div>
@@ -30,4 +71,13 @@
       <aside class="inline-warning">Eleven v3 is the active default. It uses audio tags and stability for delivery; similarity, style, speaker boost, and numeric speed are not exposed when the selected model does not support them.</aside>
     </section>
   </div>
+  <section class="alpha-panel cost-guide">
+    <div class="panel-heading"><div><span class="panel-step">Preflight estimates</span><h2>What a paid action means</h2><p>Every speech button shows an estimate before it can contact ElevenLabs.</p></div></div>
+    <div class="cost-guide-grid">
+      <article><strong>Meter</strong><p>Speech is metered by characters, not LLM tokens. The app shows the exact text length before a request and records the provider's <code>character-cost</code> afterward when available.</p></article>
+      <article><strong>Published API rate</strong><p>Eleven v3 and Multilingual v2 are estimated at $0.10 per 1,000 characters. Your included plan usage or contracted rate can make the actual cash impact different.</p></article>
+      <article><strong>Audio duration</strong><p>Budget roughly one minute of finished speech per 1,000 characters. Delivery, pauses, audio tags, and punctuation can make the real file shorter or longer.</p></article>
+      <article><strong>Request wait</strong><p>The alpha allows up to three minutes for generation. Voice Design returns three candidates and charges the preview text once; saving one candidate uses a voice slot.</p></article>
+    </div>
+  </section>
 {% endblock %}

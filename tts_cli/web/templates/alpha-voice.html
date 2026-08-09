@@ -56,16 +56,18 @@
   <section class="alpha-panel creation-workspace" id="provider-creation">
     <div class="panel-heading"><div><span class="panel-step">Provider creation</span><h2>Create the reusable voice</h2></div><span>{{ app_settings.voice_design_model_id }}</span></div>
     <div data-method-panel="unselected"><p class="empty-copy">Choose and save a creation path above. Only the controls required by that method will appear here.</p></div>
-    <form data-json-form data-paid data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="designed">
+    <form data-json-form data-paid data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="designed">
       <div class="context-summary"><span>Context sent to ElevenLabs</span><p>{{ voice.description }}</p></div>
-      <label><span>Fixed comparison script</span><textarea name="preview_text" rows="6" minlength="100" maxlength="1000" required>The road through the mountains is dangerous after nightfall. Stay near the lanterns, keep your companions close, and listen carefully for movement beyond the pass. We have endured harder winters than this, and we will endure this one as well.</textarea></label>
+      <label><span>Fixed comparison script</span><textarea name="preview_text" rows="6" minlength="100" maxlength="1000" data-metered-text required>The road through the mountains is dangerous after nightfall. Stay near the lanterns, keep your companions close, and listen carefully for movement beyond the pass. We have endured harder winters than this, and we will endure this one as well.</textarea></label>
+      <div class="metering-preview"><span><strong data-estimate-characters>--</strong> metered characters</span><span><strong data-estimate-dollars>--</strong> published list-rate equivalent</span><span><strong data-estimate-duration>--</strong> per candidate</span><small>Three candidates are returned; preview text is charged once.</small></div>
       <button type="submit" {% if not provider_configured %}disabled{% endif %}>Generate three design candidates</button>
     </form>
-    <form data-json-form data-paid data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="reference_design">
+    <form data-json-form data-paid data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="reference_design">
       <div class="context-summary"><span>Context sent to ElevenLabs</span><p>{{ voice.description }}</p></div>
       <label><span>Required reference clip</span><select name="reference_clip_id" required><option value="">Select one clip</option>{% for clip in voice.clips %}<option value="{{ clip.clip_id }}">{{ clip.original_name }}</option>{% endfor %}</select></label>
       <label><span>Prompt influence <output data-range-output>0.5</output></span><input name="prompt_strength" type="range" min="0" max="1" step="0.05" value="0.5"></label>
-      <label><span>Fixed comparison script</span><textarea name="preview_text" rows="6" minlength="100" maxlength="1000" required>The road through the mountains is dangerous after nightfall. Stay near the lanterns, keep your companions close, and listen carefully for movement beyond the pass. We have endured harder winters than this, and we will endure this one as well.</textarea></label>
+      <label><span>Fixed comparison script</span><textarea name="preview_text" rows="6" minlength="100" maxlength="1000" data-metered-text required>The road through the mountains is dangerous after nightfall. Stay near the lanterns, keep your companions close, and listen carefully for movement beyond the pass. We have endured harder winters than this, and we will endure this one as well.</textarea></label>
+      <div class="metering-preview"><span><strong data-estimate-characters>--</strong> metered characters</span><span><strong data-estimate-dollars>--</strong> published list-rate equivalent</span><span><strong data-estimate-duration>--</strong> per candidate</span><small>Three candidates are returned; preview text is charged once.</small></div>
       <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Generate three reference-guided candidates</button>
     </form>
     <form data-json-form data-paid data-confirm="This sends the selected reference clips to ElevenLabs and creates a reusable Instant Voice Clone. Continue?" data-url="/api/alpha/voices/{{ voice.voice_id }}/clone" data-method="POST" data-method-panel="instant_clone">
@@ -85,11 +87,12 @@
         <label><span>Notes</span><textarea name="notes" rows="2">{{ preset.notes }}</textarea></label>
         <button type="submit">Save metadata</button>
       </form>
-      <form data-json-form data-paid data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form">
-        <input type="hidden" name="sample_text" value="The road ahead is dangerous, but our purpose remains clear. Stay close, listen carefully, and remember why we began this journey. Whatever waits beyond the pass, we will face it together and return with the truth.">
+      <form data-json-form data-paid data-metering="speech" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form">
+        <input type="hidden" name="sample_text" data-metered-text value="The road ahead is dangerous, but our purpose remains clear. Stay close, listen carefully, and remember why we began this journey. Whatever waits beyond the pass, we will face it together and return with the truth.">
+        <div class="metering-preview compact"><span><strong data-estimate-characters>--</strong> chars</span><span><strong data-estimate-dollars>--</strong></span><span><strong data-estimate-duration>--</strong></span></div>
         <button type="submit" {% if not provider_configured or not voice.provider_voice_id %}disabled{% endif %}>Generate comparison</button>
       </form>
-      <div class="delivery-preview-list">{% for preview in preset.previews[:2] %}<div><audio controls preload="none" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio><small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status }}</small>{% if preview.status == 'candidate' %}<button type="button" data-action data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST">Approve</button>{% endif %}</div>{% endfor %}</div>
+      <div class="delivery-preview-list">{% for preview in preset.previews[:2] %}<div><audio controls preload="none" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio><small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} metered chars{% endif %}</small>{% if preview.status == 'candidate' %}<button type="button" data-action data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST">Approve</button>{% endif %}</div>{% endfor %}</div>
     </article>{% endfor %}</div>
     <p class="form-help">These are five delivery presets for one reusable voice—not five cloned voices. Each preset advances only after an exact generated comparison is approved.</p>
   </section>

@@ -3,11 +3,20 @@ from tts_cli.elevenlabs_client import ElevenLabsClient
 
 
 class FakeResponse:
-    def __init__(self, *, payload=None, content=b"", content_type="application/json"):
+    def __init__(
+        self,
+        *,
+        payload=None,
+        content=b"",
+        content_type="application/json",
+        character_cost=None,
+    ):
         self.status_code = 200
         self._payload = payload or {}
         self.content = content
         self.headers = {"Content-Type": content_type, "request-id": "request-1"}
+        if character_cost is not None:
+            self.headers["character-cost"] = str(character_cost)
 
     @property
     def ok(self):
@@ -23,7 +32,7 @@ class FakeSession:
 
     def post(self, url, **kwargs):
         self.calls.append(("POST", url, kwargs))
-        return FakeResponse(content=b"audio", content_type="audio/mpeg")
+        return FakeResponse(content=b"audio", content_type="audio/mpeg", character_cost=19)
 
     def get(self, url, **kwargs):
         self.calls.append(("GET", url, kwargs))
@@ -49,5 +58,24 @@ def test_tts_is_called_only_through_explicit_client_method():
 
     assert result.content == b"audio"
     assert result.request_id == "request-1"
+    assert result.character_cost == 19
     assert len(session.calls) == 1
     assert session.calls[0][1].endswith("/v1/text-to-speech/voice-1")
+
+
+def test_voice_design_exposes_provider_cost_metadata():
+    session = FakeSession()
+    client = ElevenLabsClient(
+        settings=Settings(elevenlabs_api_key="test-key"),
+        session=session,
+    )
+
+    result = client.design_voice(
+        description="A deliberate Warcraft test voice with a grounded tone.",
+        preview_text="This comparison passage is intentionally long enough for a useful preview.",
+    )
+
+    assert result.payload == {}
+    assert result.request_id == "request-1"
+    assert result.character_cost == 19
+    assert session.calls[0][1].endswith("/v1/text-to-voice/design")

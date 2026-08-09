@@ -11,6 +11,21 @@ class UnconfiguredElevenLabs:
     configured = False
 
 
+class ConfiguredElevenLabs:
+    configured = True
+
+    def subscription(self):
+        return {
+            "tier": "creator",
+            "status": "active",
+            "character_count": 2500,
+            "character_limit": 10000,
+            "next_character_count_reset_unix": 1_800_000_000,
+            "voice_limit": 30,
+            "can_use_instant_voice_cloning": True,
+        }
+
+
 @pytest.fixture(autouse=True)
 def isolated_alpha(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     data_dir = tmp_path / "data"
@@ -195,8 +210,25 @@ def test_settings_owns_provider_model_selection(monkeypatch):
 
     assert page.status_code == 200
     assert "What is reusable" in page.text
+    assert "characters, not LLM tokens" in page.text
+    assert "configure-elevenlabs.ps1" in page.text
     assert saved.status_code == 200
     assert saved.json()["settings"]["tts_model_id"] == "eleven_multilingual_v2"
+
+
+def test_provider_status_verifies_account_without_a_paid_action(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(web, "elevenlabs", ConfiguredElevenLabs())
+    with TestClient(web.app) as client:
+        response = client.get("/api/alpha/provider-status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["configured"] is True
+    assert payload["account"]["tier"] == "creator"
+    assert payload["account"]["remaining_characters"] == 7500
+    assert payload["account"]["percent_used"] == 25.0
+    assert "did not generate audio" in payload["message"]
 
 
 def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):

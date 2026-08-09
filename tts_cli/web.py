@@ -10,6 +10,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from threading import Lock
@@ -254,6 +255,38 @@ def _alpha_context(**values) -> dict:
     }
 
 
+def _subscription_summary(payload: dict) -> dict:
+    used = payload.get("character_count")
+    limit = payload.get("character_limit")
+    remaining = None
+    percent_used = None
+    if isinstance(used, (int, float)) and isinstance(limit, (int, float)) and limit > 0:
+        remaining = max(int(limit - used), 0)
+        percent_used = round((used / limit) * 100, 1)
+    reset_unix = payload.get("next_character_count_reset_unix")
+    reset_at = None
+    if isinstance(reset_unix, (int, float)):
+        reset_at = datetime.fromtimestamp(reset_unix, tz=UTC).isoformat()
+    return {
+        "tier": payload.get("tier") or payload.get("billing_period") or "unknown",
+        "status": payload.get("status") or "active",
+        "character_count": used,
+        "character_limit": limit,
+        "remaining_characters": remaining,
+        "percent_used": percent_used,
+        "next_reset_at": reset_at,
+        "voice_limit": payload.get("voice_limit"),
+        "can_use_instant_voice_cloning": payload.get("can_use_instant_voice_cloning"),
+    }
+
+
+def _usage_snapshot(subscription: dict, character_cost: int | None) -> dict:
+    usage = dict(subscription)
+    if character_cost is not None:
+        usage["request_character_cost"] = character_cost
+    return usage
+
+
 @app.get("/alpha", response_class=HTMLResponse)
 def alpha_dashboard(
     request: Request,
@@ -395,8 +428,28 @@ def alpha_settings(request: Request, _: Annotated[str, Depends(require_auth)]):
     return templates.TemplateResponse(
         request=request,
         name="alpha-settings.html",
-        context=_alpha_context(),
+        context=_alpha_context(provider_events=alpha_store.list_provider_usage()),
     )
+
+
+@app.get("/api/alpha/provider-status")
+def api_alpha_provider_status(_: Annotated[str, Depends(require_auth)]) -> dict:
+    if not elevenlabs.configured:
+        return {
+            "configured": False,
+            "provider": "ElevenLabs",
+            "message": "No ElevenLabs API key is configured on this deployment.",
+        }
+    try:
+        subscription = elevenlabs.subscription()
+    except ElevenLabsError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return {
+        "configured": True,
+        "provider": "ElevenLabs",
+        "message": "ElevenLabs accepted the configured API key. This check did not generate audio.",
+        "account": _subscription_summary(subscription),
+    }
 
 
 @app.post("/api/data")
@@ -652,13 +705,22 @@ def api_generate_delivery_preview(
             subscription = elevenlabs.subscription()
         except ElevenLabsError:
             subscription = {}
+        usage = _usage_snapshot(subscription, result.character_cost)
+        alpha_store.record_provider_usage(
+            action="delivery_preview",
+            subject_id=f"{voice_id}:{delivery}",
+            input_character_count=len(request["text"]),
+            character_cost=result.character_cost,
+            provider_request_id=result.request_id,
+            subscription=subscription,
+        )
         preview = alpha_store.record_delivery_preview(
             voice_id,
             delivery,
             request,
             content=result.content,
             provider_request_id=result.request_id,
-            subscription=subscription,
+            subscription=usage,
         )
         return {"message": f"Generated one {delivery} comparison for review.", **preview}
     except (AlphaError, ElevenLabsError) as error:
@@ -790,8 +852,20 @@ def api_design_voice(
             reference_audio=reference_audio,
             prompt_strength=float(payload.get("prompt_strength", 0.5)),
         )
+        try:
+            subscription = elevenlabs.subscription()
+        except ElevenLabsError:
+            subscription = {}
+        alpha_store.record_provider_usage(
+            action="voice_design",
+            subject_id=voice_id,
+            input_character_count=len(preview_text),
+            character_cost=result.character_cost,
+            provider_request_id=result.request_id,
+            subscription=subscription,
+        )
         previews = []
-        for preview in result.get("previews", []):
+        for preview in result.payload.get("previews", []):
             try:
                 content = base64.b64decode(preview["audio_base_64"], validate=True)
                 generated_voice_id = str(preview["generated_voice_id"])
@@ -807,9 +881,16 @@ def api_design_voice(
             model_id=design_model,
             previews=previews,
         )
+        cost_note = (
+            f" ElevenLabs reported {result.character_cost:,} metered characters for the request."
+            if result.character_cost is not None
+            else ""
+        )
         return {
-            "message": f"Stored {len(preview_ids)} new voice candidates.",
+            "message": f"Stored {len(preview_ids)} new voice candidates.{cost_note}",
             "preview_ids": preview_ids,
+            "provider_request_id": result.request_id,
+            "character_cost": result.character_cost,
         }
     except (AlphaError, ElevenLabsError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -909,15 +990,31 @@ def api_generate_dialogue(
             subscription = elevenlabs.subscription()
         except ElevenLabsError:
             subscription = {}
+        usage = _usage_snapshot(subscription, result.character_cost)
+        alpha_store.record_provider_usage(
+            action="dialogue_tts",
+            subject_id=dialogue_id,
+            input_character_count=len(generation["text"]),
+            character_cost=result.character_cost,
+            provider_request_id=result.request_id,
+            subscription=subscription,
+        )
         candidate = alpha_store.complete_generation(
             generation_id,
             content=result.content,
             mime_type=result.content_type,
             provider_request_id=result.request_id,
-            subscription=subscription,
+            subscription=usage,
         )
         return {
-            "message": "Generated one audio candidate for review.",
+            "message": (
+                "Generated one audio candidate for review."
+                + (
+                    f" ElevenLabs reported {result.character_cost:,} metered characters."
+                    if result.character_cost is not None
+                    else ""
+                )
+            ),
             "generation_id": generation_id,
             **candidate,
         }

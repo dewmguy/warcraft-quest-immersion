@@ -67,6 +67,23 @@ def test_spoken_text_is_created_only_by_explicit_action(store: AlphaStore):
         store.prepare_spoken_text(row["dialogue_id"])
 
 
+def test_provider_usage_ledger_records_exact_reported_cost(store: AlphaStore):
+    event = store.record_provider_usage(
+        action="dialogue_tts",
+        subject_id="dialogue-test",
+        input_character_count=118,
+        character_cost=120,
+        provider_request_id="request-test",
+        subscription={"character_count": 2500, "character_limit": 10000},
+    )
+
+    assert event["action"] == "dialogue_tts"
+    assert event["input_character_count"] == 118
+    assert event["character_cost"] == 120
+    assert event["subscription"]["character_count"] == 2500
+    assert store.list_provider_usage()[0]["provider_request_id"] == "request-test"
+
+
 def test_text_voice_generation_and_approval_are_separate_records(
     store: AlphaStore, monkeypatch: pytest.MonkeyPatch
 ):
