@@ -1863,6 +1863,30 @@ class AlphaStore:
         temporary_path.unlink(missing_ok=True)
         return self.get_voice(row["voice_id"])
 
+    def delete_voice_preview(self, preview_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT voice_id, storage_path FROM voice_previews WHERE preview_id=?",
+                (preview_id,),
+            ).fetchone()
+        if not row:
+            raise AlphaError("Voice candidate was not found.")
+        path = Path(row["storage_path"]).resolve()
+        if self.storage_root not in path.parents:
+            raise AlphaError("Voice candidate storage path is invalid.")
+        temporary_path = path.with_name(f".{path.name}.deleting")
+        if path.is_file():
+            path.replace(temporary_path)
+        try:
+            with self.connect() as connection:
+                connection.execute("DELETE FROM voice_previews WHERE preview_id=?", (preview_id,))
+        except Exception:
+            if temporary_path.is_file():
+                temporary_path.replace(path)
+            raise
+        temporary_path.unlink(missing_ok=True)
+        return self.get_voice(row["voice_id"])
+
     def record_voice_previews(
         self,
         voice_id: str,
@@ -1871,34 +1895,63 @@ class AlphaStore:
         preview_text: str,
         model_id: str,
         previews: list[dict[str, Any]],
+        replace_existing: bool = False,
     ) -> list[str]:
+        if not previews:
+            raise AlphaError("At least one generated voice candidate is required.")
         self.get_voice(voice_id)
         folder = self.storage_root / "voice-previews" / voice_id
         folder.mkdir(parents=True, exist_ok=True)
         preview_ids = []
+        new_paths: list[Path] = []
+        replaced_rows: list[sqlite3.Row] = []
         now = utc_now()
-        with self.connect() as connection:
-            for preview in previews:
-                content = preview["content"]
-                preview_id = uuid.uuid4().hex
-                path = folder / f"{preview_id}.mp3"
-                path.write_bytes(content)
-                connection.execute(
-                    "INSERT INTO voice_previews VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?)",
-                    (
-                        preview_id,
-                        voice_id,
-                        preview["generated_voice_id"],
-                        str(path),
-                        sha256_bytes(content),
-                        _audio_duration(path),
-                        prompt,
-                        preview_text,
-                        model_id,
-                        now,
-                    ),
-                )
-                preview_ids.append(preview_id)
+        try:
+            with self.connect() as connection:
+                if replace_existing:
+                    replaced_rows = list(
+                        connection.execute(
+                            "SELECT preview_id, storage_path FROM voice_previews WHERE voice_id=?",
+                            (voice_id,),
+                        )
+                    )
+                for preview in previews:
+                    content = preview["content"]
+                    preview_id = uuid.uuid4().hex
+                    path = folder / f"{preview_id}.mp3"
+                    path.write_bytes(content)
+                    new_paths.append(path)
+                    connection.execute(
+                        "INSERT INTO voice_previews VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                        "'candidate', ?)",
+                        (
+                            preview_id,
+                            voice_id,
+                            preview["generated_voice_id"],
+                            str(path),
+                            sha256_bytes(content),
+                            _audio_duration(path),
+                            prompt,
+                            preview_text,
+                            model_id,
+                            now,
+                        ),
+                    )
+                    preview_ids.append(preview_id)
+                if replaced_rows:
+                    connection.executemany(
+                        "DELETE FROM voice_previews WHERE preview_id=?",
+                        ((row["preview_id"],) for row in replaced_rows),
+                    )
+        except Exception:
+            for path in new_paths:
+                path.unlink(missing_ok=True)
+            raise
+
+        for row in replaced_rows:
+            path = Path(row["storage_path"]).resolve()
+            if self.storage_root in path.parents:
+                path.unlink(missing_ok=True)
         return preview_ids
 
     def get_reference_clip(self, clip_id: str) -> dict[str, Any]:

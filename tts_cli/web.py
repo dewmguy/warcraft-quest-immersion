@@ -859,6 +859,22 @@ def api_delete_reference_clip(
         raise _alpha_error(error, 404) from error
 
 
+@app.delete("/api/alpha/voice-previews/{preview_id}")
+def api_delete_voice_preview(
+    preview_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        voice = alpha_store.delete_voice_preview(preview_id)
+        return {
+            "message": "Voice candidate was deleted from local storage.",
+            "voice": voice,
+        }
+    except AlphaError as error:
+        raise _alpha_error(error, 404) from error
+
+
 def _require_elevenlabs() -> None:
     if not elevenlabs.configured:
         raise HTTPException(
@@ -932,14 +948,25 @@ def api_design_voice(
             preview_text=preview_text,
             model_id=design_model,
             previews=previews,
+            replace_existing=True,
         )
+        replaced_count = len(voice["previews"])
         cost_note = (
             f" ElevenLabs reported {result.character_cost:,} metered characters for the request."
             if result.character_cost is not None
             else ""
         )
+        replacement_note = (
+            f" Replaced {replaced_count} former candidate"
+            f"{'s' if replaced_count != 1 else ''}."
+            if replaced_count
+            else ""
+        )
         return {
-            "message": f"Stored {len(preview_ids)} new voice candidates.{cost_note}",
+            "message": (
+                f"Stored {len(preview_ids)} new voice candidates."
+                f"{replacement_note}{cost_note}"
+            ),
             "preview_ids": preview_ids,
             "provider_request_id": result.request_id,
             "character_cost": result.character_cost,

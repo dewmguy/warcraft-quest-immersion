@@ -360,6 +360,9 @@ dialog .actions { justify-content: flex-end; }
 .creation-candidates .candidate-meta span { color: #aaa3ad; font-size: .72rem; text-align: right; }
 .creation-candidates .candidate-meta small { grid-column: 1 / -1; }
 .creation-candidates button { width: 100%; min-height: 34px; padding: 7px 9px; font-size: .76rem; }
+.candidate-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.candidate-actions > button:not(.candidate-delete) { flex: 1; }
+.creation-candidates .candidate-delete { flex: 0 0 34px; width: 34px; border-color: #704446; color: #d78787; }
 .delivery-preset-grid { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap: 10px; overflow-x: auto; }
 .delivery-preset-card { align-content: start; min-width: 190px; border: 1px solid #39343d; border-radius: 8px; padding: 14px; background: #131216; }
 .delivery-preset-card > div:first-child { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

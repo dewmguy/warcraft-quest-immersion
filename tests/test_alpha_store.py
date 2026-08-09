@@ -271,6 +271,83 @@ def test_baseline_context_revision_preserves_creation_work(store: AlphaStore, mo
     assert current["version_number"] < revised["version_number"]
 
 
+def test_voice_candidate_regeneration_replaces_files_only_after_new_set_is_ready(
+    store: AlphaStore, monkeypatch
+):
+    voice_id = "baseline--bloodelf-female"
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
+    former_ids = store.record_voice_previews(
+        voice_id,
+        prompt="Former prompt",
+        preview_text="Former comparison text",
+        model_id="eleven_ttv_v3",
+        previews=[
+            {"content": f"former-{index}".encode(), "generated_voice_id": f"former-{index}"}
+            for index in range(3)
+        ],
+    )
+    former_paths = [Path(item["storage_path"]) for item in store.get_voice(voice_id)["previews"]]
+
+    with pytest.raises(AlphaError, match="At least one generated voice candidate"):
+        store.record_voice_previews(
+            voice_id,
+            prompt="Failed prompt",
+            preview_text="Failed comparison text",
+            model_id="eleven_ttv_v3",
+            previews=[],
+            replace_existing=True,
+        )
+    assert {item["preview_id"] for item in store.get_voice(voice_id)["previews"]} == set(
+        former_ids
+    )
+    assert all(path.is_file() for path in former_paths)
+
+    replacement_ids = store.record_voice_previews(
+        voice_id,
+        prompt="Replacement prompt",
+        preview_text="Replacement comparison text",
+        model_id="eleven_ttv_v3",
+        previews=[
+            {
+                "content": f"replacement-{index}".encode(),
+                "generated_voice_id": f"replacement-{index}",
+            }
+            for index in range(3)
+        ],
+        replace_existing=True,
+    )
+    revised = store.get_voice(voice_id)
+
+    assert {item["preview_id"] for item in revised["previews"]} == set(replacement_ids)
+    assert not any(path.exists() for path in former_paths)
+    assert all(Path(item["storage_path"]).is_file() for item in revised["previews"])
+
+
+def test_voice_candidate_can_be_deleted_without_changing_other_voice_data(
+    store: AlphaStore, monkeypatch
+):
+    voice_id = "baseline--bloodelf-female"
+    before = store.get_voice(voice_id)
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
+    preview_id = store.record_voice_previews(
+        voice_id,
+        prompt="Candidate prompt",
+        preview_text="Candidate comparison text",
+        model_id="eleven_ttv_v3",
+        previews=[{"content": b"candidate", "generated_voice_id": "generated-candidate"}],
+    )[0]
+    preview_path = Path(store.get_voice_preview(preview_id)["storage_path"])
+
+    revised = store.delete_voice_preview(preview_id)
+
+    assert revised["previews"] == []
+    assert revised["version_number"] == before["version_number"]
+    assert revised["clips"] == before["clips"]
+    assert not preview_path.exists()
+    with pytest.raises(AlphaError, match="Voice preview was not found"):
+        store.get_voice_preview(preview_id)
+
+
 def test_delivery_presets_are_voice_metadata_used_for_dialogue(store: AlphaStore):
     row = _first_dialogue(store)
     prepared = store.prepare_spoken_text(row["dialogue_id"])

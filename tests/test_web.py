@@ -1,4 +1,6 @@
+import base64
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,6 +26,23 @@ class ConfiguredElevenLabs:
             "voice_limit": 30,
             "can_use_instant_voice_cloning": True,
         }
+
+
+class DesigningElevenLabs(ConfiguredElevenLabs):
+    def design_voice(self, **_kwargs):
+        return SimpleNamespace(
+            payload={
+                "previews": [
+                    {
+                        "audio_base_64": base64.b64encode(f"new-{index}".encode()).decode(),
+                        "generated_voice_id": f"generated-{index}",
+                    }
+                    for index in range(3)
+                ]
+            },
+            request_id="design-request-test",
+            character_cost=242,
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -160,6 +179,87 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Stored reference clips" in page.text
     assert "https://kit.fontawesome.com/666b0b7246.js" in page.text
     assert "Files are preserved exactly as uploaded" in page.text
+    assert "No stored candidates will be removed" in page.text
+
+
+def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        preview_id = web.alpha_store.record_voice_previews(
+            voice_id,
+            prompt="Candidate prompt",
+            preview_text="Candidate comparison text",
+            model_id="eleven_ttv_v3",
+            previews=[{"content": b"candidate-audio", "generated_voice_id": "candidate-one"}],
+        )[0]
+        preview_path = Path(web.alpha_store.get_voice_preview(preview_id)["storage_path"])
+        page = client.get(f"/alpha/voices/{voice_id}")
+        deleted = client.delete(
+            f"/api/alpha/voice-previews/{preview_id}",
+            headers={"X-WQI-Action": "confirmed"},
+        )
+
+    assert page.status_code == 200
+    assert "permanently replace and delete all 1 stored candidates" in page.text
+    assert f'data-url="/api/alpha/voice-previews/{preview_id}"' in page.text
+    assert 'data-method="DELETE"' in page.text
+    assert "This does not affect reference clips" in page.text
+    assert deleted.status_code == 200
+    assert deleted.json()["message"] == "Voice candidate was deleted from local storage."
+    assert not preview_path.exists()
+    assert web.alpha_store.get_voice(voice_id)["previews"] == []
+
+
+def test_paid_confirmation_includes_candidate_replacement_warning():
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+
+    assert "const warning = element.dataset.confirm?.trim()" in script
+    assert "const preface = warning" in script
+
+
+def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        current = web.alpha_store.get_voice(voice_id)
+        web.alpha_store.update_voice(
+            voice_id,
+            {
+                "description": current["description"],
+                "creation_method": "designed",
+                "status": "draft",
+            },
+        )
+        former_id = web.alpha_store.record_voice_previews(
+            voice_id,
+            prompt="Former prompt",
+            preview_text="Former comparison text",
+            model_id="eleven_ttv_v3",
+            previews=[{"content": b"former-audio", "generated_voice_id": "former-one"}],
+        )[0]
+        former_path = Path(web.alpha_store.get_voice_preview(former_id)["storage_path"])
+        response = client.post(
+            f"/api/alpha/voices/{voice_id}/design",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+            json={
+                "preview_text": (
+                    "The road ahead is dangerous, but our purpose remains clear. Stay close, "
+                    "listen carefully, and remember why we began this journey together."
+                )
+            },
+        )
+        revised = web.alpha_store.get_voice(voice_id)
+
+    assert response.status_code == 200
+    assert "Replaced 1 former candidate" in response.json()["message"]
+    assert len(revised["previews"]) == 3
+    assert former_id not in {item["preview_id"] for item in revised["previews"]}
+    assert not former_path.exists()
 
 
 def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):

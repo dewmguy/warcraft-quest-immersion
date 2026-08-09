@@ -52,10 +52,12 @@ function formatSeconds(seconds) {
 function paidConfirmation(element) {
   const estimate = meteringEstimate(element);
   if (!estimate) return element.dataset.confirm || "";
+  const warning = element.dataset.confirm?.trim();
   const action = estimate.kind === "voice-design"
     ? "This creates three Voice Design candidates; ElevenLabs charges the preview text once."
     : "This creates one speech candidate.";
-  return `${action}\n\nPreflight estimate:\n- ${estimate.characters.toLocaleString()} metered characters\n- about $${estimate.dollars.toFixed(3)} at the published v2/v3 API list rate\n- about ${formatSeconds(estimate.seconds)} of audio per candidate\n\nYour plan and the provider response determine exact usage. Continue?`;
+  const preface = warning ? `${warning}\n\n` : "";
+  return `${preface}${action}\n\nPreflight estimate:\n- ${estimate.characters.toLocaleString()} metered characters\n- about $${estimate.dollars.toFixed(3)} at the published v2/v3 API list rate\n- about ${formatSeconds(estimate.seconds)} of audio per candidate\n\nYour plan and the provider response determine exact usage. Continue?`;
 }
 
 function syncMeteringCard(element) {
