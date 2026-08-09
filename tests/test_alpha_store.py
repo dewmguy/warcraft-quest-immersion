@@ -39,6 +39,35 @@ def test_initialize_adds_candidate_method_to_existing_alpha_database(tmp_path: P
     assert "creation_method" in columns
 
 
+def test_initialize_supersedes_stale_selected_preview_for_active_instant_clone(
+    store: AlphaStore,
+):
+    voice_id = "baseline--bloodelf-female"
+    preview_id = store.record_voice_previews(
+        voice_id,
+        prompt="Prior design prompt",
+        preview_text="Prior design sample",
+        model_id="eleven_ttv_v3",
+        creation_method="designed",
+        previews=[{"content": b"prior-audio", "generated_voice_id": "prior-generated"}],
+    )[0]
+    store.activate_voice_preview(preview_id, "prior-provider-voice")
+    current = store.get_voice(voice_id)
+    store.update_voice(
+        voice_id,
+        {
+            "description": current["description"],
+            "creation_method": "instant_clone",
+            "provider_voice_id": "active-instant-clone",
+        },
+    )
+    assert store.get_voice_preview(preview_id)["status"] == "selected"
+
+    store.initialize()
+
+    assert store.get_voice_preview(preview_id)["status"] == "superseded"
+
+
 def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore):
     dashboard = store.dashboard()
     listing = store.list_dialogue(page_size=10)

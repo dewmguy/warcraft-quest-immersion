@@ -394,6 +394,10 @@ dialog .actions { justify-content: flex-end; }
 .creation-candidates .candidate-list { gap: 8px; }
 .creation-candidates .candidate-list article { grid-template-columns: 1fr; gap: 8px; padding: 10px; background: #111014; }
 .creation-candidates .candidate-list article.candidate-selected { border-color: #4f9d70; background: #13231a; box-shadow: 0 0 0 2px rgb(79 157 112 / 18%); }
+.instant-clone-result-icon { display: grid; min-height: 58px; place-items: center; border: 1px solid #356b4f; border-radius: 6px; background: #0e1913; color: #8fd1aa; font-size: 1.5rem; }
+.instant-clone-result .candidate-meta code { grid-column: 1 / -1; color: #a9d9bb; font-size: .7rem; overflow-wrap: anywhere; }
+.instant-clone-result > p { margin: 0; color: #a9b8ae; font-size: .74rem; line-height: 1.5; }
+.creation-candidates .instant-clone-result .button-link { width: 100%; min-height: 34px; padding: 7px 9px; font-size: .76rem; }
 .creation-candidates .candidate-player { width: 100%; }
 .creation-candidates .candidate-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; }
 .creation-candidates .candidate-meta strong { color: #eee4ca; font-size: .86rem; }
@@ -412,6 +416,7 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preset-batch-actions button { min-height: 36px; padding: 7px 11px; white-space: nowrap; }
 .delivery-preset-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .delivery-preset-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(275px, .34fr); grid-template-areas: "heading review" "settings review"; grid-template-rows: auto 1fr; align-items: start; column-gap: 24px; row-gap: 16px; border: 1px solid #39343d; border-radius: 8px; padding: 16px; background: #131216; }
+.delivery-preset-card[id] { scroll-margin-top: 92px; }
 .delivery-preset-card.is-generating { border-color: #9b7835; box-shadow: 0 0 0 2px rgb(201 157 67 / 12%); }
 .delivery-preset-heading { grid-area: heading; display: grid; grid-template-columns: minmax(180px, auto) minmax(0, 1fr); align-items: center; gap: 18px; border-bottom: 1px solid #302c33; padding-bottom: 12px; }
 .delivery-preset-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

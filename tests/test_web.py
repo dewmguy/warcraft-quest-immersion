@@ -707,6 +707,15 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
                 "creation_method": current["creation_method"],
             },
         )
+        preview_id = web.alpha_store.record_voice_previews(
+            voice_id,
+            prompt=full_description,
+            preview_text="A previous Voice Design sample retained for comparison.",
+            model_id="eleven_ttv_v3",
+            creation_method="designed",
+            previews=[{"content": b"former-design-audio", "generated_voice_id": "former-design"}],
+        )[0]
+        web.alpha_store.activate_voice_preview(preview_id, "provider-before-clone")
         clip = web.alpha_store.save_reference_clip(
             voice_id,
             original_name="clone-source.wav",
@@ -732,12 +741,18 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
     assert revised["creation_method"] == "instant_clone"
     assert revised["provider_voice_id"] == "provider-instant-clone"
     assert revised["description"] == full_description
+    assert revised["previews"][0]["status"] == "superseded"
     assert provider.clone_kwargs is not None
     assert len(provider.clone_kwargs["description"]) <= 500
     assert provider.clone_kwargs["description"].endswith("…")
 
     assert "The selected audio determines the cloned voice" in page.text
     assert "automatically shortened to ElevenLabs' 500-character limit" in page.text
+    assert "Instant clone active" in page.text
+    assert "Instant Voice Clone does not return Voice Design candidates" in page.text
+    assert "Previous design candidate" in page.text
+    assert 'href="#delivery-neutral"' in page.text
+    assert "does not return Voice Design candidates" in cloned.json()["message"]
 
 
 def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):

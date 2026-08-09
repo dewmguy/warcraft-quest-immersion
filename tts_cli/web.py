@@ -1105,7 +1105,15 @@ def api_clone_voice(
                 "provider_voice_id": provider_voice_id,
             },
         )
-        return {"message": f"Activated the instant clone for {voice['name']}.", "voice": updated}
+        updated = alpha_store.supersede_selected_voice_previews(voice_id)
+        return {
+            "message": (
+                f"Instant clone is active for {voice['name']}. "
+                "ElevenLabs creates this reusable voice directly, so it does not return "
+                "Voice Design candidates. Generate a new neutral sample to review the clone."
+            ),
+            "voice": updated,
+        }
     except (AlphaError, ElevenLabsError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

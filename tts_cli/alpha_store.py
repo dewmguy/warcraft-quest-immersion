@@ -537,6 +537,7 @@ class AlphaStore:
             self._seed_app_settings(connection)
             self._seed_baseline_voices(connection)
             self._normalize_delivery_prompt_tags(connection)
+            self._normalize_instant_clone_previews(connection)
             self._sync_baseline_contexts(connection)
 
     @staticmethod
@@ -559,6 +560,17 @@ class AlphaStore:
                 "ALTER TABLE voice_previews ADD COLUMN creation_method TEXT NOT NULL "
                 "DEFAULT 'legacy_unknown'"
             )
+
+    @staticmethod
+    def _normalize_instant_clone_previews(connection: sqlite3.Connection) -> None:
+        """Repair older clone records that still mark a Voice Design preview as selected."""
+        connection.execute(
+            "UPDATE voice_previews SET status='superseded' WHERE status='selected' "
+            "AND EXISTS (SELECT 1 FROM voice_versions vv "
+            "WHERE vv.voice_id=voice_previews.voice_id AND vv.is_current=1 "
+            "AND vv.creation_method='instant_clone' "
+            "AND COALESCE(vv.provider_voice_id, '')<>'')"
+        )
 
     def _seed_baseline_voices(self, connection: sqlite3.Connection) -> None:
         review = load_phase2_review()
@@ -2208,6 +2220,17 @@ class AlphaStore:
                 "UPDATE voice_previews SET status='selected' WHERE preview_id=?", (preview_id,)
             )
         return self.retain_voice_preview(preview_id)
+
+    def supersede_selected_voice_previews(self, voice_id: str) -> dict[str, Any]:
+        """Keep prior design audio for comparison without presenting it as the active voice."""
+        self.get_voice(voice_id)
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE voice_previews SET status='superseded' "
+                "WHERE voice_id=? AND status='selected'",
+                (voice_id,),
+            )
+        return self.get_voice(voice_id)
 
     def retain_voice_preview(self, preview_id: str) -> dict[str, Any]:
         """Keep one selected preview and remove every other local candidate for its voice."""
