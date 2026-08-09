@@ -138,7 +138,7 @@ The Alpha portal is the working production surface:
 All provider operations have a separate paid-action confirmation. If
 ElevenLabs is not configured, they remain disabled and no request can be sent.
 On the homelab, configure a newly created key without placing it in PowerShell
-history or Git by running `scripts\configure-elevenlabs.ps1`. It prompts with
+history or Git by running `scripts\configure-elevenlabs.cmd`. It prompts with
 masked input, sends the value over SSH standard input, updates only the ignored
 server `.env`, and recreates only `warcraft-quest-immersion`. Alpha's Settings
 page then verifies the key and account usage through a read-only provider call.

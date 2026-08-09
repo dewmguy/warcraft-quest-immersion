@@ -211,7 +211,7 @@ def test_settings_owns_provider_model_selection(monkeypatch):
     assert page.status_code == 200
     assert "What is reusable" in page.text
     assert "characters, not LLM tokens" in page.text
-    assert "configure-elevenlabs.ps1" in page.text
+    assert "configure-elevenlabs.cmd" in page.text
     assert saved.status_code == 200
     assert saved.json()["settings"]["tts_model_id"] == "eleven_multilingual_v2"
 
