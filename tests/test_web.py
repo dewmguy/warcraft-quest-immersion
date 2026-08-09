@@ -183,6 +183,8 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Robust · consistent, least responsive to direction" in page.text
     assert "Save preset settings" in page.text
     assert "Generate one comparison" in page.text
+    assert "Preset settings" in page.text
+    assert "Comparison" in page.text
     assert 'type="range"' in page.text
     assert 'href="#provider-creation"' in page.text
     assert 'id="provider-creation"' in page.text
@@ -194,7 +196,8 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "No stored candidates will be removed" in page.text
 
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
-    assert ".delivery-preset-card { display: grid; grid-template-columns:" in stylesheet
+    assert 'grid-template-areas: "heading heading" "settings review"' in stylesheet
+    assert "grid-template-columns: repeat(2, minmax(250px, 1fr))" in stylesheet
     assert ".delivery-preset-grid { display: grid; grid-template-columns: 1fr;" in stylesheet
 
 

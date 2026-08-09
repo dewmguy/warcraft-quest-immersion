@@ -126,6 +126,7 @@
     <div class="delivery-preset-grid">{% for preset in voice.delivery_presets %}<article class="delivery-preset-card">
       <header class="delivery-preset-heading"><div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}">{{ preset.status | replace('_',' ') | title }}</span></div><p>{{ delivery_guidance[preset.delivery] }}</p></header>
       <form class="delivery-preset-settings" data-json-form data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}" data-method="PATCH">
+        <span class="delivery-preset-section-label">Preset settings</span>
         <label><span>Eleven v3 direction{% if preset.delivery == 'neutral' %} · optional{% endif %}</span><input name="prompt_tag" value="{{ preset.prompt_tag }}" maxlength="80" placeholder="{{ 'No tag — baseline delivery' if preset.delivery == 'neutral' else '[emotional direction]' }}"><small>Sent in brackets immediately before the spoken text. It guides delivery but is not a guaranteed standardized preset.</small></label>
         <label><span>Performance consistency</span><select name="stability">
           <option value="0" {% if preset.stability == 0 %}selected{% endif %}>Creative · expressive, least predictable</option>
@@ -136,6 +137,7 @@
         <button type="submit">Save preset settings</button>
       </form>
       <div class="delivery-preset-review">
+      <span class="delivery-preset-section-label">Comparison</span>
       <form data-json-form data-paid data-provider-operation="Generating a delivery comparison" data-metering="speech" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form">
         <input type="hidden" name="sample_text" data-metered-text value="{{ delivery_sample_text }}">
         <div class="metering-preview compact"><span><strong data-estimate-characters>--</strong> chars</span><span><strong data-estimate-dollars>--</strong></span><span><strong data-estimate-duration>--</strong></span></div>
