@@ -44,6 +44,9 @@ class DesigningElevenLabs(ConfiguredElevenLabs):
             character_cost=242,
         )
 
+    def create_designed_voice(self, **_kwargs):
+        return {"voice_id": "provider-voice-selected"}
+
 
 @pytest.fixture(autouse=True)
 def isolated_alpha(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
@@ -288,10 +291,100 @@ def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
         revised = web.alpha_store.get_voice(voice_id)
 
     assert response.status_code == 200
-    assert "Replaced 1 former candidate" in response.json()["message"]
+    assert "Replaced 1 former unselected candidate" in response.json()["message"]
     assert len(revised["previews"]) == 3
     assert former_id not in {item["preview_id"] for item in revised["previews"]}
     assert not former_path.exists()
+
+
+def test_selected_voice_candidate_is_protected_and_survives_regeneration(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        current = web.alpha_store.get_voice(voice_id)
+        web.alpha_store.update_voice(
+            voice_id,
+            {
+                "description": current["description"],
+                "creation_method": "designed",
+                "status": "draft",
+            },
+        )
+        preview_ids = web.alpha_store.record_voice_previews(
+            voice_id,
+            prompt="Candidate prompt",
+            preview_text="Candidate comparison text",
+            model_id="eleven_ttv_v3",
+            previews=[
+                {
+                    "content": f"candidate-{index}".encode(),
+                    "generated_voice_id": f"candidate-{index}",
+                }
+                for index in range(3)
+            ],
+        )
+        selected_id = preview_ids[1]
+        original_paths = {
+            preview["preview_id"]: Path(preview["storage_path"])
+            for preview in web.alpha_store.get_voice(voice_id)["previews"]
+        }
+        activated = client.post(
+            f"/api/alpha/voice-previews/{selected_id}/activate",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+        )
+        selected_page = client.get(f"/alpha/voices/{voice_id}")
+        protected_delete = client.delete(
+            f"/api/alpha/voice-previews/{selected_id}",
+            headers={"X-WQI-Action": "confirmed"},
+        )
+        regenerated = client.post(
+            f"/api/alpha/voices/{voice_id}/design",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+            json={
+                "preview_text": (
+                    "The road ahead is dangerous, but our purpose remains clear. Stay close, "
+                    "listen carefully, and remember why we began this journey together."
+                )
+            },
+        )
+        revised = web.alpha_store.get_voice(voice_id)
+
+    assert activated.status_code == 200
+    assert "Deleted 2 other local candidates" in activated.json()["message"]
+    assert selected_page.status_code == 200
+    assert 'class="candidate-selected"' in selected_page.text
+    assert "Selected candidate" in selected_page.text
+    assert "Protected until replaced" in selected_page.text
+    assert "The selected candidate and reusable ElevenLabs voice will be preserved" in (
+        selected_page.text
+    )
+    assert f'data-url="/api/alpha/voice-previews/{selected_id}"' not in selected_page.text
+    assert protected_delete.status_code == 422
+    assert "selected candidate is protected" in protected_delete.json()["detail"]
+    assert regenerated.status_code == 200
+    assert "Preserved the selected candidate and reusable ElevenLabs voice" in (
+        regenerated.json()["message"]
+    )
+    assert revised["provider_voice_id"] == "provider-voice-selected"
+    assert len(revised["previews"]) == 4
+    assert sum(preview["status"] == "selected" for preview in revised["previews"]) == 1
+    assert {preview["preview_id"] for preview in revised["previews"]} == {
+        selected_id,
+        *regenerated.json()["preview_ids"],
+    }
+    assert original_paths[selected_id].is_file()
+    assert all(
+        not path.exists()
+        for preview_id, path in original_paths.items()
+        if preview_id != selected_id
+    )
 
 
 def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):

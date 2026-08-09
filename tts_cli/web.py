@@ -872,7 +872,8 @@ def api_delete_voice_preview(
             "voice": voice,
         }
     except AlphaError as error:
-        raise _alpha_error(error, 404) from error
+        status_code = 404 if "not found" in str(error).lower() else 422
+        raise _alpha_error(error, status_code) from error
 
 
 def _require_elevenlabs() -> None:
@@ -950,22 +951,32 @@ def api_design_voice(
             previews=previews,
             replace_existing=True,
         )
-        replaced_count = len(voice["previews"])
+        replaced_count = sum(
+            preview["status"] != "selected" for preview in voice["previews"]
+        )
+        selected_preserved = any(
+            preview["status"] == "selected" for preview in voice["previews"]
+        )
         cost_note = (
             f" ElevenLabs reported {result.character_cost:,} metered characters for the request."
             if result.character_cost is not None
             else ""
         )
         replacement_note = (
-            f" Replaced {replaced_count} former candidate"
+            f" Replaced {replaced_count} former unselected candidate"
             f"{'s' if replaced_count != 1 else ''}."
             if replaced_count
+            else ""
+        )
+        preservation_note = (
+            " Preserved the selected candidate and reusable ElevenLabs voice."
+            if selected_preserved
             else ""
         )
         return {
             "message": (
                 f"Stored {len(preview_ids)} new voice candidates."
-                f"{replacement_note}{cost_note}"
+                f"{replacement_note}{preservation_note}{cost_note}"
             ),
             "preview_ids": preview_ids,
             "provider_request_id": result.request_id,
@@ -994,7 +1005,17 @@ def api_activate_voice_preview(
         if not provider_voice_id:
             raise ElevenLabsError("ElevenLabs did not return a voice ID.")
         voice = alpha_store.activate_voice_preview(preview_id, provider_voice_id)
-        return {"message": f"Activated {voice['name']} in ElevenLabs.", "voice": voice}
+        discarded_count = int(voice.pop("discarded_preview_count", 0))
+        cleanup_note = (
+            f" Deleted {discarded_count} other local candidate"
+            f"{'s' if discarded_count != 1 else ''}."
+            if discarded_count
+            else ""
+        )
+        return {
+            "message": f"Activated {voice['name']} in ElevenLabs.{cleanup_note}",
+            "voice": voice,
+        }
     except (AlphaError, ElevenLabsError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

@@ -1866,11 +1866,15 @@ class AlphaStore:
     def delete_voice_preview(self, preview_id: str) -> dict[str, Any]:
         with self.connect() as connection:
             row = connection.execute(
-                "SELECT voice_id, storage_path FROM voice_previews WHERE preview_id=?",
+                "SELECT voice_id, storage_path, status FROM voice_previews WHERE preview_id=?",
                 (preview_id,),
             ).fetchone()
         if not row:
             raise AlphaError("Voice candidate was not found.")
+        if row["status"] == "selected":
+            raise AlphaError(
+                "The selected candidate is protected. Select another candidate to replace it."
+            )
         path = Path(row["storage_path"]).resolve()
         if self.storage_root not in path.parents:
             raise AlphaError("Voice candidate storage path is invalid.")
@@ -1911,7 +1915,8 @@ class AlphaStore:
                 if replace_existing:
                     replaced_rows = list(
                         connection.execute(
-                            "SELECT preview_id, storage_path FROM voice_previews WHERE voice_id=?",
+                            "SELECT preview_id, storage_path FROM voice_previews "
+                            "WHERE voice_id=? AND status<>'selected'",
                             (voice_id,),
                         )
                     )
@@ -1987,7 +1992,7 @@ class AlphaStore:
     def activate_voice_preview(self, preview_id: str, provider_voice_id: str) -> dict[str, Any]:
         preview = self.get_voice_preview(preview_id)
         current = self.get_voice(preview["voice_id"])
-        updated = self.update_voice(
+        self.update_voice(
             preview["voice_id"],
             {
                 "description": preview["description"],
@@ -2001,12 +2006,47 @@ class AlphaStore:
             connection.execute(
                 "UPDATE voice_previews SET status='selected' WHERE preview_id=?", (preview_id,)
             )
-            connection.execute(
-                "UPDATE voice_previews SET status='rejected' WHERE voice_id=? AND preview_id<>? "
-                "AND status='candidate'",
-                (preview["voice_id"], preview_id),
+        return self.retain_voice_preview(preview_id)
+
+    def retain_voice_preview(self, preview_id: str) -> dict[str, Any]:
+        """Keep one selected preview and remove every other local candidate for its voice."""
+        preview = self.get_voice_preview(preview_id)
+        if preview["status"] != "selected":
+            raise AlphaError("Only a selected voice candidate can be retained.")
+        with self.connect() as connection:
+            discarded_rows = list(
+                connection.execute(
+                    "SELECT preview_id, storage_path FROM voice_previews "
+                    "WHERE voice_id=? AND preview_id<>?",
+                    (preview["voice_id"], preview_id),
+                )
             )
-        return updated
+        temporary_paths: list[tuple[Path, Path]] = []
+        try:
+            for row in discarded_rows:
+                path = Path(row["storage_path"]).resolve()
+                if self.storage_root not in path.parents:
+                    raise AlphaError("Voice candidate storage path is invalid.")
+                if not path.is_file():
+                    continue
+                temporary_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.deleting")
+                path.replace(temporary_path)
+                temporary_paths.append((path, temporary_path))
+            with self.connect() as connection:
+                connection.execute(
+                    "DELETE FROM voice_previews WHERE voice_id=? AND preview_id<>?",
+                    (preview["voice_id"], preview_id),
+                )
+        except Exception:
+            for path, temporary_path in reversed(temporary_paths):
+                if temporary_path.is_file():
+                    temporary_path.replace(path)
+            raise
+        for _, temporary_path in temporary_paths:
+            temporary_path.unlink(missing_ok=True)
+        voice = self.get_voice(preview["voice_id"])
+        voice["discarded_preview_count"] = len(discarded_rows)
+        return voice
 
     def generation_text(self, dialogue: dict[str, Any]) -> str:
         text = str(dialogue.get("spoken_text") or "")

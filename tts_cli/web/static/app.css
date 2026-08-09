@@ -373,6 +373,7 @@ dialog .actions { justify-content: flex-end; }
 .candidate-heading > span { display: grid; min-width: 28px; min-height: 28px; place-items: center; border: 1px solid #49434f; border-radius: 999px; color: #cfc5d0; font-size: .75rem; }
 .creation-candidates .candidate-list { gap: 8px; }
 .creation-candidates .candidate-list article { grid-template-columns: 1fr; gap: 8px; padding: 10px; background: #111014; }
+.creation-candidates .candidate-list article.candidate-selected { border-color: #4f9d70; background: #13231a; box-shadow: 0 0 0 2px rgb(79 157 112 / 18%); }
 .creation-candidates .candidate-player { width: 100%; }
 .creation-candidates .candidate-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; }
 .creation-candidates .candidate-meta strong { color: #eee4ca; font-size: .86rem; }
@@ -382,6 +383,7 @@ dialog .actions { justify-content: flex-end; }
 .candidate-actions { display: flex; justify-content: flex-end; gap: 7px; }
 .candidate-actions > button:not(.candidate-delete) { flex: 1; }
 .creation-candidates .candidate-delete { flex: 0 0 34px; width: 34px; border-color: #704446; color: #d78787; }
+.selected-candidate-lock { display: inline-flex !important; align-items: center; justify-content: flex-end; gap: 6px; color: #8fd1aa !important; font-size: .72rem !important; }
 .delivery-preset-grid { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap: 10px; overflow-x: auto; }
 .delivery-preset-card { align-content: start; min-width: 190px; border: 1px solid #39343d; border-radius: 8px; padding: 14px; background: #131216; }
 .delivery-preset-card > div:first-child { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
