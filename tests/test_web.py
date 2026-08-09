@@ -49,6 +49,9 @@ def test_dwarf_poc_is_no_audio_and_persists_workflow_decisions(monkeypatch, tmp_
 
     assert page.status_code == 200
     assert "No-spend mode is active" in page.text
+    assert 'href="/static/app.css"' in page.text
+    assert 'src="/static/dwarf-poc.js"' in page.text
+    assert "http://testserver/static/" not in page.text
     assert payload.json()["no_audio_mode"] is True
     assert len(payload.json()["profiles"]) == 2
     assert mutation.status_code == 200
