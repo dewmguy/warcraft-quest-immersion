@@ -1493,7 +1493,7 @@ class AlphaStore:
             raise AlphaError("Unknown delivery preset.")
         text = sample_text.strip()
         if not 100 <= len(text) <= 1000:
-            raise AlphaError("Delivery comparison text must contain 100–1,000 characters.")
+            raise AlphaError("Delivery sample text must contain 100–1,000 characters.")
         voice = self.get_voice(voice_id)
         if not voice.get("provider_voice_id"):
             raise AlphaError("Create the reusable provider voice before testing delivery presets.")

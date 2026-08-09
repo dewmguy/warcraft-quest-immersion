@@ -189,11 +189,14 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Creative · expressive, least predictable" in page.text
     assert "Natural · balanced and closest to the voice" in page.text
     assert "Robust · consistent, least responsive to direction" in page.text
-    assert "Save preset settings" in page.text
-    assert "Generate one comparison" in page.text
+    assert "Save preset settings" not in page.text
+    assert page.text.count("data-dirty-submit hidden") == 5
+    assert page.text.count('class="fa-solid fa-floppy-disk"') == 5
+    assert page.text.count("Generate sample") == 5
     assert "Preset settings" in page.text
-    assert "Comparison" in page.text
-    assert "Generate all five comparisons" in page.text
+    assert "Sample" in page.text
+    assert "Generate all samples" in page.text
+    assert "Fixed sample script" in page.text
     assert "<blockquote>" in page.text
     assert "<details><summary>Fixed comparison script" not in page.text
     assert page.text.count("data-delivery-generation") == 5
@@ -210,7 +213,8 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
 
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
     assert 'grid-template-areas: "heading heading" "settings review"' in stylesheet
-    assert "grid-template-columns: repeat(2, minmax(250px, 1fr))" in stylesheet
+    assert ".alpha-panel .delivery-preset-settings { grid-area: settings; grid-template-columns: 1fr;" in stylesheet
+    assert stylesheet.count(".alpha-panel .delivery-preset-settings {") == 1
     assert ".delivery-preset-grid { display: grid; grid-template-columns: 1fr;" in stylesheet
 
 
@@ -249,7 +253,7 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
     assert web.alpha_store.get_voice(voice_id)["previews"] == []
 
 
-def test_delivery_comparisons_use_the_compact_custom_player(monkeypatch):
+def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.5)
     voice_id = "baseline--bloodelf-female"
@@ -296,19 +300,45 @@ def test_delivery_comparisons_use_the_compact_custom_player(monkeypatch):
 
     assert page.status_code == 200
     assert 'class="reference-player delivery-player"' in page.text
-    assert 'data-audio-name="Neutral comparison 1"' in page.text
+    assert 'data-audio-name="Neutral sample 1"' in page.text
     assert (
         f'<audio hidden preload="metadata" src="/api/alpha/delivery-previews/{preview["preview_id"]}/audio">'
         in page.text
     )
     assert f'data-url="/api/alpha/delivery-previews/{preview["preview_id"]}"' in page.text
     assert page.text.count('class="secondary icon-button delivery-preview-delete"') == 3
+    assert page.text.count('class="icon-button delivery-sample-approve"') == 3
+    assert page.text.count('class="fa-solid fa-check"') == 3
+    assert page.text.count("Approve this neutral sample?") == 3
+    assert page.text.count("Permanently delete this neutral sample") == 3
+    assert page.text.count("Stored samples") == 1
     assert page.text.count('class="reference-player delivery-player"') == 3
     assert "ElevenLabs usage cannot be refunded" in page.text
     assert "<audio controls" not in page.text
     assert deleted.status_code == 200
-    assert deleted.json()["message"] == "Delivery comparison was deleted from local storage."
+    assert deleted.json()["message"] == "Delivery sample was deleted from local storage."
     assert not preview_path.exists()
+
+
+def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_individual_confirmation():
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+
+    assert 'document.querySelectorAll("[data-dirty-form]")' in script
+    assert 'submit.hidden = JSON.stringify(jsonFromForm(form)) === initialPayload' in script
+    assert "if (conditionalSubmit?.hidden) return" in script
+    assert 'deliveryBatchButton.textContent = "Generate all samples"' in script
+    assert "if (!window.confirm(deliveryBatchConfirmation(forms))) return" in script
+    assert "if (!window.confirm(paidConfirmation(form))) return" not in script
+
+
+def test_every_voice_page_delete_control_requires_confirmation():
+    template = (web.WEB_DIR / "templates" / "alpha-voice.html").read_text(encoding="utf-8")
+    opening_tags = [chunk.split(">", 1)[0] for chunk in template.split("<button")[1:]]
+    delete_controls = [tag for tag in opening_tags if 'data-method="DELETE"' in tag]
+
+    assert len(delete_controls) == 3
+    assert all("data-confirm-required" in tag for tag in delete_controls)
+    assert all("data-confirm=" in tag for tag in delete_controls)
 
 
 def test_paid_confirmation_includes_candidate_replacement_warning():

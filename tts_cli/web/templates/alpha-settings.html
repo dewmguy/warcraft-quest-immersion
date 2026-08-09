@@ -35,7 +35,7 @@
     {% if provider_events %}
       <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Request</th><th>Input</th><th>Provider reported</th><th>List-rate equivalent</th><th>Recorded</th></tr></thead><tbody>
       {% for event in provider_events %}<tr>
-        <td>{% if event.action == 'dialogue_tts' %}<a href="/alpha/dialogue/{{ event.subject_id }}">Dialogue speech</a>{% elif event.action == 'voice_design' %}<a href="/alpha/voices/{{ event.subject_id }}#provider-creation">Voice Design</a>{% else %}<a href="/alpha/voices/{{ event.subject_id.split(':')[0] }}#provider-creation">Delivery comparison</a>{% endif %}</td>
+        <td>{% if event.action == 'dialogue_tts' %}<a href="/alpha/dialogue/{{ event.subject_id }}">Dialogue speech</a>{% elif event.action == 'voice_design' %}<a href="/alpha/voices/{{ event.subject_id }}#provider-creation">Voice Design</a>{% else %}<a href="/alpha/voices/{{ event.subject_id.split(':')[0] }}#provider-creation">Delivery sample</a>{% endif %}</td>
         <td>{{ "{:,}".format(event.input_character_count) }} characters</td>
         <td>{% if event.character_cost is not none %}{{ "{:,}".format(event.character_cost) }} metered characters{% else %}Not returned{% endif %}</td>
         <td>{% if event.character_cost is not none %}${{ "%.3f"|format(event.character_cost * 0.10 / 1000) }}{% else %}--{% endif %}</td>

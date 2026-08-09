@@ -185,6 +185,8 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
   if (form.dataset.deliveryGeneration !== undefined) continue;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const conditionalSubmit = form.querySelector("[data-dirty-submit]");
+    if (conditionalSubmit?.hidden) return;
     try {
       const payload = await runAlphaAction({
         url: form.dataset.url,
@@ -202,6 +204,20 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
       showAlphaMessage(error.message, "failed");
     }
   });
+}
+
+for (const form of document.querySelectorAll("[data-dirty-form]")) {
+  const submit = form.querySelector("[data-dirty-submit]");
+  if (!submit) continue;
+  const initialPayload = JSON.stringify(jsonFromForm(form));
+  const syncDirtyState = () => {
+    submit.hidden = JSON.stringify(jsonFromForm(form)) === initialPayload;
+  };
+  for (const field of form.querySelectorAll("input, select, textarea")) {
+    field.addEventListener("input", syncDirtyState);
+    field.addEventListener("change", syncDirtyState);
+  }
+  syncDirtyState();
 }
 
 const deliveryGenerationForms = [...document.querySelectorAll("[data-delivery-generation]")];
@@ -238,7 +254,7 @@ function syncDeliveryBatchButton() {
   const serverDisabled = deliveryBatchButton.dataset.serverDisabled === "true";
   deliveryBatchButton.disabled = serverDisabled || !available.length;
   if (serverDisabled || !activeDeliveryGenerations.size) {
-    deliveryBatchButton.textContent = "Generate all five comparisons";
+    deliveryBatchButton.textContent = "Generate all samples";
   } else if (available.length) {
     deliveryBatchButton.textContent = `Generate remaining ${available.length}`;
   } else {
@@ -251,13 +267,13 @@ function deliveryBatchConfirmation(forms) {
   const characters = estimates.reduce((total, estimate) => total + estimate.characters, 0);
   const dollars = estimates.reduce((total, estimate) => total + estimate.dollars, 0);
   const seconds = estimates.reduce((total, estimate) => total + estimate.seconds, 0);
-  return `This starts ${forms.length} independent preset comparison request${forms.length === 1 ? "" : "s"} at the same time. Each successful result is stored separately, even if another request fails.\n\nCombined preflight estimate:\n- ${characters.toLocaleString()} metered characters\n- about $${dollars.toFixed(3)} at the published v2/v3 API list rate\n- about ${formatSeconds(seconds)} of finished audio across all requests\n\nYour plan's concurrency limit may cause an individual request to fail without affecting the others. Continue?`;
+  return `This starts ${forms.length} independent preset sample request${forms.length === 1 ? "" : "s"} at the same time. Each successful result is stored separately, even if another request fails.\n\nCombined preflight estimate:\n- ${characters.toLocaleString()} metered characters\n- about $${dollars.toFixed(3)} at the published v2/v3 API list rate\n- about ${formatSeconds(seconds)} of finished audio across all requests\n\nYour plan's concurrency limit may cause an individual request to fail without affecting the others. Continue?`;
 }
 
 function finishDeliveryGenerationRun() {
   const successes = deliveryGenerationOutcomes.filter((outcome) => outcome.ok);
   const failures = deliveryGenerationOutcomes.filter((outcome) => !outcome.ok);
-  const generated = `${successes.length} comparison${successes.length === 1 ? "" : "s"} generated`;
+  const generated = `${successes.length} sample${successes.length === 1 ? "" : "s"} generated`;
   if (failures.length) {
     const failureDetail = failures.map((outcome) => `${outcome.delivery}: ${outcome.message}`).join("; ");
     showAlphaMessage(`${generated}; ${failures.length} failed. ${failureDetail}`, "failed");
@@ -318,7 +334,6 @@ for (const form of deliveryGenerationForms) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (activeDeliveryGenerations.has(form)) return;
-    if (!window.confirm(paidConfirmation(form))) return;
     launchDeliveryGeneration(form);
   });
 }

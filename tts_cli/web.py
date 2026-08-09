@@ -729,7 +729,7 @@ def api_generate_delivery_preview(
             provider_request_id=result.request_id,
             subscription=usage,
         )
-        return {"message": f"Generated one {delivery} comparison for review.", **preview}
+        return {"message": f"Generated one {delivery} sample for review.", **preview}
     except (AlphaError, ElevenLabsError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -742,7 +742,7 @@ def api_approve_delivery_preview(
 ) -> dict:
     try:
         voice = alpha_store.approve_delivery_preview(preview_id)
-        return {"message": "Approved this delivery comparison.", "voice": voice}
+        return {"message": "Approved this delivery sample.", "voice": voice}
     except AlphaError as error:
         raise _alpha_error(error) from error
 
@@ -756,7 +756,7 @@ def api_delete_delivery_preview(
     try:
         voice = alpha_store.delete_delivery_preview(preview_id)
         return {
-            "message": "Delivery comparison was deleted from local storage.",
+            "message": "Delivery sample was deleted from local storage.",
             "voice": voice,
         }
     except AlphaError as error:
