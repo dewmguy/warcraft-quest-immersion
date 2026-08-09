@@ -354,7 +354,7 @@ dialog .actions { justify-content: flex-end; }
 .candidate-heading > span { display: grid; min-width: 28px; min-height: 28px; place-items: center; border: 1px solid #49434f; border-radius: 999px; color: #cfc5d0; font-size: .75rem; }
 .creation-candidates .candidate-list { gap: 8px; }
 .creation-candidates .candidate-list article { grid-template-columns: 1fr; gap: 8px; padding: 10px; background: #111014; }
-.creation-candidates .candidate-list audio { height: 34px; min-width: 0; }
+.creation-candidates .candidate-player { width: 100%; }
 .creation-candidates .candidate-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; }
 .creation-candidates .candidate-meta strong { color: #eee4ca; font-size: .86rem; }
 .creation-candidates .candidate-meta span { color: #aaa3ad; font-size: .72rem; text-align: right; }

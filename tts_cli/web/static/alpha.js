@@ -124,6 +124,7 @@ for (const form of document.querySelectorAll("[data-upload-form]")) {
   });
 }
 
+const compactAudioPlayers = [...document.querySelectorAll("[data-compact-audio]")];
 const referenceClips = [...document.querySelectorAll(".reference-clip")];
 
 function formatAudioTime(seconds) {
@@ -133,13 +134,13 @@ function formatAudioTime(seconds) {
   return `${minutes}:${remainder}`;
 }
 
-function syncReferencePlayer(clip) {
-  const audio = clip.querySelector("audio");
-  const button = clip.querySelector("[data-audio-toggle]");
-  const progress = clip.querySelector("[data-audio-progress]");
-  const time = clip.querySelector("[data-audio-time]");
+function syncCompactPlayer(player) {
+  const audio = player.querySelector("audio");
+  const button = player.querySelector("[data-audio-toggle]");
+  const progress = player.querySelector("[data-audio-progress]");
+  const time = player.querySelector("[data-audio-time]");
   if (!audio || !button || !progress || !time) return;
-  const fallbackDuration = Number(clip.dataset.duration) || 0;
+  const fallbackDuration = Number(player.dataset.duration) || 0;
   const duration = Number.isFinite(audio.duration) ? audio.duration : fallbackDuration;
   const currentTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
   const playing = !audio.paused && !audio.ended;
@@ -147,28 +148,36 @@ function syncReferencePlayer(clip) {
   progress.value = String(Math.min(currentTime, duration));
   time.textContent = `${formatAudioTime(currentTime)} / ${formatAudioTime(duration)}`;
   button.ariaPressed = String(playing);
-  button.ariaLabel = `${playing ? "Pause" : "Play"} ${clip.dataset.clipName}`;
+  button.ariaLabel = `${playing ? "Pause" : "Play"} ${player.dataset.audioName}`;
   const icon = button.querySelector("i");
   if (icon) icon.className = `fa-solid ${playing ? "fa-pause" : "fa-play"}`;
 }
 
-function resetReferenceAudio(clip) {
-  const audio = clip.querySelector("audio");
+function resetCompactAudio(player) {
+  const audio = player.querySelector("audio");
   if (!audio) return;
   audio.pause();
   if (audio.currentTime !== 0) audio.currentTime = 0;
-  syncReferencePlayer(clip);
+  syncCompactPlayer(player);
 }
 
-for (const clip of referenceClips) {
-  const audio = clip.querySelector("audio");
-  const toggle = clip.querySelector("[data-audio-toggle]");
-  const progress = clip.querySelector("[data-audio-progress]");
+for (const player of compactAudioPlayers) {
+  const audio = player.querySelector("audio");
+  const toggle = player.querySelector("[data-audio-toggle]");
+  const progress = player.querySelector("[data-audio-progress]");
   if (!audio || !toggle || !progress) continue;
-  for (const eventName of ["loadedmetadata", "timeupdate", "play", "pause"]) {
-    audio.addEventListener(eventName, () => syncReferencePlayer(clip));
+  for (const eventName of ["loadedmetadata", "timeupdate", "pause"]) {
+    audio.addEventListener(eventName, () => syncCompactPlayer(player));
   }
-  audio.addEventListener("ended", () => resetReferenceAudio(clip));
+  audio.addEventListener("play", () => {
+    for (const otherPlayer of compactAudioPlayers) {
+      if (otherPlayer === player) continue;
+      const otherAudio = otherPlayer.querySelector("audio");
+      if (otherAudio && !otherAudio.paused) resetCompactAudio(otherPlayer);
+    }
+    syncCompactPlayer(player);
+  });
+  audio.addEventListener("ended", () => resetCompactAudio(player));
   toggle.addEventListener("click", () => {
     if (audio.paused) {
       audio.play().catch(() => {});
@@ -178,16 +187,24 @@ for (const clip of referenceClips) {
   });
   progress.addEventListener("input", () => {
     audio.currentTime = Number(progress.value);
-    syncReferencePlayer(clip);
+    syncCompactPlayer(player);
   });
+  syncCompactPlayer(player);
+}
+
+for (const clip of referenceClips) {
+  const player = clip.querySelector("[data-compact-audio]");
+  const audio = player?.querySelector("audio");
+  if (!player || !audio) continue;
   clip.addEventListener("toggle", () => {
     if (!clip.open) {
-      resetReferenceAudio(clip);
+      resetCompactAudio(player);
       return;
     }
     for (const otherClip of referenceClips) {
       if (otherClip === clip || !otherClip.open) continue;
-      resetReferenceAudio(otherClip);
+      const otherPlayer = otherClip.querySelector("[data-compact-audio]");
+      if (otherPlayer) resetCompactAudio(otherPlayer);
       otherClip.open = false;
     }
     if (audio.currentTime !== 0) audio.currentTime = 0;
@@ -195,7 +212,6 @@ for (const clip of referenceClips) {
       // Browsers may still require the visible play control under strict autoplay policies.
     });
   });
-  syncReferencePlayer(clip);
 }
 
 for (const button of document.querySelectorAll("[data-action]")) {

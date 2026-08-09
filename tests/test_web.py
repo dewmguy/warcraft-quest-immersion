@@ -205,6 +205,12 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
     assert f'data-url="/api/alpha/voice-previews/{preview_id}"' in page.text
     assert 'data-method="DELETE"' in page.text
     assert "This does not affect reference clips" in page.text
+    assert 'class="reference-player candidate-player"' in page.text
+    assert 'data-audio-name="Candidate 1"' in page.text
+    assert (
+        f'<audio hidden preload="metadata" src="/api/alpha/voice-previews/{preview_id}/audio">'
+        in page.text
+    )
     assert deleted.status_code == 200
     assert deleted.json()["message"] == "Voice candidate was deleted from local storage."
     assert not preview_path.exists()
@@ -292,7 +298,8 @@ def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
     assert stored_content == {b"first-audio", b"second-audio"}
     assert page.text.count('class="reference-clip"') == 2
     assert 'class="fa-solid fa-trash-can"' in page.text
-    assert page.text.count("data-reference-player") == 2
+    assert page.text.count("data-compact-audio") == 2
+    assert page.text.count("data-audio-name") == 2
     assert page.text.count("data-audio-toggle") == 2
     assert page.text.count("data-audio-progress") == 2
     assert page.text.count("<audio hidden") == 2
@@ -310,7 +317,9 @@ def test_reference_library_script_uses_single_playing_clip_accordion():
     assert "otherClip.open = false" in script
     assert "audio.play()" in script
     assert "audio.pause()" in script
-    assert "syncReferencePlayer" in script
+    assert "syncCompactPlayer" in script
+    assert 'document.querySelectorAll("[data-compact-audio]")' in script
+    assert "otherAudio && !otherAudio.paused" in script
     assert 'progress.addEventListener("input"' in script
 
 
