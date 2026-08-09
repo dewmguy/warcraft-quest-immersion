@@ -122,6 +122,35 @@ for (const form of document.querySelectorAll("[data-upload-form]")) {
   });
 }
 
+const referenceClips = [...document.querySelectorAll(".reference-clip")];
+
+function resetReferenceAudio(clip) {
+  const audio = clip.querySelector("audio");
+  if (!audio) return;
+  audio.pause();
+  if (audio.currentTime !== 0) audio.currentTime = 0;
+}
+
+for (const clip of referenceClips) {
+  clip.addEventListener("toggle", () => {
+    if (!clip.open) {
+      resetReferenceAudio(clip);
+      return;
+    }
+    for (const otherClip of referenceClips) {
+      if (otherClip === clip || !otherClip.open) continue;
+      resetReferenceAudio(otherClip);
+      otherClip.open = false;
+    }
+    const audio = clip.querySelector("audio");
+    if (!audio) return;
+    if (audio.currentTime !== 0) audio.currentTime = 0;
+    audio.play().catch(() => {
+      // Browsers may still require the visible play control under strict autoplay policies.
+    });
+  });
+}
+
 for (const button of document.querySelectorAll("[data-action]")) {
   button.addEventListener("click", async () => {
     try {

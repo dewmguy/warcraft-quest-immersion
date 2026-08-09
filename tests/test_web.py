@@ -198,6 +198,16 @@ def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
     assert len(web.alpha_store.get_voice(voice_id)["clips"]) == 1
 
 
+def test_reference_library_script_uses_single_playing_clip_accordion():
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+
+    assert 'document.querySelectorAll(".reference-clip")' in script
+    assert 'clip.addEventListener("toggle"' in script
+    assert "otherClip.open = false" in script
+    assert "audio.play()" in script
+    assert "audio.pause()" in script
+
+
 def test_actionable_statuses_link_to_the_work_that_resolves_them(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
