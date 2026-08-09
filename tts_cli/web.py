@@ -287,6 +287,15 @@ def _subscription_summary(payload: dict) -> dict:
     }
 
 
+def _provider_clone_description(value: str, limit: int = 500) -> str:
+    """Fit stored voice context into ElevenLabs' clone-description metadata field."""
+    normalized = " ".join(str(value).split())
+    if len(normalized) <= limit:
+        return normalized
+    shortened = normalized[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return f"{shortened or normalized[: limit - 1]}…"
+
+
 def _usage_snapshot(subscription: dict, character_cost: int | None) -> dict:
     usage = dict(subscription)
     if character_cost is not None:
@@ -1077,7 +1086,7 @@ def api_clone_voice(
             raise AlphaError("Every selected clip must be marked provider eligible.")
         result = elevenlabs.clone_voice(
             name=voice["name"],
-            description=voice["description"],
+            description=_provider_clone_description(voice["description"]),
             labels={
                 "gender": GENDER_DICT.get(voice["gender_id"], "unknown"),
                 "accent": RACE_DICT.get(voice["race_id"], "unknown"),

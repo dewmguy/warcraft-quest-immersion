@@ -38,7 +38,7 @@
           <p data-method="unselected">Choose how this reusable voice will be created. Reference clips remain available regardless of this choice.</p>
           <p data-method="designed">ElevenLabs uses the reviewed description and sample script to create three previews. Selecting one creates the reusable provider voice.</p>
           <p data-method="reference_design">The v3 design model balances the reviewed description against one required reference clip, then returns three previews.</p>
-          <p data-method="instant_clone">ElevenLabs creates the reusable voice directly from clean, single-speaker reference material. Sample quality and consistency matter more than file count.</p>
+          <p data-method="instant_clone">ElevenLabs creates the reusable voice from clean, single-speaker reference material. The audio determines how the clone sounds; a shortened copy of the stored context is attached only as provider metadata.</p>
         </div>
         <label data-prompt-context {% if voice.creation_method not in ['designed','reference_design','instant_clone'] %}hidden{% endif %} {% if voice.creation_method == 'instant_clone' %}class="is-disabled"{% endif %}><span>Voice Design Prompt Context</span><textarea name="description" rows="11" minlength="20" required {% if voice.creation_method not in ['designed','reference_design'] %}disabled{% endif %}>{{ voice.description }}</textarea><small>This prompt is sent only by Voice Design. Instant Voice Clone uses the selected reference clips instead.</small></label>
         <aside class="lifecycle-explanation"><span>Automatic lifecycle</span><strong>{{ voice.status | title }}</strong><p>{{ voice.lifecycle_reason }}</p></aside>
@@ -116,6 +116,7 @@
     <form data-json-form data-paid data-provider-operation="Creating an instant voice clone" data-url="/api/alpha/voices/{{ voice.voice_id }}/clone" data-method="POST" data-method-panel="instant_clone">
       <input type="hidden" name="creation_method" value="instant_clone">
       <fieldset><legend>Reference clips to clone</legend>{% for clip in voice.clips %}<label class="check-row"><input type="checkbox" name="clip_ids" value="{{ clip.clip_id }}" data-array><span>{{ clip.original_name }} · {{ "%.2f"|format(clip.duration_seconds or 0) }} sec</span></label>{% else %}<p class="empty-copy">Upload approximately 1–2 minutes of clean, consistent, single-speaker audio first.</p>{% endfor %}</fieldset>
+      <p class="form-help">The selected audio determines the cloned voice. A copy of the stored context, automatically shortened to ElevenLabs' 500-character limit, is attached as descriptive metadata and does not condition the clone.</p>
       <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Create instant voice clone</button>
     </form>
     {% if not provider_configured %}<aside class="inline-warning">ElevenLabs is not configured. Provider creation remains disabled and no request can be sent.</aside>{% endif %}

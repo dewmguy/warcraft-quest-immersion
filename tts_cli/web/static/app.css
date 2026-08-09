@@ -329,8 +329,11 @@ dialog .actions { justify-content: flex-end; }
 .link-list li, .version-list li { margin-bottom: 9px; }
 .export-summary { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
 .export-summary > strong { color: #fff3d3; font-size: 2.4rem; }
-.alpha-message { position: fixed; right: 24px; bottom: 24px; z-index: 50; display: grid; width: min(430px, calc(100% - 48px)); gap: 8px; border: 1px solid #6c5730; border-radius: 7px; padding: 13px 16px; background: #211b14; color: #e8cb87; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+.alpha-message { position: fixed; right: 24px; bottom: 24px; z-index: 50; display: grid; width: min(430px, calc(100% - 48px)); gap: 8px; border: 1px solid #6c5730; border-radius: 7px; padding: 13px 44px 13px 16px; background: #211b14; color: #e8cb87; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
 .alpha-message[hidden] { display: none; }
+.alpha-message-close { position: absolute; top: 8px; right: 8px; display: inline-grid; width: 28px; min-height: 28px; place-items: center; border: 1px solid #9a5e56; border-radius: 5px; padding: 0; background: transparent; color: currentColor; }
+.alpha-message-close[hidden] { display: none; }
+.alpha-message-close:hover { border-color: #efa096; background: #efa096; color: #1b1110; filter: none; }
 .alpha-message-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; }
 .alpha-message-heading strong { color: currentColor; font-size: .88rem; line-height: 1.35; }
 .alpha-message-indicator { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 50%; opacity: .85; }

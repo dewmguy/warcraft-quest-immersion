@@ -51,7 +51,11 @@ class DesigningElevenLabs(ConfiguredElevenLabs):
 
 
 class CloningElevenLabs(ConfiguredElevenLabs):
-    def clone_voice(self, **_kwargs):
+    def __init__(self):
+        self.clone_kwargs = None
+
+    def clone_voice(self, **kwargs):
+        self.clone_kwargs = kwargs
         return {"voice_id": "provider-instant-clone"}
 
 
@@ -465,6 +469,7 @@ def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):
     assert "data-alpha-message-title" in voice_page.text
     assert "data-alpha-message-elapsed" in voice_page.text
     assert "data-alpha-message-progress" in voice_page.text
+    assert "data-alpha-message-close" in voice_page.text
     assert 'aria-live="polite"' in voice_page.text
     assert voice_page.text.count("data-paid") == voice_page.text.count("data-provider-operation")
     assert dialogue_page.text.count("data-paid") == dialogue_page.text.count(
@@ -480,6 +485,9 @@ def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):
     assert "window.setInterval(renderElevenLabsProgress, 1000)" in script
     assert "the request remains active" in script
     assert 'startElevenLabsRequest("Checking ElevenLabs account", null, true)' in script
+    assert 'alphaMessageClose.hidden = state !== "failed"' in script
+    assert 'alphaMessageClose.addEventListener("click"' in script
+    assert script.count("alphaMessage.hidden = true") == 1
 
 
 def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
@@ -685,10 +693,20 @@ def test_provider_creation_accepts_new_unsaved_path_and_records_candidate_method
 
 def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
-    monkeypatch.setattr(web, "elevenlabs", CloningElevenLabs())
+    provider = CloningElevenLabs()
+    monkeypatch.setattr(web, "elevenlabs", provider)
     monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 65.0)
     with TestClient(web.app) as client:
         voice_id = "baseline--bloodelf-female"
+        current = web.alpha_store.get_voice(voice_id)
+        full_description = (current["description"] + " Preserve this additional context.") * 2
+        web.alpha_store.update_voice(
+            voice_id,
+            {
+                "description": full_description,
+                "creation_method": current["creation_method"],
+            },
+        )
         clip = web.alpha_store.save_reference_clip(
             voice_id,
             original_name="clone-source.wav",
@@ -708,10 +726,18 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
             },
         )
         revised = web.alpha_store.get_voice(voice_id)
+        page = client.get(f"/alpha/voices/{voice_id}")
 
     assert cloned.status_code == 200
     assert revised["creation_method"] == "instant_clone"
     assert revised["provider_voice_id"] == "provider-instant-clone"
+    assert revised["description"] == full_description
+    assert provider.clone_kwargs is not None
+    assert len(provider.clone_kwargs["description"]) <= 500
+    assert provider.clone_kwargs["description"].endswith("…")
+
+    assert "The selected audio determines the cloned voice" in page.text
+    assert "automatically shortened to ElevenLabs' 500-character limit" in page.text
 
 
 def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):

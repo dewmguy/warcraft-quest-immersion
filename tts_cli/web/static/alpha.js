@@ -3,6 +3,7 @@ const alphaMessageTitle = alphaMessage.querySelector("[data-alpha-message-title]
 const alphaMessageDetail = alphaMessage.querySelector("[data-alpha-message-detail]");
 const alphaMessageElapsed = alphaMessage.querySelector("[data-alpha-message-elapsed]");
 const alphaMessageProgress = alphaMessage.querySelector("[data-alpha-message-progress]");
+const alphaMessageClose = alphaMessage.querySelector("[data-alpha-message-close]");
 const providerUsageIndicator = document.querySelector("[data-provider-usage-indicator]");
 let alphaProviderTimer = null;
 const alphaProviderRequests = new Map();
@@ -32,6 +33,7 @@ function renderAlphaMessage({ title, detail = "", state = "working", elapsed = "
   alphaMessageElapsed.textContent = elapsed;
   alphaMessageElapsed.hidden = !elapsed;
   alphaMessageProgress.hidden = !provider || state !== "working";
+  alphaMessageClose.hidden = state !== "failed";
 }
 
 function providerProgressDetail(request, elapsedSeconds) {
@@ -98,6 +100,10 @@ function showAlphaMessage(text, state = "working") {
   }
   renderAlphaMessage({ title: text, state });
 }
+
+alphaMessageClose.addEventListener("click", () => {
+  alphaMessage.hidden = true;
+});
 
 async function parseAlphaResponse(response) {
   const payload = await response.json().catch(() => ({}));
