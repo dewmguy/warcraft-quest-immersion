@@ -1,0 +1,53 @@
+from tts_cli.config import Settings
+from tts_cli.elevenlabs_client import ElevenLabsClient
+
+
+class FakeResponse:
+    def __init__(self, *, payload=None, content=b"", content_type="application/json"):
+        self.status_code = 200
+        self._payload = payload or {}
+        self.content = content
+        self.headers = {"Content-Type": content_type, "request-id": "request-1"}
+
+    @property
+    def ok(self):
+        return 200 <= self.status_code < 300
+
+    def json(self):
+        return self._payload
+
+
+class FakeSession:
+    def __init__(self):
+        self.calls = []
+
+    def post(self, url, **kwargs):
+        self.calls.append(("POST", url, kwargs))
+        return FakeResponse(content=b"audio", content_type="audio/mpeg")
+
+    def get(self, url, **kwargs):
+        self.calls.append(("GET", url, kwargs))
+        return FakeResponse(payload={"character_count": 50, "character_limit": 1000})
+
+
+def test_tts_is_called_only_through_explicit_client_method():
+    session = FakeSession()
+    client = ElevenLabsClient(
+        settings=Settings(elevenlabs_api_key="test-key"),
+        session=session,
+    )
+
+    assert client.configured is True
+    assert session.calls == []
+
+    result = client.text_to_speech(
+        voice_id="voice-1",
+        text="Prepared dialogue.",
+        model_id="eleven_v3",
+        settings={"stability": 0.5},
+    )
+
+    assert result.content == b"audio"
+    assert result.request_id == "request-1"
+    assert len(session.calls) == 1
+    assert session.calls[0][1].endswith("/v1/text-to-speech/voice-1")

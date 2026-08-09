@@ -1,51 +1,58 @@
-# Project phases and audio-production stages
+# Alpha production model
 
-The project plan and the audio lifecycle are two different systems. They must
-not share a single status label.
+The portal is a production database. It prepares approved audio assets for the
+existing addon packaging and playback tooling; addon behavior is not a website
+workflow.
 
-## Project phases
+## Controlled path
 
-Project phases describe delivery milestones for the application and addon:
+1. Import the complete validated quest and gossip source.
+2. Find a dialogue record in the work queue.
+3. Review the NPC, object, or item delivering it.
+4. Click **Prepare spoken text** when a speech revision is wanted.
+5. Review or edit that revision and assign the speaker's voice.
+6. Select the line delivery.
+7. Explicitly confirm one paid generation request.
+8. Review the returned audio candidate.
+9. Approve an exact candidate as the production asset.
+10. Export approved audio and its deterministic addon manifest.
 
-1. **Imported Sample** — inventory and preserve the inherited baseline.
-2. **Voice Workbench** — define baseline identities and build the interface that
-   manages their execution. The Dwarf proof of concept belongs here.
-3. **Processed Text Tooling** — suggest speech-safe text while preserving the
-   immutable original.
-4. **Short Baseline Generation** — connect approved profiles to guarded,
-   cost-quoted generation.
-5. **Complete Baseline Drafts** — produce complete baseline-voice line drafts.
-6. **Unique Voice Forks** — support NPC-specific source lineage and settings.
-7. **Production Review** — promote exact reviewed files without regeneration.
-8. **Addon Packaging** — compile and verify client-specific releases.
+Import does not populate spoken text, generate voice candidates, create provider
+voices, clone voices, or generate dialogue audio. Each operation requires a
+separate user action.
 
-Advancing a project phase requires an explicit owner approval. A line moving
-through its audio lifecycle does not advance the project plan.
+## Primary records
 
-## Baseline-profile stages
+- **Source snapshot:** content-addressed input, expansion, locale, and import count.
+- **Dialogue:** immutable source text and stable addon identity.
+- **Speaker:** NPC context, importance, uniqueness, and voice assignment.
+- **Spoken-text revision:** separately created and never overwrites the source.
+- **Voice:** logical baseline or NPC-specific speaker.
+- **Voice version:** exact description, creation method, provider ID, model, and settings.
+- **Reference clip:** ignored audio with provenance and provider-eligibility metadata.
+- **Generation:** one explicit provider request and its exact inputs and usage snapshot.
+- **Audio candidate:** one returned file with hash and duration.
+- **Production asset:** the exact approved candidate and addon filename.
 
-Each race/gender baseline has its own progress:
+## Voice model
 
-1. Identity defined
-2. Source strategy selected
-3. Neutral candidate prepared
-4. Neutral identity approved
-5. Delivery presets calibrated
-6. Baseline ready
+A baseline voice represents a stable race-and-gender speaker. Delivery such as
+angry, sorrowful, joyful, or proclaiming belongs to a dialogue line and is not a
+separate voice by default. A unique NPC voice inherits its current baseline as
+context but becomes an independently versioned record.
 
-The Dwarf proof of concept simulates these decisions without generating audio.
+Supported creation methods are an existing provider/library voice, text Voice
+Design, reference-assisted Voice Design, eligible Instant Voice Cloning, and an
+external/manual provider voice.
 
-## Per-line audio-production stages
+## Storage boundary
 
-Every quest or gossip line independently moves through:
+The Git repository contains application code, schema logic, and reviewed static
+configuration. The runtime SQLite database, reference clips, voice previews,
+generated dialogue candidates, and production audio are stored below
+`data/alpha/` and ignored by Git.
 
-1. Imported sample checked
-2. Text processed
-3. Short baseline preview
-4. Complete baseline preview
-5. Short unique preview, when needed
-6. Complete unique preview, when needed
-7. Production approved
-
-The unique branch may be marked not required for ordinary NPCs. Originals,
-processed text, settings, decisions, and file hashes remain separate records.
+Uploaded sources are stored below `data/sources/` and are also ignored. Each
+expansion/locale has one active replaceable snapshot; other active sources stay
+online. Approved ZIP exports are separated by expansion and locale before the
+addon-relative path so identical quest IDs cannot collide across clients.

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Alpha{% endblock %} · Warcraft Quest Immersion</title>
+    <link rel="stylesheet" href="/static/app.css">
+  </head>
+  <body class="alpha-body">
+    <header class="alpha-header">
+      <a class="alpha-brand" href="/alpha">
+        <span>Warcraft Quest Immersion</span>
+        <strong>Alpha production database</strong>
+      </a>
+      <nav aria-label="Alpha workspaces">
+        <a href="/alpha" {% if active_nav == 'dialogue' %}aria-current="page"{% endif %}>Dialogue</a>
+        <a href="/alpha/voices" {% if active_nav == 'voices' %}aria-current="page"{% endif %}>Voices</a>
+        <a href="/alpha/export" {% if active_nav == 'export' %}aria-current="page"{% endif %}>Production export</a>
+      </nav>
+      <span class="provider-state {{ 'is-ready' if provider_configured else 'is-offline' }}">
+        ElevenLabs {{ 'ready' if provider_configured else 'not configured' }}
+      </span>
+    </header>
+    <main class="alpha-main">
+      {% block content %}{% endblock %}
+    </main>
+    <div id="alpha-message" class="alpha-message" role="status" hidden></div>
+    <script src="/static/alpha.js"></script>
+  </body>
+</html>

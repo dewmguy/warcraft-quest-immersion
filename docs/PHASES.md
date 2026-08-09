@@ -31,25 +31,26 @@ Approved result:
 - source archives and interface comparison retained through hashed manifests and reports;
 - 61 owner-reviewed Warcraft pronunciation entries normalized and approved.
 
-## Phase 2: Voice Workbench — Dwarf proof of concept in progress
+## Phase 2: Full-scope Alpha production database — in progress
 
-Define neutral race/gender voice profiles and build the interface that manages
-their settings, evidence, gates, history, costs, and later audio execution.
-Prove the interaction model with Dwarf Male and Dwarf Female before expanding
-it across the complete matrix.
+The Dwarf proof of concept was rejected on 2026-08-08 because it exposed project
+language instead of a clear content-production workflow. It has been retired.
 
-Current review set:
+The replacement Alpha works across the entire imported source and organizes the
+real production records: dialogue, speakers, spoken-text revisions, baseline and
+unique voices, reference clips, provider attempts, audio candidates, approvals,
+and addon-ready exports.
 
-- 46 draft profiles: narrator plus race IDs 1–22, each with male and female presentation;
-- 33 combinations observed in the pinned display-data export;
-- 11 deliberate fallback combinations and 2 required narrator profiles;
-- neutral, angry, sorrowful, joyful, and proclaiming delivery presets;
-- 230 planned profile/preset previews, all ungenerated;
-- no attached source voices and no authorized paid API calls.
+Exit gate:
 
-The owner approved the Dwarf profile scope on 2026-08-08. The proof of concept
-remains in no-audio mode: it simulates profile and line decisions without an
-ElevenLabs request.
+- accept and version a complete quest and gossip export;
+- leave spoken text empty until explicitly prepared;
+- assign baseline or unique voices at the NPC level;
+- keep delivery at the dialogue level;
+- require separate confirmation for every provider request;
+- approve an exact audio candidate without regeneration;
+- export deterministic addon filenames, hashes, and durations;
+- validate one real record through the existing addon packaging and playback path.
 
 ## Phase 3: Processed Text Tooling — pending
 

@@ -1,0 +1,1308 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import sqlite3
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from mutagen import File as MutagenFile
+
+from tts_cli.consts import GENDER_DICT, RACE_DICT
+from tts_cli.data_sources import REQUIRED_COLUMNS, load_dialogue_csv
+from tts_cli.voice_profiles import load_phase2_review
+
+DELIVERIES = ("neutral", "angry", "sorrowful", "joyful", "proclaiming")
+VOICE_METHODS = (
+    "unselected",
+    "library",
+    "designed",
+    "reference_design",
+    "instant_clone",
+    "external",
+)
+VOICE_STATUSES = ("draft", "candidate", "active", "retired")
+PRODUCTION_STATES = (
+    "needs_text",
+    "needs_voice",
+    "ready_to_generate",
+    "generation_failed",
+    "audio_to_review",
+    "approved",
+)
+MAX_REFERENCE_BYTES = 50 * 1024 * 1024
+
+
+class AlphaError(ValueError):
+    pass
+
+
+def utc_now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def sha256_bytes(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _loads(value: str | None, fallback: Any) -> Any:
+    if not value:
+        return fallback
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return fallback
+
+
+def _audio_duration(path: Path) -> float | None:
+    try:
+        audio = MutagenFile(path)
+        return round(float(audio.info.length), 3) if audio and audio.info else None
+    except Exception:
+        return None
+
+
+def _safe_filename(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-.")
+    return cleaned[:120] or "audio.mp3"
+
+
+class AlphaStore:
+    def __init__(self, database_path: Path, storage_root: Path) -> None:
+        self.database_path = database_path.resolve()
+        self.storage_root = storage_root.resolve()
+
+    def connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.database_path, timeout=30)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        return connection
+
+    def initialize(self) -> None:
+        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.storage_root.mkdir(parents=True, exist_ok=True)
+        with self.connect() as connection:
+            connection.executescript(
+                """
+                PRAGMA journal_mode = WAL;
+                CREATE TABLE IF NOT EXISTS source_snapshots (
+                    snapshot_id TEXT PRIMARY KEY,
+                    source_name TEXT NOT NULL,
+                    source_hash TEXT NOT NULL UNIQUE,
+                    expansion TEXT NOT NULL,
+                    locale TEXT NOT NULL,
+                    row_count INTEGER NOT NULL,
+                    imported_at TEXT NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE TABLE IF NOT EXISTS voices (
+                    voice_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    scope TEXT NOT NULL CHECK(scope IN ('baseline', 'unique')),
+                    profile_id TEXT,
+                    race_id INTEGER NOT NULL,
+                    gender_id INTEGER NOT NULL,
+                    parent_voice_id TEXT REFERENCES voices(voice_id),
+                    npc_speaker_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS voice_versions (
+                    version_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
+                    version_number INTEGER NOT NULL,
+                    description TEXT NOT NULL,
+                    creation_method TEXT NOT NULL,
+                    provider TEXT NOT NULL DEFAULT 'elevenlabs',
+                    provider_voice_id TEXT,
+                    model_id TEXT NOT NULL DEFAULT 'eleven_v3',
+                    settings_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    is_current INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(voice_id, version_number)
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS one_current_voice_version
+                    ON voice_versions(voice_id) WHERE is_current = 1;
+                CREATE TABLE IF NOT EXISTS speakers (
+                    speaker_id TEXT PRIMARY KEY,
+                    entity_type TEXT NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    race_id INTEGER NOT NULL,
+                    gender_id INTEGER NOT NULL,
+                    race_name TEXT NOT NULL,
+                    gender_name TEXT NOT NULL,
+                    voice_id TEXT REFERENCES voices(voice_id),
+                    role TEXT NOT NULL DEFAULT '',
+                    faction TEXT NOT NULL DEFAULT '',
+                    zone TEXT NOT NULL DEFAULT '',
+                    context_summary TEXT NOT NULL DEFAULT '',
+                    importance TEXT NOT NULL DEFAULT 'unassessed',
+                    uniqueness TEXT NOT NULL DEFAULT 'unassessed',
+                    source_snapshot_id TEXT REFERENCES source_snapshots(snapshot_id),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(entity_type, entity_id)
+                );
+                CREATE TABLE IF NOT EXISTS dialogue_entries (
+                    dialogue_id TEXT PRIMARY KEY,
+                    source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+                    expansion TEXT NOT NULL,
+                    locale TEXT NOT NULL,
+                    source_record_id TEXT NOT NULL DEFAULT '',
+                    source TEXT NOT NULL,
+                    quest_id INTEGER,
+                    quest_title TEXT NOT NULL,
+                    speaker_id TEXT NOT NULL REFERENCES speakers(speaker_id),
+                    original_text TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    addon_file_key TEXT NOT NULL,
+                    delivery TEXT NOT NULL DEFAULT 'neutral',
+                    imported_audio_status TEXT NOT NULL DEFAULT 'unknown',
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS dialogue_speaker_idx ON dialogue_entries(speaker_id);
+                CREATE INDEX IF NOT EXISTS dialogue_quest_idx ON dialogue_entries(quest_id);
+                CREATE INDEX IF NOT EXISTS dialogue_source_idx ON dialogue_entries(source);
+                CREATE TABLE IF NOT EXISTS spoken_text_revisions (
+                    revision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dialogue_id TEXT NOT NULL REFERENCES dialogue_entries(dialogue_id) ON DELETE CASCADE,
+                    revision_number INTEGER NOT NULL,
+                    spoken_text TEXT NOT NULL,
+                    processor TEXT NOT NULL,
+                    changes_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    is_current INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(dialogue_id, revision_number)
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS one_current_spoken_revision
+                    ON spoken_text_revisions(dialogue_id) WHERE is_current = 1;
+                CREATE TABLE IF NOT EXISTS reference_clips (
+                    clip_id TEXT PRIMARY KEY,
+                    voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
+                    original_name TEXT NOT NULL,
+                    storage_path TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    duration_seconds REAL,
+                    provenance TEXT NOT NULL,
+                    provider_eligible INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS voice_previews (
+                    preview_id TEXT PRIMARY KEY,
+                    voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
+                    generated_voice_id TEXT NOT NULL,
+                    storage_path TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    duration_seconds REAL,
+                    prompt TEXT NOT NULL,
+                    preview_text TEXT NOT NULL,
+                    model_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'candidate',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS generations (
+                    generation_id TEXT PRIMARY KEY,
+                    dialogue_id TEXT NOT NULL REFERENCES dialogue_entries(dialogue_id),
+                    revision_id INTEGER NOT NULL REFERENCES spoken_text_revisions(revision_id),
+                    voice_id TEXT NOT NULL REFERENCES voices(voice_id),
+                    voice_version_id INTEGER NOT NULL REFERENCES voice_versions(version_id),
+                    provider TEXT NOT NULL,
+                    model_id TEXT NOT NULL,
+                    delivery TEXT NOT NULL,
+                    request_text TEXT NOT NULL,
+                    request_json TEXT NOT NULL,
+                    provider_request_id TEXT,
+                    character_count INTEGER NOT NULL,
+                    subscription_json TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL,
+                    error TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    completed_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS generations_dialogue_idx ON generations(dialogue_id);
+                CREATE TABLE IF NOT EXISTS audio_candidates (
+                    candidate_id TEXT PRIMARY KEY,
+                    generation_id TEXT NOT NULL REFERENCES generations(generation_id),
+                    dialogue_id TEXT NOT NULL REFERENCES dialogue_entries(dialogue_id),
+                    storage_path TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    duration_seconds REAL NOT NULL,
+                    mime_type TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending_review',
+                    created_at TEXT NOT NULL,
+                    reviewed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS production_assets (
+                    dialogue_id TEXT PRIMARY KEY REFERENCES dialogue_entries(dialogue_id),
+                    candidate_id TEXT NOT NULL REFERENCES audio_candidates(candidate_id),
+                    addon_filename TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    duration_seconds REAL NOT NULL,
+                    approved_at TEXT NOT NULL
+                );
+                """
+            )
+            self._ensure_columns(connection)
+            self._seed_baseline_voices(connection)
+
+    @staticmethod
+    def _ensure_columns(connection: sqlite3.Connection) -> None:
+        """Apply additive migrations to Alpha databases created by earlier builds."""
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(dialogue_entries)")}
+        if "source_record_id" not in columns:
+            connection.execute(
+                "ALTER TABLE dialogue_entries ADD COLUMN source_record_id TEXT NOT NULL DEFAULT ''"
+            )
+        if "metadata_json" not in columns:
+            connection.execute(
+                "ALTER TABLE dialogue_entries ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'"
+            )
+
+    def _seed_baseline_voices(self, connection: sqlite3.Connection) -> None:
+        review = load_phase2_review()
+        now = utc_now()
+        default_settings = {
+            "stability": 0.5,
+            "similarity_boost": 0.75,
+            "style": 0,
+            "use_speaker_boost": True,
+            "speed": 1,
+        }
+        for profile in review["profiles"]:
+            voice_id = f"baseline--{profile['profile_id']}"
+            description = " ".join(
+                part.strip()
+                for part in (
+                    profile["identity"],
+                    profile["accent_or_cadence"],
+                    profile["timbre"],
+                    profile["pacing"],
+                    profile["gender_guidance"],
+                    profile["guardrails"],
+                )
+                if part.strip()
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO voices(voice_id, name, scope, profile_id, race_id, "
+                "gender_id, created_at, updated_at) VALUES (?, ?, 'baseline', ?, ?, ?, ?, ?)",
+                (
+                    voice_id,
+                    f"{profile['race_name']} · {profile['gender_name']}",
+                    profile["profile_id"],
+                    profile["race_id"],
+                    profile["gender_id"],
+                    now,
+                    now,
+                ),
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO voice_versions(voice_id, version_number, description, "
+                "creation_method, settings_json, status, created_at) VALUES (?, 1, ?, "
+                "'unselected', ?, 'draft', ?)",
+                (voice_id, description, _json(default_settings), now),
+            )
+
+    @staticmethod
+    def _dialogue_id(row: dict[str, Any], expansion: str, locale: str) -> str:
+        quest = str(row["quest"]).strip()
+        identity = [expansion, locale, row["type"], str(row["id"]), row["source"]]
+        source_record_id = next(
+            (
+                str(row.get(field, "")).strip()
+                for field in ("source_record_id", "broadcast_text_id", "record_id")
+                if str(row.get(field, "")).strip() not in {"", "0"}
+            ),
+            "",
+        )
+        if source_record_id:
+            identity.extend(["source-record", source_record_id])
+        elif quest:
+            identity.extend(["quest", quest])
+        else:
+            identity.extend(["gossip", hashlib.sha256(row["original_text"].encode()).hexdigest()])
+        return hashlib.sha256("|".join(identity).encode()).hexdigest()[:24]
+
+    @staticmethod
+    def _addon_key(row: dict[str, Any]) -> str:
+        quest = str(row["quest"]).strip()
+        if quest:
+            return f"{int(float(quest))}-{row['source']}"
+        race = RACE_DICT.get(int(row["DisplayRaceID"]), "unknown")
+        gender = GENDER_DICT.get(int(row["DisplaySexID"]), "unknown")
+        payload = f"{row['original_text']}{race}{gender}"
+        return hashlib.md5(payload.encode()).hexdigest()  # noqa: S324 - addon compatibility key
+
+    def import_csv(
+        self,
+        path: Path,
+        *,
+        source_name: str = "dialogue.csv",
+        expansion: str = "3.3.5",
+        locale: str = "enUS",
+    ) -> dict[str, Any]:
+        dataframe = load_dialogue_csv(path)
+        content_hash = sha256_bytes(path.read_bytes())
+        source_hash = sha256_bytes(f"{expansion}|{locale}|{content_hash}".encode())
+        snapshot_id = source_hash[:24]
+        now = utc_now()
+        imported_ids: set[str] = set()
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE source_snapshots SET is_active=0 WHERE expansion=? AND locale=?",
+                (expansion, locale),
+            )
+            connection.execute(
+                "UPDATE dialogue_entries SET active=0 WHERE expansion=? AND locale=?",
+                (expansion, locale),
+            )
+            connection.execute(
+                "INSERT INTO source_snapshots(snapshot_id, source_name, source_hash, expansion, "
+                "locale, row_count, imported_at, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1) "
+                "ON CONFLICT(source_hash) DO UPDATE SET source_name=excluded.source_name, "
+                "row_count=excluded.row_count, imported_at=excluded.imported_at, is_active=1",
+                (
+                    snapshot_id,
+                    source_name,
+                    source_hash,
+                    expansion,
+                    locale,
+                    len(dataframe),
+                    now,
+                ),
+            )
+            for row in dataframe.to_dict(orient="records"):
+                row = {
+                    key: value.item() if hasattr(value, "item") else value
+                    for key, value in row.items()
+                }
+                entity_type = str(row["type"])
+                entity_id = int(row["id"])
+                speaker_id = f"{entity_type}-{entity_id}"
+                race_id = int(row["DisplayRaceID"])
+                gender_id = int(row["DisplaySexID"])
+                race_name = RACE_DICT.get(race_id, f"race-{race_id}")
+                gender_name = GENDER_DICT.get(gender_id, f"gender-{gender_id}")
+                profile_id = f"baseline--{race_name}-{gender_name}"
+                baseline_exists = connection.execute(
+                    "SELECT 1 FROM voices WHERE voice_id = ?", (profile_id,)
+                ).fetchone()
+                connection.execute(
+                    "INSERT INTO speakers(speaker_id, entity_type, entity_id, name, race_id, "
+                    "gender_id, race_name, gender_name, voice_id, source_snapshot_id, created_at, "
+                    "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(speaker_id) DO UPDATE SET name=excluded.name, race_id=excluded.race_id, "
+                    "gender_id=excluded.gender_id, race_name=excluded.race_name, "
+                    "gender_name=excluded.gender_name, source_snapshot_id=excluded.source_snapshot_id, "
+                    "updated_at=excluded.updated_at",
+                    (
+                        speaker_id,
+                        entity_type,
+                        entity_id,
+                        str(row["name"]),
+                        race_id,
+                        gender_id,
+                        race_name,
+                        gender_name,
+                        profile_id if baseline_exists else None,
+                        snapshot_id,
+                        now,
+                        now,
+                    ),
+                )
+                if baseline_exists:
+                    connection.execute(
+                        "UPDATE speakers SET voice_id = COALESCE(voice_id, ?) WHERE speaker_id = ?",
+                        (profile_id, speaker_id),
+                    )
+                dialogue_id = self._dialogue_id(row, expansion, locale)
+                imported_ids.add(dialogue_id)
+                quest_raw = str(row["quest"]).strip()
+                quest_id = int(float(quest_raw)) if quest_raw else None
+                source_record_id = next(
+                    (
+                        str(row.get(field, "")).strip()
+                        for field in ("source_record_id", "broadcast_text_id", "record_id")
+                        if str(row.get(field, "")).strip() not in {"", "0"}
+                    ),
+                    "",
+                )
+                metadata = {
+                    key: value
+                    for key, value in row.items()
+                    if key not in REQUIRED_COLUMNS and str(value).strip()
+                }
+                connection.execute(
+                    "INSERT INTO dialogue_entries(dialogue_id, source_snapshot_id, expansion, "
+                    "locale, source_record_id, source, quest_id, quest_title, speaker_id, original_text, "
+                    "metadata_json, addon_file_key, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(dialogue_id) DO UPDATE SET source_snapshot_id=excluded.source_snapshot_id, "
+                    "quest_title=excluded.quest_title, speaker_id=excluded.speaker_id, "
+                    "original_text=excluded.original_text, source_record_id=excluded.source_record_id, "
+                    "metadata_json=excluded.metadata_json, addon_file_key=excluded.addon_file_key, "
+                    "active=1, updated_at=excluded.updated_at",
+                    (
+                        dialogue_id,
+                        snapshot_id,
+                        expansion,
+                        locale,
+                        source_record_id,
+                        str(row["source"]),
+                        quest_id,
+                        str(row["quest_title"]),
+                        speaker_id,
+                        str(row["original_text"]),
+                        _json(metadata),
+                        self._addon_key(row),
+                        now,
+                        now,
+                    ),
+                )
+        return {
+            "snapshot_id": snapshot_id,
+            "source_hash": source_hash,
+            "rows_received": len(dataframe),
+            "dialogue_records": len(imported_ids),
+        }
+
+    @staticmethod
+    def _status_expression() -> str:
+        return """
+            CASE
+                WHEN pa.dialogue_id IS NOT NULL THEN 'approved'
+                WHEN EXISTS (
+                    SELECT 1 FROM audio_candidates ac
+                    WHERE ac.dialogue_id = d.dialogue_id AND ac.status = 'pending_review'
+                ) THEN 'audio_to_review'
+                WHEN EXISTS (
+                    SELECT 1 FROM generations gx
+                    WHERE gx.dialogue_id = d.dialogue_id AND gx.status = 'failed'
+                    AND gx.created_at = (SELECT MAX(created_at) FROM generations WHERE dialogue_id=d.dialogue_id)
+                ) THEN 'generation_failed'
+                WHEN tr.revision_id IS NULL THEN 'needs_text'
+                WHEN s.voice_id IS NULL OR vv.provider_voice_id IS NULL OR vv.provider_voice_id = ''
+                    THEN 'needs_voice'
+                ELSE 'ready_to_generate'
+            END
+        """
+
+    def _dialogue_select(self) -> str:
+        return f"""
+            SELECT d.*, s.name AS speaker_name, s.entity_type, s.entity_id, s.race_id,
+                s.gender_id, s.race_name, s.gender_name, s.voice_id,
+                v.name AS voice_name, v.scope AS voice_scope,
+                vv.version_id AS voice_version_id, vv.version_number AS voice_version_number,
+                vv.provider_voice_id, vv.model_id, vv.description AS voice_description,
+                vv.creation_method, vv.settings_json,
+                tr.revision_id, tr.revision_number, tr.spoken_text, tr.changes_json,
+                tr.warnings_json, pa.candidate_id AS production_candidate_id,
+                pa.addon_filename, pa.sha256 AS production_sha256,
+                pa.duration_seconds AS production_duration,
+                {self._status_expression()} AS production_state
+            FROM dialogue_entries d
+            JOIN speakers s ON s.speaker_id = d.speaker_id
+            LEFT JOIN voices v ON v.voice_id = s.voice_id
+            LEFT JOIN voice_versions vv ON vv.voice_id = v.voice_id AND vv.is_current = 1
+            LEFT JOIN spoken_text_revisions tr ON tr.dialogue_id = d.dialogue_id AND tr.is_current = 1
+            LEFT JOIN production_assets pa ON pa.dialogue_id = d.dialogue_id
+        """
+
+    def dashboard(self) -> dict[str, Any]:
+        with self.connect() as connection:
+            snapshots = connection.execute(
+                "SELECT * FROM source_snapshots WHERE is_active=1 "
+                "ORDER BY imported_at DESC, expansion, locale"
+            ).fetchall()
+            counts = {
+                "dialogue": connection.execute(
+                    "SELECT COUNT(*) FROM dialogue_entries WHERE active=1"
+                ).fetchone()[0],
+                "speakers": connection.execute("SELECT COUNT(*) FROM speakers").fetchone()[0],
+                "baseline_voices": connection.execute(
+                    "SELECT COUNT(*) FROM voices WHERE scope='baseline'"
+                ).fetchone()[0],
+                "unique_voices": connection.execute(
+                    "SELECT COUNT(*) FROM voices WHERE scope='unique'"
+                ).fetchone()[0],
+            }
+            rows = connection.execute(
+                f"SELECT production_state, COUNT(*) AS total FROM ({self._dialogue_select()} "
+                "WHERE d.active=1) GROUP BY production_state ORDER BY production_state"
+            ).fetchall()
+            source_rows = connection.execute(
+                "SELECT source, COUNT(*) AS total FROM dialogue_entries WHERE active=1 "
+                "GROUP BY source ORDER BY source"
+            ).fetchall()
+        return {
+            "snapshot": dict(snapshots[0]) if snapshots else None,
+            "snapshots": [dict(snapshot) for snapshot in snapshots],
+            "counts": counts,
+            "states": {row["production_state"]: row["total"] for row in rows},
+            "sources": {row["source"]: row["total"] for row in source_rows},
+        }
+
+    def list_dialogue(
+        self,
+        *,
+        query: str = "",
+        state: str = "",
+        source: str = "",
+        expansion: str = "",
+        race_id: str = "",
+        gender_id: str = "",
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict[str, Any]:
+        conditions = ["active = 1"]
+        parameters: list[Any] = []
+        if query.strip():
+            conditions.append(
+                "(speaker_name LIKE ? OR quest_title LIKE ? OR original_text LIKE ? OR "
+                "CAST(quest_id AS TEXT) = ?)"
+            )
+            term = f"%{query.strip()}%"
+            parameters.extend([term, term, term, query.strip()])
+        if state:
+            if state not in PRODUCTION_STATES:
+                raise AlphaError("Unknown production state filter.")
+            conditions.append("production_state = ?")
+            parameters.append(state)
+        if source:
+            conditions.append("source = ?")
+            parameters.append(source)
+        if expansion:
+            conditions.append("expansion = ?")
+            parameters.append(expansion)
+        if race_id:
+            conditions.append("race_id = ?")
+            parameters.append(int(race_id))
+        if gender_id:
+            conditions.append("gender_id = ?")
+            parameters.append(int(gender_id))
+        where = " AND ".join(conditions)
+        base = self._dialogue_select()
+        with self.connect() as connection:
+            total = connection.execute(
+                f"SELECT COUNT(*) FROM ({base}) WHERE {where}", parameters
+            ).fetchone()[0]
+            rows = connection.execute(
+                f"SELECT * FROM ({base}) WHERE {where} ORDER BY speaker_name, quest_id, source "
+                "LIMIT ? OFFSET ?",
+                [*parameters, page_size, max(page - 1, 0) * page_size],
+            ).fetchall()
+            races = connection.execute(
+                "SELECT DISTINCT race_id, race_name FROM speakers ORDER BY race_name"
+            ).fetchall()
+        return {
+            "rows": [dict(row) for row in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "page_count": max(1, (total + page_size - 1) // page_size),
+            "races": [dict(row) for row in races],
+        }
+
+    def get_dialogue(self, dialogue_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                f"{self._dialogue_select()} WHERE d.dialogue_id = ?", (dialogue_id,)
+            ).fetchone()
+            if not row:
+                raise AlphaError("Dialogue record was not found.")
+            revisions = connection.execute(
+                "SELECT * FROM spoken_text_revisions WHERE dialogue_id=? "
+                "ORDER BY revision_number DESC",
+                (dialogue_id,),
+            ).fetchall()
+            candidates = connection.execute(
+                "SELECT ac.*, g.delivery, g.model_id, g.character_count, g.provider_request_id, "
+                "g.created_at AS generated_at FROM audio_candidates ac "
+                "JOIN generations g ON g.generation_id=ac.generation_id "
+                "WHERE ac.dialogue_id=? ORDER BY ac.created_at DESC",
+                (dialogue_id,),
+            ).fetchall()
+            generations = connection.execute(
+                "SELECT * FROM generations WHERE dialogue_id=? ORDER BY created_at DESC LIMIT 20",
+                (dialogue_id,),
+            ).fetchall()
+            voices = connection.execute(
+                "SELECT v.voice_id, v.name, v.scope, vv.provider_voice_id, vv.status, "
+                "vv.version_number FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id "
+                "AND vv.is_current=1 ORDER BY v.scope, v.name"
+            ).fetchall()
+        payload = dict(row)
+        payload["metadata"] = _loads(payload.get("metadata_json"), {})
+        payload["changes"] = _loads(payload.get("changes_json"), [])
+        payload["warnings"] = _loads(payload.get("warnings_json"), [])
+        payload["voice_settings"] = _loads(payload.get("settings_json"), {})
+        payload["revisions"] = [dict(item) for item in revisions]
+        payload["candidates"] = [dict(item) for item in candidates]
+        payload["generations"] = []
+        for item in generations:
+            generation = dict(item)
+            generation["subscription"] = _loads(generation.get("subscription_json"), {})
+            payload["generations"].append(generation)
+        payload["voices"] = [dict(item) for item in voices]
+        payload["generation_text"] = self.generation_text(payload)
+        return payload
+
+    @staticmethod
+    def prepare_text(original_text: str) -> tuple[str, list[str], list[str]]:
+        text = original_text
+        changes: list[str] = []
+        warnings: list[str] = []
+        substitutions = {
+            "$N": "Adventurer",
+            "$n": "adventurer",
+            "$C": "Adventurer",
+            "$c": "adventurer",
+            "$R": "Traveler",
+            "$r": "traveler",
+            "$B": "\n\n",
+            "$b": "\n\n",
+        }
+        for source, replacement in substitutions.items():
+            if source in text:
+                text = text.replace(source, replacement)
+                changes.append(f"Expanded {source} as {replacement!r}.")
+        markup = re.findall(r"<[^>]+>", text)
+        if markup:
+            text = re.sub(r"<[^>]+>", " ", text)
+            changes.append("Removed non-spoken markup.")
+        if re.search(r"\$[Gg][^;]*;", text):
+            warnings.append("Player-gender alternatives still require a deliberate spoken version.")
+        unresolved = sorted(set(re.findall(r"\$[A-Za-z]+", text)))
+        if unresolved:
+            warnings.append(f"Unresolved game tokens remain: {', '.join(unresolved)}")
+        paragraphs = [re.sub(r"\s+", " ", part).strip() for part in re.split(r"\n+", text)]
+        text = "\n\n".join(part for part in paragraphs if part)
+        if text != original_text and not changes:
+            changes.append("Normalized whitespace for speech.")
+        return text, changes, warnings
+
+    def _insert_revision(
+        self,
+        connection: sqlite3.Connection,
+        dialogue_id: str,
+        spoken_text: str,
+        processor: str,
+        changes: list[str],
+        warnings: list[str],
+    ) -> int:
+        current = connection.execute(
+            "SELECT COALESCE(MAX(revision_number), 0) FROM spoken_text_revisions "
+            "WHERE dialogue_id=?",
+            (dialogue_id,),
+        ).fetchone()[0]
+        connection.execute(
+            "UPDATE spoken_text_revisions SET is_current=0 WHERE dialogue_id=?",
+            (dialogue_id,),
+        )
+        cursor = connection.execute(
+            "INSERT INTO spoken_text_revisions(dialogue_id, revision_number, spoken_text, "
+            "processor, changes_json, warnings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                dialogue_id,
+                current + 1,
+                spoken_text,
+                processor,
+                _json(changes),
+                _json(warnings),
+                utc_now(),
+            ),
+        )
+        return int(cursor.lastrowid)
+
+    def prepare_spoken_text(self, dialogue_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT original_text FROM dialogue_entries WHERE dialogue_id=?", (dialogue_id,)
+            ).fetchone()
+            if not row:
+                raise AlphaError("Dialogue record was not found.")
+            existing = connection.execute(
+                "SELECT revision_id FROM spoken_text_revisions WHERE dialogue_id=? AND is_current=1",
+                (dialogue_id,),
+            ).fetchone()
+            if existing:
+                raise AlphaError("Spoken text has already been prepared; save a revision instead.")
+            text, changes, warnings = self.prepare_text(row["original_text"])
+            self._insert_revision(
+                connection, dialogue_id, text, "deterministic-cleaner-v1", changes, warnings
+            )
+        return self.get_dialogue(dialogue_id)
+
+    def save_spoken_text(self, dialogue_id: str, spoken_text: str) -> dict[str, Any]:
+        text = spoken_text.strip()
+        if not text or len(text) > 20000:
+            raise AlphaError("Spoken text must contain 1–20,000 characters.")
+        warnings = []
+        unresolved = sorted(set(re.findall(r"\$[A-Za-z]+|<[^>]+>", text)))
+        if unresolved:
+            warnings.append(f"Unresolved game tokens or markup remain: {', '.join(unresolved)}")
+        with self.connect() as connection:
+            if not connection.execute(
+                "SELECT 1 FROM dialogue_entries WHERE dialogue_id=?", (dialogue_id,)
+            ).fetchone():
+                raise AlphaError("Dialogue record was not found.")
+            self._insert_revision(
+                connection,
+                dialogue_id,
+                text,
+                "manual",
+                ["Saved a manually reviewed spoken-text revision."],
+                warnings,
+            )
+        return self.get_dialogue(dialogue_id)
+
+    def set_delivery(self, dialogue_id: str, delivery: str) -> None:
+        if delivery not in DELIVERIES:
+            raise AlphaError("Unknown delivery selection.")
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "UPDATE dialogue_entries SET delivery=?, updated_at=? WHERE dialogue_id=?",
+                (delivery, utc_now(), dialogue_id),
+            )
+            if not cursor.rowcount:
+                raise AlphaError("Dialogue record was not found.")
+
+    def update_speaker(self, speaker_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        importance = str(payload.get("importance", "unassessed"))
+        uniqueness = str(payload.get("uniqueness", "unassessed"))
+        if importance not in {"unassessed", "minor", "supporting", "major"}:
+            raise AlphaError("Unknown story importance.")
+        if uniqueness not in {"unassessed", "baseline", "unique_candidate", "unique"}:
+            raise AlphaError("Unknown uniqueness selection.")
+        voice_id = str(payload.get("voice_id", "")).strip() or None
+        with self.connect() as connection:
+            if (
+                voice_id
+                and not connection.execute(
+                    "SELECT 1 FROM voices WHERE voice_id=?", (voice_id,)
+                ).fetchone()
+            ):
+                raise AlphaError("Selected voice was not found.")
+            cursor = connection.execute(
+                "UPDATE speakers SET role=?, faction=?, zone=?, context_summary=?, importance=?, "
+                "uniqueness=?, voice_id=?, updated_at=? WHERE speaker_id=?",
+                (
+                    str(payload.get("role", ""))[:200].strip(),
+                    str(payload.get("faction", ""))[:200].strip(),
+                    str(payload.get("zone", ""))[:200].strip(),
+                    str(payload.get("context_summary", ""))[:4000].strip(),
+                    importance,
+                    uniqueness,
+                    voice_id,
+                    utc_now(),
+                    speaker_id,
+                ),
+            )
+            if not cursor.rowcount:
+                raise AlphaError("Speaker was not found.")
+        return self.get_speaker(speaker_id)
+
+    def get_speaker(self, speaker_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            speaker = connection.execute(
+                "SELECT s.*, v.name AS voice_name, v.scope AS voice_scope, "
+                "vv.provider_voice_id, vv.status AS voice_status FROM speakers s "
+                "LEFT JOIN voices v ON v.voice_id=s.voice_id "
+                "LEFT JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
+                "WHERE s.speaker_id=?",
+                (speaker_id,),
+            ).fetchone()
+            if not speaker:
+                raise AlphaError("Speaker was not found.")
+            lines = connection.execute(
+                f"SELECT * FROM ({self._dialogue_select()}) WHERE speaker_id=? AND active=1 "
+                "ORDER BY quest_id, source",
+                (speaker_id,),
+            ).fetchall()
+            voices = connection.execute(
+                "SELECT v.voice_id, v.name, v.scope, vv.provider_voice_id, vv.status "
+                "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
+                "ORDER BY v.scope, v.name"
+            ).fetchall()
+        return {
+            "speaker": dict(speaker),
+            "dialogue": [dict(row) for row in lines],
+            "voices": [dict(row) for row in voices],
+        }
+
+    def create_unique_voice(self, speaker_id: str) -> dict[str, Any]:
+        now = utc_now()
+        with self.connect() as connection:
+            speaker = connection.execute(
+                "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
+            ).fetchone()
+            if not speaker:
+                raise AlphaError("Speaker was not found.")
+            existing = connection.execute(
+                "SELECT voice_id FROM voices WHERE npc_speaker_id=?", (speaker_id,)
+            ).fetchone()
+            if existing:
+                connection.execute(
+                    "UPDATE speakers SET voice_id=?, uniqueness='unique', updated_at=? "
+                    "WHERE speaker_id=?",
+                    (existing["voice_id"], now, speaker_id),
+                )
+                return self.get_voice(existing["voice_id"])
+            voice_id = f"unique--{speaker_id}"
+            parent_voice_id = speaker["voice_id"]
+            parent = connection.execute(
+                "SELECT description, settings_json FROM voice_versions WHERE voice_id=? AND is_current=1",
+                (parent_voice_id,),
+            ).fetchone()
+            description = f"Unique voice for {speaker['name']}. " + (
+                parent["description"] if parent else "Context and direction need review."
+            )
+            settings = parent["settings_json"] if parent else _json({"stability": 0.5})
+            connection.execute(
+                "INSERT INTO voices(voice_id, name, scope, race_id, gender_id, parent_voice_id, "
+                "npc_speaker_id, created_at, updated_at) VALUES (?, ?, 'unique', ?, ?, ?, ?, ?, ?)",
+                (
+                    voice_id,
+                    speaker["name"],
+                    speaker["race_id"],
+                    speaker["gender_id"],
+                    parent_voice_id,
+                    speaker_id,
+                    now,
+                    now,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO voice_versions(voice_id, version_number, description, creation_method, "
+                "settings_json, status, created_at) VALUES (?, 1, ?, 'unselected', ?, 'draft', ?)",
+                (voice_id, description, settings, now),
+            )
+            connection.execute(
+                "UPDATE speakers SET voice_id=?, uniqueness='unique', updated_at=? WHERE speaker_id=?",
+                (voice_id, now, speaker_id),
+            )
+        return self.get_voice(voice_id)
+
+    def list_voices(self, scope: str = "") -> list[dict[str, Any]]:
+        parameters: list[Any] = []
+        where = ""
+        if scope:
+            if scope not in {"baseline", "unique"}:
+                raise AlphaError("Unknown voice scope.")
+            where = "WHERE v.scope=?"
+            parameters.append(scope)
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT v.*, vv.version_id, vv.version_number, vv.creation_method, vv.provider, "
+                "vv.provider_voice_id, vv.model_id, vv.status, "
+                "(SELECT COUNT(*) FROM speakers s WHERE s.voice_id=v.voice_id) AS speaker_count, "
+                "(SELECT COUNT(*) FROM reference_clips rc WHERE rc.voice_id=v.voice_id) AS clip_count "
+                "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
+                f"{where} ORDER BY v.scope, v.name",
+                parameters,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_voice(self, voice_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            voice = connection.execute(
+                "SELECT v.*, vv.version_id, vv.version_number, vv.description, vv.creation_method, "
+                "vv.provider, vv.provider_voice_id, vv.model_id, vv.settings_json, vv.status "
+                "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
+                "WHERE v.voice_id=?",
+                (voice_id,),
+            ).fetchone()
+            if not voice:
+                raise AlphaError("Voice was not found.")
+            versions = connection.execute(
+                "SELECT * FROM voice_versions WHERE voice_id=? ORDER BY version_number DESC",
+                (voice_id,),
+            ).fetchall()
+            clips = connection.execute(
+                "SELECT * FROM reference_clips WHERE voice_id=? ORDER BY created_at DESC",
+                (voice_id,),
+            ).fetchall()
+            previews = connection.execute(
+                "SELECT * FROM voice_previews WHERE voice_id=? ORDER BY created_at DESC",
+                (voice_id,),
+            ).fetchall()
+            speakers = connection.execute(
+                "SELECT speaker_id, entity_type, entity_id, name FROM speakers WHERE voice_id=? "
+                "ORDER BY name",
+                (voice_id,),
+            ).fetchall()
+        payload = dict(voice)
+        payload["settings"] = _loads(payload["settings_json"], {})
+        payload["versions"] = [dict(row) for row in versions]
+        payload["clips"] = [dict(row) for row in clips]
+        payload["previews"] = [dict(row) for row in previews]
+        payload["speakers"] = [dict(row) for row in speakers]
+        return payload
+
+    def update_voice(self, voice_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        current = self.get_voice(voice_id)
+        method = str(payload.get("creation_method", current["creation_method"]))
+        status = str(payload.get("status", current["status"]))
+        if method not in VOICE_METHODS:
+            raise AlphaError("Unknown voice creation method.")
+        if status not in VOICE_STATUSES:
+            raise AlphaError("Unknown voice status.")
+        description = str(payload.get("description", current["description"])).strip()
+        if not 20 <= len(description) <= 5000:
+            raise AlphaError("Voice description must contain 20–5,000 characters.")
+        model_id = str(payload.get("model_id", current["model_id"])).strip() or "eleven_v3"
+        provider_voice_id = str(
+            payload.get("provider_voice_id", current["provider_voice_id"] or "")
+        ).strip()
+        settings = current["settings"].copy()
+        for key in ("stability", "similarity_boost", "style", "speed"):
+            if key in payload:
+                settings[key] = float(payload[key])
+        settings["use_speaker_boost"] = bool(
+            payload.get("use_speaker_boost", settings.get("use_speaker_boost", True))
+        )
+        now = utc_now()
+        with self.connect() as connection:
+            next_version = connection.execute(
+                "SELECT COALESCE(MAX(version_number), 0)+1 FROM voice_versions WHERE voice_id=?",
+                (voice_id,),
+            ).fetchone()[0]
+            connection.execute(
+                "UPDATE voice_versions SET is_current=0 WHERE voice_id=?", (voice_id,)
+            )
+            connection.execute(
+                "INSERT INTO voice_versions(voice_id, version_number, description, creation_method, "
+                "provider, provider_voice_id, model_id, settings_json, status, created_at) "
+                "VALUES (?, ?, ?, ?, 'elevenlabs', ?, ?, ?, ?, ?)",
+                (
+                    voice_id,
+                    next_version,
+                    description,
+                    method,
+                    provider_voice_id or None,
+                    model_id,
+                    _json(settings),
+                    status,
+                    now,
+                ),
+            )
+            connection.execute("UPDATE voices SET updated_at=? WHERE voice_id=?", (now, voice_id))
+        return self.get_voice(voice_id)
+
+    def save_reference_clip(
+        self,
+        voice_id: str,
+        *,
+        original_name: str,
+        content: bytes,
+        provenance: str,
+        provider_eligible: bool,
+    ) -> dict[str, Any]:
+        if not content or len(content) > MAX_REFERENCE_BYTES:
+            raise AlphaError("Reference audio must contain 1 byte–50 MB.")
+        self.get_voice(voice_id)
+        clip_id = uuid.uuid4().hex
+        folder = self.storage_root / "reference-clips" / voice_id
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{clip_id}-{_safe_filename(original_name)}"
+        path.write_bytes(content)
+        duration = _audio_duration(path)
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO reference_clips VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    clip_id,
+                    voice_id,
+                    original_name[:255],
+                    str(path),
+                    sha256_bytes(content),
+                    duration,
+                    provenance[:2000].strip(),
+                    int(provider_eligible),
+                    utc_now(),
+                ),
+            )
+        return self.get_voice(voice_id)
+
+    def record_voice_previews(
+        self,
+        voice_id: str,
+        *,
+        prompt: str,
+        preview_text: str,
+        model_id: str,
+        previews: list[dict[str, Any]],
+    ) -> list[str]:
+        self.get_voice(voice_id)
+        folder = self.storage_root / "voice-previews" / voice_id
+        folder.mkdir(parents=True, exist_ok=True)
+        preview_ids = []
+        now = utc_now()
+        with self.connect() as connection:
+            for preview in previews:
+                content = preview["content"]
+                preview_id = uuid.uuid4().hex
+                path = folder / f"{preview_id}.mp3"
+                path.write_bytes(content)
+                connection.execute(
+                    "INSERT INTO voice_previews VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?)",
+                    (
+                        preview_id,
+                        voice_id,
+                        preview["generated_voice_id"],
+                        str(path),
+                        sha256_bytes(content),
+                        _audio_duration(path),
+                        prompt,
+                        preview_text,
+                        model_id,
+                        now,
+                    ),
+                )
+                preview_ids.append(preview_id)
+        return preview_ids
+
+    def get_reference_clip(self, clip_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM reference_clips WHERE clip_id=?", (clip_id,)
+            ).fetchone()
+        if not row:
+            raise AlphaError("Reference clip was not found.")
+        payload = dict(row)
+        path = Path(payload["storage_path"]).resolve()
+        if self.storage_root not in path.parents or not path.is_file():
+            raise AlphaError("Reference clip file is unavailable.")
+        payload["path"] = path
+        return payload
+
+    def get_voice_preview(self, preview_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT vp.*, v.name AS voice_name, vv.description FROM voice_previews vp "
+                "JOIN voices v ON v.voice_id=vp.voice_id "
+                "JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
+                "WHERE vp.preview_id=?",
+                (preview_id,),
+            ).fetchone()
+        if not row:
+            raise AlphaError("Voice preview was not found.")
+        return dict(row)
+
+    def activate_voice_preview(self, preview_id: str, provider_voice_id: str) -> dict[str, Any]:
+        preview = self.get_voice_preview(preview_id)
+        updated = self.update_voice(
+            preview["voice_id"],
+            {
+                "description": preview["description"],
+                "creation_method": "designed",
+                "provider_voice_id": provider_voice_id,
+                "model_id": "eleven_v3",
+                "status": "active",
+            },
+        )
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE voice_previews SET status='selected' WHERE preview_id=?", (preview_id,)
+            )
+            connection.execute(
+                "UPDATE voice_previews SET status='rejected' WHERE voice_id=? AND preview_id<>? "
+                "AND status='candidate'",
+                (preview["voice_id"], preview_id),
+            )
+        return updated
+
+    @staticmethod
+    def generation_text(dialogue: dict[str, Any]) -> str:
+        text = str(dialogue.get("spoken_text") or "")
+        delivery = str(dialogue.get("delivery") or "neutral")
+        return text if delivery == "neutral" else f"[{delivery}] {text}"
+
+    def begin_generation(self, dialogue_id: str) -> dict[str, Any]:
+        dialogue = self.get_dialogue(dialogue_id)
+        if not dialogue.get("revision_id"):
+            raise AlphaError("Prepare and review spoken text before generating audio.")
+        if dialogue.get("warnings"):
+            raise AlphaError("Resolve the spoken-text warnings before generating audio.")
+        if not dialogue.get("voice_id") or not dialogue.get("provider_voice_id"):
+            raise AlphaError("Assign an active provider voice before generating audio.")
+        request_text = self.generation_text(dialogue)
+        request_payload = {
+            "text": request_text,
+            "voice_id": dialogue["provider_voice_id"],
+            "model_id": dialogue["model_id"],
+            "voice_settings": dialogue["voice_settings"],
+        }
+        generation_id = uuid.uuid4().hex
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO generations(generation_id, dialogue_id, revision_id, voice_id, "
+                "voice_version_id, provider, model_id, delivery, request_text, request_json, "
+                "character_count, status, created_at) VALUES (?, ?, ?, ?, ?, 'elevenlabs', ?, ?, ?, ?, ?, "
+                "'requested', ?)",
+                (
+                    generation_id,
+                    dialogue_id,
+                    dialogue["revision_id"],
+                    dialogue["voice_id"],
+                    dialogue["voice_version_id"],
+                    dialogue["model_id"],
+                    dialogue["delivery"],
+                    request_text,
+                    _json(request_payload),
+                    len(request_text),
+                    utc_now(),
+                ),
+            )
+        return {"generation_id": generation_id, **request_payload}
+
+    def fail_generation(self, generation_id: str, error: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE generations SET status='failed', error=?, completed_at=? WHERE generation_id=?",
+                (error[:2000], utc_now(), generation_id),
+            )
+
+    def complete_generation(
+        self,
+        generation_id: str,
+        *,
+        content: bytes,
+        mime_type: str,
+        provider_request_id: str | None,
+        subscription: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        with self.connect() as connection:
+            generation = connection.execute(
+                "SELECT * FROM generations WHERE generation_id=?", (generation_id,)
+            ).fetchone()
+            if not generation:
+                raise AlphaError("Generation record was not found.")
+        candidate_id = uuid.uuid4().hex
+        folder = self.storage_root / "audio" / "candidates" / generation["dialogue_id"]
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{candidate_id}.mp3"
+        path.write_bytes(content)
+        duration = _audio_duration(path)
+        if duration is None or duration <= 0:
+            path.unlink(missing_ok=True)
+            raise AlphaError("ElevenLabs returned audio whose duration could not be validated.")
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE generations SET status='complete', provider_request_id=?, "
+                "subscription_json=?, completed_at=? WHERE generation_id=?",
+                (provider_request_id, _json(subscription or {}), now, generation_id),
+            )
+            connection.execute(
+                "INSERT INTO audio_candidates VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, NULL)",
+                (
+                    candidate_id,
+                    generation_id,
+                    generation["dialogue_id"],
+                    str(path),
+                    sha256_bytes(content),
+                    duration,
+                    mime_type,
+                    now,
+                ),
+            )
+        return {"candidate_id": candidate_id, "duration_seconds": duration}
+
+    def candidate_path(self, candidate_id: str) -> Path:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT storage_path FROM audio_candidates WHERE candidate_id=?", (candidate_id,)
+            ).fetchone()
+        if not row:
+            raise AlphaError("Audio candidate was not found.")
+        path = Path(row["storage_path"]).resolve()
+        if self.storage_root not in path.parents or not path.is_file():
+            raise AlphaError("Audio candidate file is unavailable.")
+        return path
+
+    def preview_path(self, preview_id: str) -> Path:
+        preview = self.get_voice_preview(preview_id)
+        path = Path(preview["storage_path"]).resolve()
+        if self.storage_root not in path.parents or not path.is_file():
+            raise AlphaError("Voice preview file is unavailable.")
+        return path
+
+    def approve_candidate(self, candidate_id: str) -> dict[str, Any]:
+        now = utc_now()
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT ac.*, d.addon_file_key, d.source FROM audio_candidates ac "
+                "JOIN dialogue_entries d ON d.dialogue_id=ac.dialogue_id "
+                "WHERE ac.candidate_id=?",
+                (candidate_id,),
+            ).fetchone()
+            if not row:
+                raise AlphaError("Audio candidate was not found.")
+            connection.execute(
+                "UPDATE audio_candidates SET status='rejected', reviewed_at=? "
+                "WHERE dialogue_id=? AND candidate_id<>? AND status='pending_review'",
+                (now, row["dialogue_id"], candidate_id),
+            )
+            connection.execute(
+                "UPDATE audio_candidates SET status='approved', reviewed_at=? WHERE candidate_id=?",
+                (now, candidate_id),
+            )
+            folder = "quests" if row["source"] != "gossip" else "gossip"
+            addon_filename = f"generated/sounds/{folder}/{row['addon_file_key']}.mp3"
+            connection.execute(
+                "INSERT INTO production_assets(dialogue_id, candidate_id, addon_filename, sha256, "
+                "duration_seconds, approved_at) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(dialogue_id) DO UPDATE SET candidate_id=excluded.candidate_id, "
+                "addon_filename=excluded.addon_filename, sha256=excluded.sha256, "
+                "duration_seconds=excluded.duration_seconds, approved_at=excluded.approved_at",
+                (
+                    row["dialogue_id"],
+                    candidate_id,
+                    addon_filename,
+                    row["sha256"],
+                    row["duration_seconds"],
+                    now,
+                ),
+            )
+        return self.get_dialogue(row["dialogue_id"])
+
+    def export_manifest(self) -> dict[str, Any]:
+        with self.connect() as connection:
+            snapshots = connection.execute(
+                "SELECT * FROM source_snapshots WHERE is_active=1 "
+                "ORDER BY imported_at DESC, expansion, locale"
+            ).fetchall()
+            rows = connection.execute(
+                "SELECT pa.*, d.expansion, d.locale, d.source, d.quest_id, d.quest_title, "
+                "d.original_text, d.speaker_id, s.name AS speaker_name, ac.storage_path "
+                "FROM production_assets pa "
+                "JOIN dialogue_entries d ON d.dialogue_id=pa.dialogue_id "
+                "JOIN speakers s ON s.speaker_id=d.speaker_id "
+                "JOIN audio_candidates ac ON ac.candidate_id=pa.candidate_id "
+                "ORDER BY pa.addon_filename"
+            ).fetchall()
+        assets = [dict(row) for row in rows]
+        for asset in assets:
+            asset["package_path"] = (
+                f"{asset['expansion']}/{asset['locale']}/{asset['addon_filename']}"
+            )
+        return {
+            "schema_version": 1,
+            "generated_at": utc_now(),
+            "source_snapshot": dict(snapshots[0]) if snapshots else None,
+            "source_snapshots": [dict(snapshot) for snapshot in snapshots],
+            "asset_count": len(rows),
+            "assets": assets,
+        }

@@ -66,16 +66,19 @@ generated CSV and manifest artifacts with:
 .\.venv\Scripts\python.exe scripts\build_baseline_voice_profiles.py
 ```
 
-Open `/voices` in the web application to review the profiles. This page is
-read-only and cannot make ElevenLabs calls. Reference clips belong under
-`voice_profiles/source-library/clips/` and generated audio under
-`voice_profiles/generated-audio/`; both are excluded from Git.
+The web application now opens at `/alpha`. Its persistent production database
+provides a filterable queue for every imported quest and gossip record, NPC
+context, baseline-or-unique voice assignment, on-demand spoken-text revisions,
+versioned voices and reference clips, guarded ElevenLabs actions, audio review,
+production approval, and deterministic exports.
 
-The interactive proof of concept is available at `/poc/dwarves`. It deliberately
-limits the workflow to Dwarf Male and Dwarf Female and makes the distinction
-between project phases, baseline-profile gates, and per-line audio-production
-stages visible. It persists simulated settings and decisions beneath `data/`
-without creating audio or contacting ElevenLabs.
+The bundled CSV contains only four safe demonstration rows. Upload complete
+validated exports through Alpha to populate the full corpus. Sources for
+1.12.1, 2.4.3, 3.3.5, and current Classic coexist in one production database;
+replacing one expansion/locale does not deactivate the others. Joined source
+fields are retained as record metadata. Importing never creates spoken text or
+contacts ElevenLabs. The uploaded sources, SQLite database, reference clips,
+voice previews, and generated audio remain outside Git under `data/`.
 
 ## Container layout
 
@@ -115,14 +118,22 @@ Invoke-RestMethod http://localhost:8090/health
 
 ## Web workflow
 
-The control panel supports two deliberately bounded data operations and one
-read-only voice-review workspace:
+The Alpha portal is the working production surface:
 
-1. Upload and validate a dialogue CSV.
-2. Generate and download the addon's Lua lookup tables.
-3. Review Phase 2 race/gender baselines, delivery presets, and preview status.
+1. Upload a validated expansion/locale dialogue source.
+2. Filter the complete queue by expansion, status, content type, race, gender,
+   NPC, quest, or text.
+3. Prepare spoken text on demand, then review or edit the revision.
+4. Record NPC context and assign a baseline or versioned unique voice.
+5. Store eligible reference audio outside Git and configure the exact provider
+   voice/version.
+6. Explicitly request one ElevenLabs candidate, review it, and approve the exact
+   file for production.
+7. Export a manifest and expansion-separated audio package for the existing
+   addon packaging workflow.
 
-Database initialization and ElevenLabs audio generation remain CLI-only. This prevents a public web route from starting a long database import or a paid audio job.
+All provider operations have a separate paid-action confirmation. If
+ElevenLabs is not configured, they remain disabled and no request can be sent.
 
 For a public hostname, enable Pangolin SSO or set `WQI_ADMIN_PASSWORD`. When both are disabled, the control panel is intentionally open.
 

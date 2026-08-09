@@ -1,0 +1,83 @@
+{% extends "alpha-base.html" %}
+{% set active_nav = "dialogue" %}
+{% block title %}{{ dialogue.quest_title or dialogue.speaker_name }}{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs"><a href="/alpha">Dialogue</a><span>›</span><a href="/alpha/speakers/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></nav>
+  <section class="alpha-page-heading record-heading">
+    <div>
+      <span class="alpha-kicker">{{ dialogue.source | title }}{% if dialogue.quest_id %} · Quest {{ dialogue.quest_id }}{% endif %}</span>
+      <h1>{{ dialogue.quest_title or dialogue.speaker_name }}</h1>
+      <p>{{ dialogue.speaker_name }} · {{ dialogue.race_name | title }} · {{ dialogue.gender_name | title }}</p>
+    </div>
+    <span class="work-status status-{{ dialogue.production_state }}">{{ dialogue.production_state | replace('_',' ') | title }}</span>
+  </section>
+
+  <div class="record-grid">
+    <section class="alpha-panel source-copy">
+      <div class="panel-heading"><div><span class="panel-step">Source</span><h2>Original text</h2></div><span>Immutable</span></div>
+      <blockquote>{{ dialogue.original_text }}</blockquote>
+      <dl class="record-facts">
+        <div><dt>Speaker</dt><dd><a href="/alpha/speakers/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></dd></div>
+        <div><dt>Database key</dt><dd>{{ dialogue.dialogue_id }}</dd></div>
+        {% if dialogue.source_record_id %}<div><dt>Source record</dt><dd>{{ dialogue.source_record_id }}</dd></div>{% endif %}
+        <div><dt>Expansion</dt><dd>{{ dialogue.expansion }} · {{ dialogue.locale }}</dd></div>
+        <div><dt>Addon key</dt><dd><code>{{ dialogue.addon_file_key }}</code></dd></div>
+      </dl>
+      {% if dialogue.metadata %}<details><summary>Additional source fields</summary><dl class="record-facts">{% for key, value in dialogue.metadata.items() %}<div><dt>{{ key | replace('_',' ') | title }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>{% endif %}
+    </section>
+
+    <section class="alpha-panel spoken-copy">
+      <div class="panel-heading"><div><span class="panel-step">Preparation</span><h2>Spoken text</h2></div>{% if dialogue.revision_id %}<span>Revision {{ dialogue.revision_number }}</span>{% endif %}</div>
+      {% if not dialogue.revision_id %}
+        <div class="empty-action"><p>No spoken text exists. Preparing it applies deterministic token and markup cleanup; it does not call an AI service.</p><button type="button" data-action data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/prepare-spoken-text" data-method="POST">Prepare spoken text</button></div>
+      {% else %}
+        <form data-json-form data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/spoken-text" data-method="PATCH">
+          <label><span>What ElevenLabs will speak</span><textarea name="spoken_text" rows="9" required>{{ dialogue.spoken_text }}</textarea></label>
+          {% if dialogue.changes %}<details><summary>Preparation changes</summary><ul>{% for change in dialogue.changes %}<li>{{ change }}</li>{% endfor %}</ul></details>{% endif %}
+          {% if dialogue.warnings %}<aside class="inline-warning"><strong>Review required</strong><ul>{% for warning in dialogue.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></aside>{% endif %}
+          <button type="submit">Save new revision</button>
+        </form>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="record-grid">
+    <section class="alpha-panel">
+      <div class="panel-heading"><div><span class="panel-step">Speaker</span><h2>Voice and delivery</h2></div></div>
+      <p><a href="/alpha/speakers/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a> currently uses <strong>{{ dialogue.voice_name or 'no assigned voice' }}</strong>.</p>
+      {% if dialogue.voice_id %}<p><a href="/alpha/voices/{{ dialogue.voice_id }}">Open voice record</a>{% if not dialogue.provider_voice_id %} · A provider voice still needs to be created or assigned.{% endif %}</p>{% endif %}
+      <form data-json-form data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/delivery" data-method="PATCH" class="compact-form">
+        <label><span>Line delivery</span><select name="delivery">{% for delivery in deliveries %}<option value="{{ delivery }}" {% if delivery == dialogue.delivery %}selected{% endif %}>{{ delivery | title }}</option>{% endfor %}</select></label>
+        <button type="submit">Save delivery</button>
+      </form>
+    </section>
+
+    <section class="alpha-panel">
+      <div class="panel-heading"><div><span class="panel-step">Generation</span><h2>Create audio</h2></div><span>{{ dialogue.generation_text|length }} characters</span></div>
+      {% if dialogue.revision_id %}<div class="api-input"><span>Exact speech input</span><p>{{ dialogue.generation_text }}</p></div>{% endif %}
+      {% if not provider_configured %}<aside class="inline-warning">ElevenLabs is not configured on this deployment. The button remains guarded and no request can be sent.</aside>{% endif %}
+      <button type="button" data-action data-paid data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/generate" data-method="POST" {% if dialogue.production_state not in ['ready_to_generate','generation_failed','audio_to_review'] or not provider_configured %}disabled{% endif %}>Generate one ElevenLabs candidate</button>
+      <p class="form-help">This is the only paid line-generation action. It always creates a new attempt and never overwrites an earlier file.</p>
+    </section>
+  </div>
+
+  <section class="alpha-panel">
+    <div class="panel-heading"><div><span class="panel-step">Review</span><h2>Audio candidates</h2></div><span>{{ dialogue.candidates|length }} generated</span></div>
+    <div class="candidate-list">
+      {% for candidate in dialogue.candidates %}
+      <article>
+        <audio controls preload="none" src="/api/alpha/candidates/{{ candidate.candidate_id }}/audio"></audio>
+        <div><strong>{{ candidate.delivery | title }} · {{ "%.2f"|format(candidate.duration_seconds) }} seconds</strong><span>{{ candidate.model_id }} · {{ candidate.character_count }} characters · {{ candidate.status | replace('_',' ') }}</span></div>
+        {% if candidate.status == 'pending_review' %}<button type="button" data-action data-url="/api/alpha/candidates/{{ candidate.candidate_id }}/approve" data-method="POST">Approve for production</button>{% endif %}
+      </article>
+      {% else %}<p class="empty-copy">No audio has been generated for this line.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section class="alpha-panel output-contract">
+    <div class="panel-heading"><div><span class="panel-step">Handoff</span><h2>Addon output</h2></div></div>
+    {% if dialogue.addon_filename %}<p class="production-ready"><strong>Production ready</strong><code>{{ dialogue.addon_filename }}</code><span>{{ "%.2f"|format(dialogue.production_duration) }} seconds · {{ dialogue.production_sha256[:16] }}…</span></p>{% else %}<p>The approved file will be exported as <code>generated/sounds/{{ 'gossip' if dialogue.source == 'gossip' else 'quests' }}/{{ dialogue.addon_file_key }}.mp3</code>.</p>{% endif %}
+  </section>
+
+  {% if dialogue.revisions or dialogue.generations %}<details class="alpha-history"><summary>Revision, generation, and usage history</summary><div>{% for revision in dialogue.revisions %}<p><strong>Text revision {{ revision.revision_number }}</strong> · {{ revision.processor }} · {{ revision.created_at[:19] | replace('T',' ') }} UTC</p>{% endfor %}{% for generation in dialogue.generations %}<p><strong>Generation {{ generation.generation_id[:8] }}</strong> · {{ generation.status }} · {{ generation.character_count }} characters{% if generation.subscription.get('character_count') is not none %} · balance after request: {{ "{:,}".format(generation.subscription.character_count) }} / {{ "{:,}".format(generation.subscription.get('character_limit', 0)) }} characters used{% endif %}{% if generation.error %} · {{ generation.error }}{% endif %}</p>{% endfor %}</div></details>{% endif %}
+{% endblock %}

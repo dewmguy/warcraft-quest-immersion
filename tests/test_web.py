@@ -1,7 +1,28 @@
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
 from tts_cli import web
-from tts_cli.workflow_poc import WorkflowPoc
+from tts_cli.alpha_store import AlphaStore
+
+
+class UnconfiguredElevenLabs:
+    configured = False
+
+
+@pytest.fixture(autouse=True)
+def isolated_alpha(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(web, "DATA_DIR", data_dir)
+    monkeypatch.setattr(web, "DIALOGUE_PATH", data_dir / "dialogue.csv")
+    monkeypatch.setattr(web, "SOURCE_DIR", data_dir / "sources")
+    monkeypatch.setattr(
+        web,
+        "alpha_store",
+        AlphaStore(tmp_path / "alpha.sqlite3", tmp_path / "alpha-storage"),
+    )
+    monkeypatch.setattr(web, "elevenlabs", UnconfiguredElevenLabs())
 
 
 def test_health_is_public():
@@ -12,56 +33,103 @@ def test_health_is_public():
     assert response.json() == {"status": "ok"}
 
 
-def test_dashboard_is_open_when_authentication_is_delegated(monkeypatch):
+def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
         response = client.get("/")
 
     assert response.status_code == 200
-    assert "Application login is off" in response.text
+    assert response.url.path == "/alpha"
+    assert "Alpha production database" in response.text
+    assert "Work queue" in response.text
+    assert "4 active dialogue records" in response.text
 
 
-def test_voice_review_is_read_only_and_complete(monkeypatch):
+def test_alpha_starts_with_empty_spoken_text_and_prepares_only_on_click(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
-        page = client.get("/voices")
-        payload = client.get("/api/phase2")
-
-    assert page.status_code == 200
-    assert "All 230 planned previews remain ungenerated" in page.text
-    assert "No source voice · no audio" in page.text
-    assert payload.status_code == 200
-    assert payload.json()["manifest"]["profile_count"] == 46
-    assert payload.json()["preview_states"] == {"ungenerated": 230}
-
-
-def test_dwarf_poc_is_no_audio_and_persists_workflow_decisions(monkeypatch, tmp_path):
-    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
-    monkeypatch.setattr(web, "workflow_poc", WorkflowPoc(tmp_path / "dwarf-poc.sqlite3"))
-    with TestClient(web.app) as client:
-        page = client.get("/poc/dwarves")
-        payload = client.get("/api/poc/dwarves")
-        mutation = client.post(
-            "/api/poc/dwarves/dwarf-male/profile-stages/identity_defined",
+        row = web.alpha_store.list_dialogue(page_size=10)["rows"][0]
+        page = client.get(f"/alpha/dialogue/{row['dialogue_id']}")
+        missing_confirmation = client.post(
+            f"/api/alpha/dialogue/{row['dialogue_id']}/prepare-spoken-text"
+        )
+        prepared = client.post(
+            f"/api/alpha/dialogue/{row['dialogue_id']}/prepare-spoken-text",
             headers={"X-WQI-Action": "confirmed"},
-            json={"action": "approve", "note": "POC accepted."},
         )
 
     assert page.status_code == 200
-    assert "No-spend mode is active" in page.text
-    assert 'href="/static/app.css"' in page.text
-    assert 'src="/static/dwarf-poc.js"' in page.text
-    assert "http://testserver/static/" not in page.text
-    assert payload.json()["no_audio_mode"] is True
-    assert len(payload.json()["profiles"]) == 2
-    assert mutation.status_code == 200
-    male = next(
-        item
-        for item in mutation.json()["profiles"]
-        if item["profile"]["profile_id"] == "dwarf-male"
-    )
-    assert male["profile_stages"][0]["status"] == "approved"
-    assert male["profile_stages"][1]["status"] == "current"
+    assert "No spoken text exists" in page.text
+    assert missing_confirmation.status_code == 400
+    assert prepared.status_code == 200
+    assert prepared.json()["dialogue"]["revision_number"] == 1
+
+
+def test_paid_generation_requires_separate_confirmation_and_configuration(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        row = web.alpha_store.list_dialogue(page_size=10)["rows"][0]
+        missing_paid_confirmation = client.post(
+            f"/api/alpha/dialogue/{row['dialogue_id']}/generate",
+            headers={"X-WQI-Action": "confirmed"},
+        )
+        unavailable_provider = client.post(
+            f"/api/alpha/dialogue/{row['dialogue_id']}/generate",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+        )
+
+    assert missing_paid_confirmation.status_code == 400
+    assert unavailable_provider.status_code == 503
+    assert "No paid request was made" in unavailable_provider.json()["detail"]
+
+
+def test_upload_adds_an_expansion_without_replacing_other_sources(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        uploaded = client.post(
+            "/api/data",
+            headers={"X-WQI-Action": "confirmed"},
+            data={"expansion": "1.12.1", "locale": "enUS"},
+            files={
+                "file": (
+                    "vanilla-dialogue.csv",
+                    web.SAMPLE_DATA_PATH.read_bytes(),
+                    "text/csv",
+                )
+            },
+        )
+        dashboard = client.get("/api/alpha").json()
+        vanilla = client.get("/alpha?expansion=1.12.1")
+
+    assert uploaded.status_code == 200
+    assert dashboard["counts"]["dialogue"] == 8
+    assert len(dashboard["snapshots"]) == 2
+    assert "4 matching records" in vanilla.text
+
+
+def test_failed_dwarf_poc_and_old_voice_page_redirect_to_alpha(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app, follow_redirects=False) as client:
+        dwarf = client.get("/poc/dwarves")
+        voices = client.get("/voices")
+
+    assert dwarf.status_code == 307
+    assert dwarf.headers["location"] == "/alpha"
+    assert voices.status_code == 307
+    assert voices.headers["location"] == "/alpha/voices"
+
+
+def test_phase2_source_artifact_remains_available(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        payload = client.get("/api/phase2")
+
+    assert payload.status_code == 200
+    assert payload.json()["manifest"]["profile_count"] == 46
+    assert payload.json()["preview_states"] == {"ungenerated": 230}
 
 
 def test_dashboard_requires_authentication(monkeypatch):
@@ -72,7 +140,7 @@ def test_dashboard_requires_authentication(monkeypatch):
 
     assert unauthorized.status_code == 401
     assert authorized.status_code == 200
-    assert "Warcraft Quest Immersion" in authorized.text
+    assert "Alpha production database" in authorized.text
 
 
 def test_mutations_require_confirmation_header(monkeypatch):

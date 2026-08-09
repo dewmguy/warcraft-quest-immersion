@@ -24,3 +24,12 @@ def test_unsupported_source_is_rejected():
 
     with pytest.raises(DataSourceError, match="Unsupported dialogue source"):
         validate_dialogue_dataframe(dataframe)
+
+
+def test_enriched_source_columns_are_preserved():
+    dataframe = load_dialogue_csv(SAMPLE_DATA_PATH)
+    dataframe["broadcast_text_id"] = [1001, 1002, 1003, 1004]
+
+    validated = validate_dialogue_dataframe(dataframe)
+
+    assert validated["broadcast_text_id"].tolist() == [1001, 1002, 1003, 1004]

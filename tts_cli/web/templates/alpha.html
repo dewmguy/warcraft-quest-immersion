@@ -1,0 +1,86 @@
+{% extends "alpha-base.html" %}
+{% set active_nav = "dialogue" %}
+{% block title %}Dialogue{% endblock %}
+{% block content %}
+  <section class="alpha-page-heading">
+    <div>
+      <span class="alpha-kicker">Production work</span>
+      <h1>Dialogue</h1>
+      <p>Find a quest or gossip line, prepare what should be spoken, and move it toward approved audio.</p>
+    </div>
+  </section>
+
+  {% if dashboard.snapshot %}
+  <section class="source-banner {{ 'source-sample' if dashboard.counts.dialogue < 100 else '' }}" id="source">
+    <div>
+      <strong>{{ "{:,}".format(dashboard.counts.dialogue) }} active dialogue records</strong>
+      <span>{{ dashboard.snapshots|length }} source {{ 'snapshot' if dashboard.snapshots|length == 1 else 'snapshots' }} loaded · latest: {{ dashboard.snapshot.source_name }}</span>
+      {% if dashboard.counts.dialogue < 100 %}<p>The current source is a small sample. Upload the complete validated export to populate the full corpus.</p>{% endif %}
+    </div>
+    <details>
+      <summary>Replace source data</summary>
+      <form data-upload-form data-url="/api/data" class="inline-upload">
+        <label><span>Expansion</span><select name="expansion"><option>1.12.1</option><option>2.4.3</option><option selected>3.3.5</option><option value="classic">Current Classic</option></select></label>
+        <label><span>Locale</span><input name="locale" value="enUS" pattern="[A-Za-z]{4}" required></label>
+        <label><span>Validated dialogue CSV</span><input name="file" type="file" accept=".csv,text/csv" required></label>
+        <button type="submit">Upload and import</button>
+      </form>
+    </details>
+  </section>
+  {% endif %}
+
+  <section class="alpha-metrics" aria-label="Database summary">
+    <article><strong>{{ "{:,}".format(dashboard.counts.dialogue) }}</strong><span>Dialogue records</span></article>
+    <article><strong>{{ "{:,}".format(dashboard.counts.speakers) }}</strong><span>Speakers</span></article>
+    <article><strong>{{ dashboard.counts.baseline_voices }}</strong><span>Baseline voices</span></article>
+    <article><strong>{{ dashboard.counts.unique_voices }}</strong><span>Unique voices</span></article>
+    <article><strong>{{ dashboard.states.get('approved', 0) }}</strong><span>Approved audio</span></article>
+  </section>
+
+  <section class="alpha-panel">
+    <div class="panel-heading">
+      <div><h2>Work queue</h2><p>{{ "{:,}".format(listing.total) }} matching records</p></div>
+    </div>
+    <form class="filter-bar" method="get" action="/alpha">
+      <label class="search-field"><span>Search</span><input name="q" value="{{ filters.q }}" placeholder="NPC, quest, text, or quest ID"></label>
+      <label><span>Work status</span><select name="production_state">
+        <option value="">All</option>
+        {% for value, label in [('needs_text','Needs text'),('needs_voice','Needs voice'),('ready_to_generate','Ready to generate'),('generation_failed','Generation failed'),('audio_to_review','Audio to review'),('approved','Approved')] %}
+        <option value="{{ value }}" {% if filters.production_state == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select></label>
+      <label><span>Content</span><select name="source"><option value="">All</option>{% for value in ['accept','progress','complete','gossip'] %}<option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></label>
+      <label><span>Expansion</span><select name="expansion"><option value="">All</option>{% for value in ['1.12.1','2.4.3','3.3.5','classic'] %}<option value="{{ value }}" {% if filters.expansion == value %}selected{% endif %}>{{ 'Current Classic' if value == 'classic' else value }}</option>{% endfor %}</select></label>
+      <label><span>Race</span><select name="race_id"><option value="">All</option>{% for race in listing.races %}<option value="{{ race.race_id }}" {% if filters.race_id == race.race_id|string %}selected{% endif %}>{{ race.race_name | replace('nightelf','Night Elf') | title }}</option>{% endfor %}</select></label>
+      <label><span>Gender</span><select name="gender_id"><option value="">All</option><option value="0" {% if filters.gender_id == '0' %}selected{% endif %}>Male</option><option value="1" {% if filters.gender_id == '1' %}selected{% endif %}>Female</option></select></label>
+      <button type="submit">Filter</button>
+      <a class="text-link" href="/alpha">Clear</a>
+    </form>
+
+    <div class="alpha-table-wrap">
+      <table class="alpha-table dialogue-table">
+        <thead><tr><th>Dialogue</th><th>Speaker</th><th>Spoken text</th><th>Voice</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for row in listing.rows %}
+          <tr>
+            <td><a class="record-link" href="/alpha/dialogue/{{ row.dialogue_id }}">{% if row.quest_id %}<strong>#{{ row.quest_id }} · {{ row.quest_title }}</strong><span>{{ row.source | title }}</span>{% else %}<strong>{{ row.source | title }}</strong><span>{{ row.original_text[:90] }}{% if row.original_text|length > 90 %}…{% endif %}</span>{% endif %}</a></td>
+            <td><a href="/alpha/speakers/{{ row.entity_type }}/{{ row.entity_id }}">{{ row.speaker_name }}</a><span class="cell-detail">{{ row.race_name | title }} · {{ row.gender_name | title }}</span></td>
+            <td>{{ 'Prepared' if row.revision_id else 'Not prepared' }}</td>
+            <td>{{ row.voice_name or 'Unassigned' }}{% if row.voice_name and not row.provider_voice_id %}<span class="cell-detail">Provider voice needed</span>{% endif %}</td>
+            <td><span class="work-status status-{{ row.production_state }}">{{ row.production_state | replace('_',' ') | title }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty-cell">No dialogue matches these filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if listing.page_count > 1 %}
+    <nav class="pagination" aria-label="Dialogue pages">
+      {% if listing.page > 1 %}<a href="?q={{ filters.q }}&production_state={{ filters.production_state }}&source={{ filters.source }}&expansion={{ filters.expansion }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&page={{ listing.page - 1 }}">Previous</a>{% endif %}
+      <span>Page {{ listing.page }} of {{ listing.page_count }}</span>
+      {% if listing.page < listing.page_count %}<a href="?q={{ filters.q }}&production_state={{ filters.production_state }}&source={{ filters.source }}&expansion={{ filters.expansion }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&page={{ listing.page + 1 }}">Next</a>{% endif %}
+    </nav>
+    {% endif %}
+  </section>
+{% endblock %}

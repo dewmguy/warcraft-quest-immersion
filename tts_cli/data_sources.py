@@ -29,7 +29,9 @@ def validate_dialogue_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise DataSourceError(f"Dialogue data is missing columns: {', '.join(missing)}")
 
-    data = df.loc[:, REQUIRED_COLUMNS].copy()
+    # Keep joined source fields (broadcast IDs, zone, faction, provenance, etc.)
+    # available to the production database while enforcing the generator contract.
+    data = df.copy()
     for column in ("source", "quest", "quest_title", "text", "name", "type", "original_text"):
         data[column] = data[column].fillna("").astype(str)
 

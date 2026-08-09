@@ -1,0 +1,59 @@
+{% extends "alpha-base.html" %}
+{% set active_nav = "voices" %}
+{% block title %}{{ voice.name }}{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs"><a href="/alpha/voices">Voices</a><span>›</span><span>{{ voice.name }}</span></nav>
+  <section class="alpha-page-heading record-heading"><div><span class="alpha-kicker">{{ voice.scope | title }} voice</span><h1>{{ voice.name }}</h1><p>Version {{ voice.version_number }} · {{ voice.speakers|length }} assigned speakers</p></div><span class="work-status">{{ voice.status | title }}</span></section>
+  <div class="record-grid voice-grid">
+    <section class="alpha-panel">
+      <div class="panel-heading"><div><h2>Voice definition</h2><p>Saving creates a new immutable version.</p></div></div>
+      <form data-json-form data-url="/api/alpha/voices/{{ voice.voice_id }}" data-method="PATCH">
+        <label><span>Description supplied to voice design</span><textarea name="description" rows="10" required>{{ voice.description }}</textarea></label>
+        <div class="form-grid"><label><span>Creation method</span><select name="creation_method">{% for value,label in [('unselected','Not selected'),('library','Existing library voice'),('designed','Voice Design'),('reference_design','Reference-assisted design'),('instant_clone','Instant Voice Clone'),('external','External or manual')] %}<option value="{{ value }}" {% if voice.creation_method == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><label><span>Status</span><select name="status">{% for value in ['draft','candidate','active','retired'] %}<option value="{{ value }}" {% if voice.status == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></label><label><span>ElevenLabs voice ID</span><input name="provider_voice_id" value="{{ voice.provider_voice_id or '' }}" placeholder="Leave empty until created"></label><label><span>Speech model</span><input name="model_id" value="{{ voice.model_id }}"></label></div>
+        <fieldset><legend>Default speech settings</legend><div class="form-grid"><label><span>Stability</span><input name="stability" type="number" min="0" max="1" step="0.01" value="{{ voice.settings.get('stability', 0.5) }}"></label><label><span>Similarity</span><input name="similarity_boost" type="number" min="0" max="1" step="0.01" value="{{ voice.settings.get('similarity_boost', 0.75) }}"></label><label><span>Style</span><input name="style" type="number" min="0" max="1" step="0.01" value="{{ voice.settings.get('style', 0) }}"></label><label><span>Speed</span><input name="speed" type="number" min="0.7" max="1.2" step="0.01" value="{{ voice.settings.get('speed', 1) }}"></label></div><label class="check-row"><input type="checkbox" name="use_speaker_boost" {% if voice.settings.get('use_speaker_boost', True) %}checked{% endif %}><span>Use speaker boost</span></label></fieldset>
+        <button type="submit">Save new voice version</button>
+      </form>
+    </section>
+    <section class="alpha-panel">
+      <div class="panel-heading"><div><h2>Reference library</h2><p>Files stay outside Git.</p></div><span>{{ voice.clips|length }} clips</span></div>
+      <form data-upload-form data-url="/api/alpha/voices/{{ voice.voice_id }}/reference-clips">
+        <label><span>Audio file</span><input type="file" name="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac" required></label>
+        <label><span>Provenance</span><textarea name="provenance" rows="3" placeholder="Where this clip came from and what it contains" required></textarea></label>
+        <label class="check-row"><input type="checkbox" name="provider_eligible" value="true"><span>I have marked this clip eligible for submission under the provider’s requirements.</span></label>
+        <button type="submit">Store reference clip</button>
+      </form>
+      <div class="reference-list">{% for clip in voice.clips %}<article><div><strong>{{ clip.original_name }}</strong><span>{{ "%.2f"|format(clip.duration_seconds or 0) }} seconds · {{ 'Provider eligible' if clip.provider_eligible else 'Local reference only' }}</span><p>{{ clip.provenance }}</p></div></article>{% else %}<p class="empty-copy">No reference clips stored.</p>{% endfor %}</div>
+    </section>
+  </div>
+
+  <div class="record-grid voice-grid">
+    <section class="alpha-panel">
+      <div class="panel-heading"><div><h2>Design candidates</h2><p>Creates ElevenLabs voice previews only when submitted.</p></div></div>
+      <form data-json-form data-paid data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST">
+        <label><span>Preview text</span><textarea name="preview_text" rows="6" minlength="100" maxlength="1000" required>The road through the mountains is dangerous after nightfall. Stay near the lanterns, keep your companions close, and listen carefully for movement beyond the pass. We have endured harder winters than this, and we will endure this one as well.</textarea></label>
+        <label><span>Optional eligible reference</span><select name="reference_clip_id"><option value="">No reference audio</option>{% for clip in voice.clips if clip.provider_eligible %}<option value="{{ clip.clip_id }}">{{ clip.original_name }}</option>{% endfor %}</select></label>
+        <label><span>Reference versus description</span><input name="prompt_strength" type="number" min="0" max="1" step="0.05" value="0.5"></label>
+        <button type="submit" {% if not provider_configured %}disabled{% endif %}>Generate voice candidates</button>
+      </form>
+      {% if not provider_configured %}<aside class="inline-warning">ElevenLabs is not configured. No paid voice-design request can be sent.</aside>{% endif %}
+    </section>
+    <section class="alpha-panel">
+      <div class="panel-heading"><div><h2>Instant clone</h2><p>Available only for reference material eligible under provider requirements.</p></div></div>
+      <form data-json-form data-paid data-url="/api/alpha/voices/{{ voice.voice_id }}/clone" data-method="POST">
+        <fieldset><legend>Eligible reference clips</legend>{% for clip in voice.clips if clip.provider_eligible %}<label class="check-row"><input type="checkbox" name="clip_ids" value="{{ clip.clip_id }}" data-array><span>{{ clip.original_name }}</span></label>{% else %}<p class="empty-copy">No eligible clips are available.</p>{% endfor %}</fieldset>
+        <label class="check-row"><input type="checkbox" name="rights_confirmed" required><span>I confirm the required rights, consent, and provider eligibility for the selected voice material.</span></label>
+        <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Create instant voice clone</button>
+      </form>
+    </section>
+  </div>
+
+  <section class="alpha-panel">
+    <div class="panel-heading"><div><h2>Voice candidates</h2></div><span>{{ voice.previews|length }} previews</span></div>
+    <div class="candidate-list">{% for preview in voice.previews %}<article><audio controls preload="none" src="/api/alpha/voice-previews/{{ preview.preview_id }}/audio"></audio><div><strong>{{ preview.model_id }}</strong><span>{{ "%.2f"|format(preview.duration_seconds or 0) }} seconds · {{ preview.status }}</span></div>{% if preview.status == 'candidate' %}<button type="button" data-action data-paid data-url="/api/alpha/voice-previews/{{ preview.preview_id }}/activate" data-method="POST" {% if not provider_configured %}disabled{% endif %}>Save as active voice</button>{% endif %}</article>{% else %}<p class="empty-copy">No designed voice candidates exist.</p>{% endfor %}</div>
+  </section>
+
+  <div class="record-grid">
+    <section class="alpha-panel"><div class="panel-heading"><div><h2>Assigned speakers</h2></div><span>{{ voice.speakers|length }}</span></div><ul class="link-list">{% for speaker in voice.speakers %}<li><a href="/alpha/speakers/{{ speaker.entity_type }}/{{ speaker.entity_id }}">{{ speaker.name }}</a></li>{% else %}<li>No speakers assigned.</li>{% endfor %}</ul></section>
+    <section class="alpha-panel"><div class="panel-heading"><div><h2>Version history</h2></div><span>{{ voice.versions|length }}</span></div><ol class="version-list">{% for version in voice.versions %}<li><strong>Version {{ version.version_number }}</strong><span>{{ version.creation_method | replace('_',' ') }} · {{ version.status }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</span></li>{% endfor %}</ol></section>
+  </div>
+{% endblock %}
