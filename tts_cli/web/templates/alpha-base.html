@@ -36,7 +36,15 @@
       </section>
       {% block content %}{% endblock %}
     </main>
-    <div id="alpha-message" class="alpha-message" role="status" hidden></div>
+    <div id="alpha-message" class="alpha-message" role="status" aria-live="polite" hidden>
+      <div class="alpha-message-heading">
+        <span class="alpha-message-indicator" data-alpha-message-indicator aria-hidden="true"></span>
+        <strong data-alpha-message-title></strong>
+        <span class="alpha-message-elapsed" data-alpha-message-elapsed hidden></span>
+      </div>
+      <p data-alpha-message-detail hidden></p>
+      <div class="alpha-message-progress" data-alpha-message-progress role="progressbar" aria-label="Waiting for ElevenLabs" aria-valuetext="Request in progress" hidden><span></span></div>
+    </div>
     <script src="/static/alpha.js"></script>
   </body>
 </html>

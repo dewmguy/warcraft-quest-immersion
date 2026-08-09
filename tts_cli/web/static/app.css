@@ -314,9 +314,28 @@ dialog .actions { justify-content: flex-end; }
 .link-list li, .version-list li { margin-bottom: 9px; }
 .export-summary { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
 .export-summary > strong { color: #fff3d3; font-size: 2.4rem; }
-.alpha-message { position: fixed; right: 24px; bottom: 24px; z-index: 50; max-width: min(460px, calc(100% - 48px)); border: 1px solid #6c5730; border-radius: 7px; padding: 13px 16px; background: #211b14; color: #e8cb87; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+.alpha-message { position: fixed; right: 24px; bottom: 24px; z-index: 50; display: grid; width: min(430px, calc(100% - 48px)); gap: 8px; border: 1px solid #6c5730; border-radius: 7px; padding: 13px 16px; background: #211b14; color: #e8cb87; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+.alpha-message[hidden] { display: none; }
+.alpha-message-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; }
+.alpha-message-heading strong { color: currentColor; font-size: .88rem; line-height: 1.35; }
+.alpha-message-indicator { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 50%; opacity: .85; }
+.alpha-message[data-provider="true"][data-state="working"] .alpha-message-indicator { border-right-color: transparent; animation: alpha-message-spin .8s linear infinite; }
+.alpha-message[data-state="complete"] .alpha-message-indicator { border-color: #8fd1aa; background: #8fd1aa; }
+.alpha-message[data-state="failed"] .alpha-message-indicator { border-color: #efa096; background: #efa096; }
+.alpha-message-elapsed { color: #b6a985; font-size: .72rem; white-space: nowrap; }
+.alpha-message > p { margin: 0 0 0 19px; color: #c8baa0; font-size: .78rem; line-height: 1.45; }
+.alpha-message-progress { position: relative; height: 4px; margin: 2px 0 0 19px; overflow: hidden; border-radius: 999px; background: #3b3122; }
+.alpha-message-progress span { position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: inherit; background: #d4ac59; animation: alpha-message-progress 1.35s ease-in-out infinite; }
 .alpha-message[data-state="complete"] { border-color: #397356; background: #16251d; color: #8fd1aa; }
 .alpha-message[data-state="failed"] { border-color: #81473f; background: #2b1817; color: #efa096; }
+.alpha-message[data-state="complete"] > p { color: #b4d3c0; }
+.alpha-message[data-state="failed"] > p { color: #dfb2ad; }
+@keyframes alpha-message-spin { to { transform: rotate(360deg); } }
+@keyframes alpha-message-progress { 0% { left: -40%; } 55% { left: 62%; } 100% { left: 105%; } }
+@media (prefers-reduced-motion: reduce) {
+  .alpha-message[data-provider="true"][data-state="working"] .alpha-message-indicator,
+  .alpha-message-progress span { animation-duration: 3s; }
+}
 .corpus-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 28px; }
 .corpus-progress > .progress-link { min-width: 0; color: inherit; text-decoration: none; }
 .corpus-progress article { display: grid; gap: 9px; border: 1px solid #312d35; border-radius: 8px; padding: 12px 14px; background: #17151a; }

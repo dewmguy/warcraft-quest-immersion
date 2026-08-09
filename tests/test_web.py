@@ -224,6 +224,32 @@ def test_paid_confirmation_includes_candidate_replacement_warning():
     assert "const preface = warning" in script
 
 
+def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        voice_id = web.alpha_store.list_voices("baseline")[0]["voice_id"]
+        dialogue_id = web.alpha_store.list_dialogue(page_size=1)["rows"][0]["dialogue_id"]
+        voice_page = client.get(f"/alpha/voices/{voice_id}")
+        dialogue_page = client.get(f"/alpha/dialogue/{dialogue_id}")
+
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+    assert 'data-alpha-message-title' in voice_page.text
+    assert 'data-alpha-message-elapsed' in voice_page.text
+    assert 'data-alpha-message-progress' in voice_page.text
+    assert 'aria-live="polite"' in voice_page.text
+    assert voice_page.text.count("data-paid") == voice_page.text.count(
+        "data-provider-operation"
+    )
+    assert dialogue_page.text.count("data-paid") == dialogue_page.text.count(
+        "data-provider-operation"
+    )
+    assert "function startElevenLabsRequest" in script
+    assert "function finishElevenLabsRequest" in script
+    assert "window.setInterval(renderElevenLabsProgress, 1000)" in script
+    assert "the request remains active" in script
+    assert 'startElevenLabsRequest("Checking ElevenLabs account", null, true)' in script
+
+
 def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())

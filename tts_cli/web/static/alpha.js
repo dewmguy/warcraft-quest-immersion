@@ -1,9 +1,93 @@
 const alphaMessage = document.querySelector("#alpha-message");
+const alphaMessageTitle = alphaMessage.querySelector("[data-alpha-message-title]");
+const alphaMessageDetail = alphaMessage.querySelector("[data-alpha-message-detail]");
+const alphaMessageElapsed = alphaMessage.querySelector("[data-alpha-message-elapsed]");
+const alphaMessageProgress = alphaMessage.querySelector("[data-alpha-message-progress]");
+let alphaProviderTimer = null;
+let alphaProviderRequest = null;
+
+function stopAlphaProviderTimer() {
+  if (alphaProviderTimer !== null) window.clearInterval(alphaProviderTimer);
+  alphaProviderTimer = null;
+}
+
+function formatElapsedTime(seconds) {
+  const wholeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(wholeSeconds / 60);
+  return `${minutes}:${String(wholeSeconds % 60).padStart(2, "0")}`;
+}
+
+function renderAlphaMessage({ title, detail = "", state = "working", elapsed = "", provider = false }) {
+  alphaMessage.hidden = false;
+  alphaMessage.dataset.state = state;
+  if (provider) alphaMessage.dataset.provider = "true";
+  else delete alphaMessage.dataset.provider;
+  alphaMessageTitle.textContent = title;
+  alphaMessageDetail.textContent = detail;
+  alphaMessageDetail.hidden = !detail;
+  alphaMessageElapsed.textContent = elapsed;
+  alphaMessageElapsed.hidden = !elapsed;
+  alphaMessageProgress.hidden = !provider || state !== "working";
+}
+
+function providerProgressDetail(request, elapsedSeconds) {
+  if (request.readOnly) return "Reading the configured account and current usage. No audio is being generated.";
+  const estimate = request.estimate
+    ? ` Estimated finished audio: ${formatSeconds(request.estimate.seconds)}${request.estimate.kind === "voice-design" ? " per candidate" : ""}.`
+    : "";
+  if (elapsedSeconds < 5) return `Request sent. Waiting for ElevenLabs to begin processing.${estimate}`;
+  if (elapsedSeconds < 30) return `ElevenLabs is processing the request. Keep this page open.${estimate}`;
+  if (elapsedSeconds < 90) return "Still processing. Voice Design and longer speech requests commonly need more time; the server allows up to three minutes.";
+  return "This is taking longer than usual, but the request remains active. The server will report a result or time out at three minutes.";
+}
+
+function renderElevenLabsProgress() {
+  if (!alphaProviderRequest) return;
+  const elapsedSeconds = (Date.now() - alphaProviderRequest.startedAt) / 1000;
+  const elapsed = `Elapsed ${formatElapsedTime(elapsedSeconds)}`;
+  alphaMessageProgress.setAttribute("aria-valuetext", `${alphaProviderRequest.operation}; ${elapsed}`);
+  renderAlphaMessage({
+    title: alphaProviderRequest.operation,
+    detail: providerProgressDetail(alphaProviderRequest, elapsedSeconds),
+    state: "working",
+    elapsed,
+    provider: true,
+  });
+}
+
+function startElevenLabsRequest(operation, estimate = null, readOnly = false) {
+  stopAlphaProviderTimer();
+  alphaProviderRequest = {
+    operation: operation || "Processing an ElevenLabs request",
+    estimate,
+    readOnly,
+    startedAt: Date.now(),
+  };
+  renderElevenLabsProgress();
+  alphaProviderTimer = window.setInterval(renderElevenLabsProgress, 1000);
+}
+
+function finishElevenLabsRequest(text, state) {
+  const request = alphaProviderRequest;
+  const elapsedSeconds = request ? (Date.now() - request.startedAt) / 1000 : 0;
+  stopAlphaProviderTimer();
+  alphaProviderRequest = null;
+  renderAlphaMessage({
+    title: state === "complete" ? "ElevenLabs request complete" : "ElevenLabs request failed",
+    detail: text,
+    state,
+    elapsed: `${state === "complete" ? "Completed" : "Stopped"} in ${formatElapsedTime(elapsedSeconds)}`,
+  });
+}
 
 function showAlphaMessage(text, state = "working") {
-  alphaMessage.hidden = false;
-  alphaMessage.textContent = text;
-  alphaMessage.dataset.state = state;
+  if (alphaProviderRequest && state !== "working") {
+    finishElevenLabsRequest(text, state);
+    return;
+  }
+  stopAlphaProviderTimer();
+  alphaProviderRequest = null;
+  renderAlphaMessage({ title: text, state });
 }
 
 async function parseAlphaResponse(response) {
@@ -71,10 +155,11 @@ function syncMeteringCard(element) {
   if (duration) duration.textContent = formatSeconds(estimate.seconds);
 }
 
-async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmRequired = false, confirmText = "" }) {
+async function runAlphaAction({ url, method = "POST", body = null, paid = false, confirmRequired = false, confirmText = "", providerOperation = "", providerEstimate = null }) {
   const shouldConfirm = paid || confirmRequired;
   if (shouldConfirm && !window.confirm(confirmText || "This action can contact ElevenLabs and may consume credits or a voice slot. Continue?")) return null;
-  showAlphaMessage(paid ? "Sending the confirmed ElevenLabs request…" : "Saving…");
+  if (paid) startElevenLabsRequest(providerOperation, providerEstimate);
+  else showAlphaMessage("Saving…");
   const headers = { "X-WQI-Action": "confirmed" };
   if (paid) headers["X-WQI-Paid-Action"] = "confirmed";
   if (body !== null && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
@@ -96,6 +181,8 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
         body: jsonFromForm(form),
         paid: form.dataset.paid !== undefined,
         confirmText: paidConfirmation(form),
+        providerOperation: form.dataset.providerOperation,
+        providerEstimate: meteringEstimate(form),
       });
       if (!payload) return;
       showAlphaMessage(payload.message || "Saved.", "complete");
@@ -223,6 +310,8 @@ for (const button of document.querySelectorAll("[data-action]")) {
         paid: button.dataset.paid !== undefined,
         confirmRequired: button.dataset.confirmRequired !== undefined,
         confirmText: paidConfirmation(button),
+        providerOperation: button.dataset.providerOperation,
+        providerEstimate: meteringEstimate(button),
       });
       if (!payload) return;
       showAlphaMessage(payload.message || "Saved.", "complete");
@@ -295,6 +384,7 @@ if (providerAccount) {
     result.hidden = true;
     if (errorBox) errorBox.hidden = true;
     if (refresh) refresh.disabled = true;
+    startElevenLabsRequest("Checking ElevenLabs account", null, true);
     try {
       const response = await fetch(providerAccount.dataset.providerUrl);
       const payload = await parseAlphaResponse(response);
@@ -317,11 +407,13 @@ if (providerAccount) {
       progress.value = account.percent_used || 0;
       providerAccount.querySelector("[data-provider-message]").textContent = payload.message;
       result.hidden = false;
+      showAlphaMessage(payload.message || "ElevenLabs account status was refreshed.", "complete");
     } catch (error) {
       if (errorBox) {
         errorBox.textContent = error.message;
         errorBox.hidden = false;
       }
+      showAlphaMessage(error.message, "failed");
     } finally {
       loading.hidden = true;
       if (refresh) refresh.disabled = false;
