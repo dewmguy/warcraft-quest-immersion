@@ -291,6 +291,7 @@ dialog .actions { justify-content: flex-end; }
 .status-action:hover, .status-action:focus-visible { border-color: #d0a550; background: #2b2418; color: #f1ca75; }
 .cell-action { color: #dec274; font-weight: 700; text-decoration: none; }
 .cell-action:hover, .cell-action:focus-visible { color: #f2d68f; text-decoration: underline; }
+.npc-table-unique-marker { display: inline-flex; margin-left: 6px; color: #e3be5f; font-size: .78rem; vertical-align: middle; }
 .status-needs_text, .status-needs_voice, .status-generation_failed { border-color: #81514a; color: #e49586; }
 .status-ready_to_generate, .status-audio_to_review { border-color: #80692e; color: #e3be5f; }
 .status-approved { border-color: #3e775c; color: #78c99c; }

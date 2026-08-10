@@ -45,8 +45,8 @@
           {% for row in listing.rows %}
           <tr>
             <td><a class="record-link" href="/alpha/dialogue/{{ row.dialogue_id }}">{% if row.quest_id %}<strong>#{{ row.quest_id }} · {{ row.quest_title }}</strong><span>{{ row.source | title }}</span>{% else %}<strong>{{ row.source | title }}</strong><span>{{ row.original_text[:90] }}{% if row.original_text|length > 90 %}…{% endif %}</span>{% endif %}</a></td>
-            <td><a href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}">{{ row.speaker_name }}</a><span class="cell-detail">{{ row.race_name | title }} · {{ row.gender_name | title }}</span></td>
-            <td>{{ row.voice_name or 'Unassigned' }}{% if row.voice_name and not row.provider_voice_id %}<a class="cell-detail cell-action" href="{{ '/alpha/races/' if row.voice_scope == 'baseline' else '/alpha/voices/' }}{{ row.voice_id }}#provider-creation">Provider voice needed &rarr;</a>{% elif not row.voice_name %}<a class="cell-detail cell-action" href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}#voice-approach">Assign a voice &rarr;</a>{% endif %}</td>
+            <td><a href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}">{{ row.speaker_name }}</a>{% if row.voice_scope == 'unique' %}<span class="npc-table-unique-marker" title="Unique voice profile" aria-label="Unique voice profile"><i class="fa-solid fa-star" aria-hidden="true"></i></span>{% endif %}<span class="cell-detail">{{ row.race_name | title }} · {{ row.gender_name | title }}</span></td>
+            <td>{{ row.voice_name or 'Unassigned' }}{% if row.voice_scope == 'unique' %}<a class="cell-detail cell-action" href="/alpha/voices/{{ row.voice_id }}">Unique Profile</a>{% elif not row.voice_name %}<a class="cell-detail cell-action" href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}#voice-approach">Assign a voice &rarr;</a>{% endif %}</td>
             <td>{{ dialogue_status(row) }}</td>
           </tr>
           {% else %}

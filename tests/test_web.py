@@ -163,6 +163,29 @@ def test_quest_and_gossip_queues_omit_spoken_text_column(monkeypatch):
     assert '<td colspan="4" class="empty-cell">' in empty_gossip.text
 
 
+def test_quest_and_gossip_queues_identify_unique_npc_voice_profiles(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        quest_row = web.alpha_store.list_dialogue(source="quest", page_size=10)["rows"][0]
+        gossip_row = web.alpha_store.list_dialogue(source="gossip", page_size=10)["rows"][0]
+        quest_unique = client.post(
+            f"/api/alpha/npcs/{quest_row['speaker_id']}/unique-voice",
+            headers={"X-WQI-Action": "confirmed"},
+        ).json()
+        gossip_unique = client.post(
+            f"/api/alpha/npcs/{gossip_row['speaker_id']}/unique-voice",
+            headers={"X-WQI-Action": "confirmed"},
+        ).json()
+        quests = client.get("/alpha")
+        gossip = client.get("/alpha/gossip")
+
+    for page, unique in ((quests, quest_unique), (gossip, gossip_unique)):
+        assert "Provider voice needed" not in page.text
+        assert 'class="npc-table-unique-marker"' in page.text
+        assert 'class="fa-solid fa-star"' in page.text
+        assert f'href="/alpha/voices/{unique["voice_id"]}">Unique Profile</a>' in page.text
+
+
 def test_quest_page_backfills_missing_spoken_text_and_hides_it_behind_edit_control(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
