@@ -390,25 +390,27 @@ dialog .actions { justify-content: flex-end; }
 .candidate-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .candidate-heading h3 { margin: 2px 0 0; color: #fff3d3; font-family: Georgia, serif; font-size: 1.2rem; }
 .candidate-heading > span { display: grid; min-width: 28px; min-height: 28px; place-items: center; border: 1px solid #49434f; border-radius: 999px; color: #cfc5d0; font-size: .75rem; }
-.creation-candidates .candidate-list { gap: 8px; }
+.candidate-method-groups { display: grid; gap: 16px; }
+.candidate-method-group { display: grid; gap: 7px; }
+.candidate-method-group h4 { margin: 0; color: #b5a77f; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.creation-candidates .candidate-list { gap: 7px; }
 .creation-candidates .candidate-list article { grid-template-columns: 1fr; gap: 8px; padding: 10px; background: #111014; }
-.incoming-candidates { display: grid; gap: 10px; margin-top: 24px; border-top: 1px solid #4a4030; padding-top: 18px; }
-.incoming-candidates .candidate-heading { margin-bottom: 0; }
-.design-preview-list article { gap: 10px; padding: 10px; background: #111014; }
-.design-preview-list .candidate-meta { display: grid; gap: 2px; }
-.candidate-sample-missing { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 7px; border: 1px dashed #66542e; border-radius: 6px; padding: 9px; color: #d8b86d; }
-.candidate-sample-missing button { grid-column: 1 / -1; }
+.creation-candidates .candidate-list article > header strong { color: #eee4ca; font-size: .86rem; }
+.proposed-candidates { display: grid; gap: 10px; margin-top: 24px; border-top: 1px solid #4a4030; padding-top: 18px; }
+.proposed-candidates .candidate-heading { margin-bottom: 0; }
+.candidate-id-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; color: #aaa3ad; font-size: .7rem; }
+.candidate-id-row > span { display: flex; min-width: 0; align-items: center; gap: 5px; }
+.candidate-id-row code { overflow: hidden; color: #70c994; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+.candidate-id-row > strong { flex: none; color: #d8b86d; font-size: .68rem; font-weight: 700; }
+.candidate-proposed-id strong { color: #d8b86d; }
+.candidate-card-footer { display: grid; grid-template-columns: minmax(0, 1fr) 30px 30px; align-items: center; gap: 6px; }
+.candidate-sample-missing { display: flex; width: 100%; min-height: 30px !important; align-items: center; justify-content: center; gap: 7px; border: 1px dashed #66542e !important; padding: 5px 8px !important; color: #d8b86d !important; background: #17130d !important; font-size: .7rem !important; }
 .creation-candidates .candidate-player { width: 100%; }
-.creation-candidates .candidate-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; }
-.creation-candidates .candidate-meta strong { color: #eee4ca; font-size: .86rem; }
-.creation-candidates .candidate-meta span { color: #aaa3ad; font-size: .72rem; text-align: right; }
-.creation-candidates .candidate-meta small { grid-column: 1 / -1; }
-.creation-candidates .candidate-meta code { grid-column: 1 / -1; border: 1px solid #2f4f3c; border-radius: 4px; padding: 5px 6px; color: #a9d9bb; font-size: .68rem; overflow-wrap: anywhere; background: #0d1510; }
-.creation-candidates button { width: 100%; min-height: 34px; padding: 7px 9px; font-size: .76rem; }
-.candidate-actions { display: flex; justify-content: flex-end; gap: 7px; }
-.candidate-actions > button:not(.candidate-delete) { flex: 1; }
-.creation-candidates .candidate-delete { flex: 0 0 34px; width: 34px; border-color: #704446; color: #d78787; }
-.selected-candidate-lock { display: inline-flex !important; align-items: center; justify-content: flex-end; gap: 6px; color: #8fd1aa !important; font-size: .72rem !important; }
+.candidate-card-footer .icon-button { display: grid; width: 30px; min-height: 30px; place-items: center; padding: 0; }
+.candidate-card-footer .candidate-assign, .candidate-card-footer .candidate-keep { border: 1px solid #66542e; border-radius: 5px; color: var(--gold-bright); background: #100f12; text-decoration: none; }
+.candidate-card-footer .candidate-assign:hover, .candidate-card-footer .candidate-assign:focus-visible, .candidate-card-footer .candidate-keep:hover, .candidate-card-footer .candidate-keep:focus-visible { border-color: var(--success); color: #100f12; background: var(--success); }
+.creation-candidates .candidate-delete { border-color: #704446; color: #d78787; }
+.creation-candidates .candidate-delete:hover, .creation-candidates .candidate-delete:focus-visible { border-color: var(--danger); color: #100f12; background: var(--danger); }
 .delivery-preset-explainer { display: flex; align-items: stretch; justify-content: space-between; gap: 18px; margin-bottom: 12px; border: 1px solid #4a4030; border-radius: 8px; padding: 14px; background: #1c1812; }
 .delivery-sample-script { display: grid; min-width: 0; flex: 1; gap: 7px; }
 .delivery-sample-script > span { color: #e2c270; font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }

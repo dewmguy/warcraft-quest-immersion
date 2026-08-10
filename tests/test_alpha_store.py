@@ -35,8 +35,11 @@ def test_initialize_adds_candidate_method_to_existing_alpha_database(tmp_path: P
     legacy_store.initialize()
     with legacy_store.connect() as connection:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(voice_previews)")}
+        voice_columns = {row["name"] for row in connection.execute("PRAGMA table_info(voices)")}
 
     assert "creation_method" in columns
+    assert "generation_number" in columns
+    assert "candidate_sequence" in voice_columns
 
 
 def test_initialize_backfills_current_provider_voice_into_candidate_registry(store: AlphaStore):
@@ -429,8 +432,19 @@ def test_voice_candidate_regeneration_replaces_files_only_after_new_set_is_ready
     revised = store.get_voice(voice_id)
 
     assert {item["preview_id"] for item in revised["previews"]} == set(replacement_ids)
+    assert {item["generation_number"] for item in revised["previews"]} == {4, 5, 6}
     assert not any(path.exists() for path in former_paths)
     assert all(Path(item["storage_path"]).is_file() for item in revised["previews"])
+
+    newest_id = store.record_voice_previews(
+        voice_id,
+        prompt="Later prompt",
+        preview_text="Later comparison text",
+        model_id="eleven_ttv_v3",
+        previews=[{"content": b"later", "generated_voice_id": "later-candidate"}],
+        replace_existing=True,
+    )[0]
+    assert store.get_voice_preview(newest_id)["generation_number"] == 7
 
 
 def test_voice_candidate_can_be_deleted_without_changing_other_voice_data(
@@ -456,6 +470,14 @@ def test_voice_candidate_can_be_deleted_without_changing_other_voice_data(
     assert not preview_path.exists()
     with pytest.raises(AlphaError, match="Voice preview was not found"):
         store.get_voice_preview(preview_id)
+    later_id = store.record_voice_previews(
+        voice_id,
+        prompt="Later prompt",
+        preview_text="Later comparison text",
+        model_id="eleven_ttv_v3",
+        previews=[{"content": b"later", "generated_voice_id": "later-generated"}],
+    )[0]
+    assert store.get_voice_preview(later_id)["generation_number"] == 2
 
 
 def test_delivery_presets_are_voice_metadata_used_for_dialogue(store: AlphaStore):

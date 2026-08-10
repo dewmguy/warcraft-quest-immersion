@@ -969,8 +969,7 @@ def api_generate_voice_id_candidate_audition(
         audition = _generate_voice_id_audition(candidate, voice)
         return {
             "message": (
-                f"Generated the audition sample for voice ID candidate "
-                f"#{audition['generation_number']}."
+                f"Generated the sample for voice ID candidate #{audition['generation_number']}."
             ),
             "candidate": audition,
         }
@@ -1208,11 +1207,11 @@ def api_clone_voice(
         except (AlphaError, ElevenLabsError) as error:
             audition_error = str(error)
         sample_message = (
-            " Its standardized audition sample is ready."
+            " Its standardized sample is ready."
             if not audition_error
             else (
-                " The voice ID is safely tracked, but its audition sample could not be "
-                f"generated: {audition_error} Use Generate audition on its candidate card to retry."
+                " The voice ID is safely tracked, but its sample could not be "
+                f"generated: {audition_error} Use Generate Sample on its card to retry."
             )
         )
         return {

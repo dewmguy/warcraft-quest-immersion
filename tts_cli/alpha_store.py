@@ -69,6 +69,14 @@ VOICE_METHODS = (
     "instant_clone",
     "external",
 )
+VOICE_CANDIDATE_METHOD_ORDER = (
+    "designed",
+    "reference_design",
+    "instant_clone",
+    "library",
+    "external",
+    "legacy_unknown",
+)
 DELIVERY_STATUSES = ("not_tested", "previewed", "approved")
 PERFORMANCE_METHODS = {
     0.0: ("creative", "Creative"),
@@ -170,6 +178,19 @@ def _delivery_request_text(notes: Any, spoken_text: str) -> str:
     direction = _normalize_voice_actor_notes(notes)
     text = spoken_text.strip()
     return f"[{direction}] {text}" if direction else text
+
+
+def _candidate_groups(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for candidate in candidates:
+        grouped.setdefault(str(candidate.get("creation_method") or "legacy_unknown"), []).append(
+            candidate
+        )
+    order = {method: index for index, method in enumerate(VOICE_CANDIDATE_METHOD_ORDER)}
+    return [
+        {"creation_method": method, "candidates": grouped[method]}
+        for method in sorted(grouped, key=lambda method: (order.get(method, 999), method))
+    ]
 
 
 def _performance_method(value: Any) -> tuple[str, str, float]:
@@ -351,6 +372,7 @@ class AlphaStore:
                     gender_id INTEGER NOT NULL,
                     parent_voice_id TEXT REFERENCES voices(voice_id),
                     npc_speaker_id TEXT,
+                    candidate_sequence INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -466,6 +488,7 @@ class AlphaStore:
                     preview_text TEXT NOT NULL,
                     model_id TEXT NOT NULL,
                     creation_method TEXT NOT NULL DEFAULT 'legacy_unknown',
+                    generation_number INTEGER NOT NULL DEFAULT 0,
                     status TEXT NOT NULL DEFAULT 'candidate',
                     created_at TEXT NOT NULL
                 );
@@ -560,12 +583,19 @@ class AlphaStore:
             self._normalize_delivery_prompt_tags(connection)
             self._normalize_instant_clone_previews(connection)
             self._sync_baseline_contexts(connection)
+            self._synchronize_candidate_sequences(connection)
             self._backfill_voice_id_candidates(connection)
+            self._synchronize_candidate_sequences(connection)
             self._pin_delivery_presets_to_current_voice(connection)
 
     @staticmethod
     def _ensure_columns(connection: sqlite3.Connection) -> None:
         """Apply additive migrations to Alpha databases created by earlier builds."""
+        voice_columns = {row["name"] for row in connection.execute("PRAGMA table_info(voices)")}
+        if "candidate_sequence" not in voice_columns:
+            connection.execute(
+                "ALTER TABLE voices ADD COLUMN candidate_sequence INTEGER NOT NULL DEFAULT 0"
+            )
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(dialogue_entries)")}
         if "source_record_id" not in columns:
             connection.execute(
@@ -582,6 +612,10 @@ class AlphaStore:
             connection.execute(
                 "ALTER TABLE voice_previews ADD COLUMN creation_method TEXT NOT NULL "
                 "DEFAULT 'legacy_unknown'"
+            )
+        if "generation_number" not in preview_columns:
+            connection.execute(
+                "ALTER TABLE voice_previews ADD COLUMN generation_number INTEGER NOT NULL DEFAULT 0"
             )
         preset_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(voice_delivery_presets)")
@@ -603,6 +637,63 @@ class AlphaStore:
             "AND COALESCE(vv.provider_voice_id, '')<>'')"
         )
 
+    @staticmethod
+    def _reserve_candidate_numbers(
+        connection: sqlite3.Connection, voice_id: str, count: int = 1
+    ) -> list[int]:
+        if count < 1:
+            raise AlphaError("At least one candidate number must be reserved.")
+        row = connection.execute(
+            "SELECT candidate_sequence FROM voices WHERE voice_id=?", (voice_id,)
+        ).fetchone()
+        if not row:
+            raise AlphaError("Voice was not found.")
+        first = int(row["candidate_sequence"] or 0) + 1
+        last = first + count - 1
+        connection.execute(
+            "UPDATE voices SET candidate_sequence=? WHERE voice_id=?", (last, voice_id)
+        )
+        return list(range(first, last + 1))
+
+    @classmethod
+    def _synchronize_candidate_sequences(cls, connection: sqlite3.Connection) -> None:
+        """Backfill stable production numbers and retain the highest number ever issued."""
+        voice_rows = connection.execute(
+            "SELECT voice_id, candidate_sequence FROM voices"
+        ).fetchall()
+        for voice in voice_rows:
+            highest_candidate = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(generation_number), 0) FROM voice_id_candidates "
+                    "WHERE voice_id=?",
+                    (voice["voice_id"],),
+                ).fetchone()[0]
+            )
+            current = max(int(voice["candidate_sequence"] or 0), highest_candidate)
+            unnumbered = connection.execute(
+                "SELECT preview_id FROM voice_previews WHERE voice_id=? "
+                "AND generation_number=0 ORDER BY created_at, preview_id",
+                (voice["voice_id"],),
+            ).fetchall()
+            for preview in unnumbered:
+                current += 1
+                connection.execute(
+                    "UPDATE voice_previews SET generation_number=? WHERE preview_id=?",
+                    (current, preview["preview_id"]),
+                )
+            highest_preview = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(generation_number), 0) FROM voice_previews "
+                    "WHERE voice_id=?",
+                    (voice["voice_id"],),
+                ).fetchone()[0]
+            )
+            current = max(current, highest_preview)
+            connection.execute(
+                "UPDATE voices SET candidate_sequence=? WHERE voice_id=?",
+                (current, voice["voice_id"]),
+            )
+
     def _backfill_voice_id_candidates(self, connection: sqlite3.Connection) -> None:
         """Register current provider IDs created before the candidate registry existed."""
         rows = connection.execute(
@@ -614,11 +705,6 @@ class AlphaStore:
         ).fetchall()
         for row in rows:
             candidate_id = uuid.uuid4().hex
-            generation_number = connection.execute(
-                "SELECT COALESCE(MAX(generation_number), 0)+1 FROM voice_id_candidates "
-                "WHERE voice_id=?",
-                (row["voice_id"],),
-            ).fetchone()[0]
             creation_model_id = (
                 "instant_voice_clone"
                 if row["creation_method"] == "instant_clone"
@@ -634,6 +720,11 @@ class AlphaStore:
                 "ORDER BY created_at DESC LIMIT 1",
                 (row["voice_id"],),
             ).fetchone()
+            generation_number = (
+                int(preview["generation_number"])
+                if preview and int(preview["generation_number"] or 0) > 0
+                else self._reserve_candidate_numbers(connection, row["voice_id"])[0]
+            )
             if preview:
                 source_path = Path(preview["storage_path"]).resolve()
                 if self.storage_root in source_path.parents and source_path.is_file():
@@ -1959,7 +2050,7 @@ class AlphaStore:
                 (voice_id,),
             ).fetchall()
             previews = connection.execute(
-                "SELECT * FROM voice_previews WHERE voice_id=? ORDER BY created_at DESC",
+                "SELECT * FROM voice_previews WHERE voice_id=? ORDER BY generation_number DESC",
                 (voice_id,),
             ).fetchall()
             voice_id_candidates = connection.execute(
@@ -2001,11 +2092,14 @@ class AlphaStore:
                 seen_prompts.add(description)
         payload["clips"] = [dict(row) for row in clips]
         payload["previews"] = [dict(row) for row in previews]
+        payload["proposed_voice_groups"] = _candidate_groups(payload["previews"])
         payload["voice_id_candidates"] = []
         for row in voice_id_candidates:
             candidate = dict(row)
             candidate["subscription"] = _loads(candidate.get("subscription_json"), {})
+            candidate["credit_cost"] = candidate["subscription"].get("request_character_cost")
             payload["voice_id_candidates"].append(candidate)
+        payload["voice_id_candidate_groups"] = _candidate_groups(payload["voice_id_candidates"])
         payload["speakers"] = [dict(row) for row in speakers]
         preview_payloads = [dict(row) for row in delivery_previews]
         for preview in preview_payloads:
@@ -2128,15 +2222,19 @@ class AlphaStore:
                 ),
             )
             connection.execute("UPDATE voices SET updated_at=? WHERE voice_id=?", (now, voice_id))
-            if provider_voice_id:
-                generation_number = connection.execute(
-                    "SELECT COALESCE(MAX(generation_number), 0)+1 FROM voice_id_candidates "
-                    "WHERE voice_id=?",
-                    (voice_id,),
-                ).fetchone()[0]
+            existing_candidate = (
+                connection.execute(
+                    "SELECT 1 FROM voice_id_candidates WHERE provider_voice_id=?",
+                    (provider_voice_id,),
+                ).fetchone()
+                if provider_voice_id
+                else None
+            )
+            if provider_voice_id and not existing_candidate:
+                generation_number = self._reserve_candidate_numbers(connection, voice_id)[0]
                 creation_model_id = "instant_voice_clone" if method == "instant_clone" else model_id
                 connection.execute(
-                    "INSERT OR IGNORE INTO voice_id_candidates(candidate_id, voice_id, "
+                    "INSERT INTO voice_id_candidates(candidate_id, voice_id, "
                     "provider_voice_id, generation_number, creation_method, creation_model_id, "
                     "created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
@@ -2235,6 +2333,7 @@ class AlphaStore:
         content: bytes | None = None,
         provider_request_id: str | None = None,
         subscription: dict[str, Any] | None = None,
+        generation_number: int | None = None,
     ) -> dict[str, Any]:
         self.get_voice(voice_id)
         provider_voice_id = provider_voice_id.strip()
@@ -2262,11 +2361,17 @@ class AlphaStore:
                 raise AlphaError("The reusable voice audition audio could not be validated.")
         try:
             with self.connect() as connection:
-                generation_number = connection.execute(
-                    "SELECT COALESCE(MAX(generation_number), 0)+1 FROM voice_id_candidates "
-                    "WHERE voice_id=?",
-                    (voice_id,),
-                ).fetchone()[0]
+                if generation_number is None:
+                    assigned_number = self._reserve_candidate_numbers(connection, voice_id)[0]
+                else:
+                    assigned_number = int(generation_number)
+                    if assigned_number < 1:
+                        raise AlphaError("Candidate production number must be positive.")
+                    connection.execute(
+                        "UPDATE voices SET candidate_sequence=MAX(candidate_sequence, ?) "
+                        "WHERE voice_id=?",
+                        (assigned_number, voice_id),
+                    )
                 connection.execute(
                     "INSERT INTO voice_id_candidates(candidate_id, voice_id, provider_voice_id, "
                     "generation_number, creation_method, creation_model_id, sample_storage_path, "
@@ -2277,7 +2382,7 @@ class AlphaStore:
                         candidate_id,
                         voice_id,
                         provider_voice_id,
-                        generation_number,
+                        assigned_number,
                         creation_method,
                         creation_model_id,
                         str(path) if path else None,
@@ -2490,6 +2595,9 @@ class AlphaStore:
         now = utc_now()
         try:
             with self.connect() as connection:
+                generation_numbers = self._reserve_candidate_numbers(
+                    connection, voice_id, len(previews)
+                )
                 if replace_existing:
                     replaced_rows = list(
                         connection.execute(
@@ -2497,7 +2605,7 @@ class AlphaStore:
                             (voice_id,),
                         )
                     )
-                for preview in previews:
+                for preview, generation_number in zip(previews, generation_numbers, strict=True):
                     content = preview["content"]
                     preview_id = uuid.uuid4().hex
                     path = folder / f"{preview_id}.mp3"
@@ -2506,8 +2614,8 @@ class AlphaStore:
                     connection.execute(
                         "INSERT INTO voice_previews(preview_id, voice_id, generated_voice_id, "
                         "storage_path, sha256, duration_seconds, prompt, preview_text, model_id, "
-                        "creation_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                        "?, 'candidate', ?)",
+                        "creation_method, generation_number, status, created_at) VALUES (?, ?, ?, "
+                        "?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?)",
                         (
                             preview_id,
                             voice_id,
@@ -2519,6 +2627,7 @@ class AlphaStore:
                             preview_text,
                             model_id,
                             creation_method,
+                            generation_number,
                             now,
                         ),
                     )
@@ -2584,6 +2693,7 @@ class AlphaStore:
             sample_text=preview["preview_text"],
             sample_model_id=preview["model_id"],
             content=Path(preview["storage_path"]).read_bytes(),
+            generation_number=preview["generation_number"],
         )
         self.connect_voice_id_candidate(candidate["candidate_id"])
         with self.connect() as connection:

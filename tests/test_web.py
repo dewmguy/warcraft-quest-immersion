@@ -284,6 +284,7 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
             prompt="Candidate prompt",
             preview_text="Candidate comparison text",
             model_id="eleven_ttv_v3",
+            creation_method="designed",
             previews=[{"content": b"candidate-audio", "generated_voice_id": "candidate-one"}],
         )[0]
         preview_path = Path(web.alpha_store.get_voice_preview(preview_id)["storage_path"])
@@ -294,13 +295,16 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
         )
 
     assert page.status_code == 200
-    assert "Incoming Voice Candidates" in page.text
+    assert "Proposed Voices" in page.text
+    assert "Incoming" not in page.text
     assert "Temporary output" not in page.text
     assert f'data-url="/api/alpha/voice-previews/{preview_id}"' in page.text
     assert 'data-method="DELETE"' in page.text
-    assert "Permanently delete this incoming Voice Design candidate" in page.text
+    assert "Permanently delete proposed Voice Design #1" in page.text
     assert 'class="reference-player candidate-player"' in page.text
-    assert 'data-audio-name="Incoming voice candidate 1"' in page.text
+    assert 'data-audio-name="Proposed Voice Design 1"' in page.text
+    assert "Voice Design #1" in page.text
+    assert "Voice ID: <strong>Proposed</strong>" in page.text
     assert (
         f'<audio hidden preload="metadata" src="/api/alpha/voice-previews/{preview_id}/audio">'
         in page.text
@@ -410,7 +414,6 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert f'data-url="/api/alpha/delivery-previews/{preview["preview_id"]}"' in page.text
     assert page.text.count('class="secondary icon-button delivery-preview-delete"') == 3
     assert page.text.count('class="icon-button delivery-sample-approve"') == 3
-    assert page.text.count('class="fa-solid fa-check"') == 3
     assert page.text.count("Approve this neutral sample?") == 3
     assert page.text.count("Permanently delete this neutral sample") == 3
     assert page.text.count("Stored Samples") == 1
@@ -537,13 +540,13 @@ def test_build_actions_skip_confirmation_while_teardown_keeps_it():
     instant_clone_form = next(
         chunk.split(">", 1)[0]
         for chunk in voice_template.split("<form")[1:]
-        if 'data-provider-operation="Generating an instant-clone voice ID and audition"'
+        if 'data-provider-operation="Generating an instant-clone voice ID and sample"'
         in chunk.split(">", 1)[0]
     )
     reusable_voice_button = next(
         chunk.split(">", 1)[0]
         for chunk in voice_template.split("<button")[1:]
-        if 'data-provider-operation="Generating a reusable voice ID"' in chunk.split(">", 1)[0]
+        if 'data-provider-operation="Generating a Voice ID"' in chunk.split(">", 1)[0]
     )
 
     assert len(voice_design_forms) == 2
@@ -694,20 +697,22 @@ def test_reusable_voice_id_candidate_survives_new_design_previews(monkeypatch):
         revised = web.alpha_store.get_voice(voice_id)
 
     assert activated.status_code == 200
-    assert "Generated voice ID candidate #1" in activated.json()["message"]
+    assert "Generated voice ID candidate #2" in activated.json()["message"]
     assert "Deleted 3 temporary Voice Design previews" in activated.json()["message"]
     assert selected_page.status_code == 200
     assert 'class="voice-id-candidate"' in selected_page.text
     assert "candidate-selected" not in selected_page.text
-    assert "Voice ID Candidate #1" in selected_page.text
+    assert "Generated Voice IDs" in selected_page.text
+    assert "Voice Design #2" in selected_page.text
     assert "Profile default" not in selected_page.text
     assert "Use as default" not in selected_page.text
-    assert "Voice Design · eleven_ttv_v3" in selected_page.text
+    assert "Voice Design · eleven_ttv_v3" not in selected_page.text
     assert candidate["provider_voice_id"] in selected_page.text
     assert regenerated.status_code == 200
     assert revised["provider_voice_id"] == "provider-voice-selected"
     assert len(revised["voice_id_candidates"]) == 1
     assert len(revised["previews"]) == 3
+    assert {preview["generation_number"] for preview in revised["previews"]} == {4, 5, 6}
     assert {preview["preview_id"] for preview in revised["previews"]} == set(
         regenerated.json()["preview_ids"]
     )
@@ -793,7 +798,9 @@ def test_provider_creation_accepts_new_unsaved_path_and_records_candidate_method
     assert revised["creation_method"] == "designed"
     assert revised["description"] == "A newly edited provider-creation prompt for this voice."
     assert {preview["creation_method"] for preview in revised["previews"]} == {"designed"}
-    assert page.text.count("Voice Design · eleven_ttv_v3") == 3
+    assert all(f"Voice Design #{number}" in page.text for number in (1, 2, 3))
+    assert "Voice Design · eleven_ttv_v3" not in page.text
+    assert "Proposed Voices" in page.text
     assert "Save changed voice settings" not in page.text
 
 
@@ -866,11 +873,14 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
     assert "The selected clips define the clone" in page.text
     assert "attached only as provider metadata" not in page.text
     assert 'data-method-panel="designed" hidden' in page.text
-    assert "Voice ID Candidates" in page.text
-    assert "Voice ID Candidate #2" in page.text
-    assert "Instant Voice Clone · instant_voice_clone" in page.text
+    assert "Generated Voice IDs" in page.text
+    assert "Voice Design #1" in page.text
+    assert "Instant Voice Clone #2" in page.text
+    assert "Instant Voice Clone · instant_voice_clone" not in page.text
     assert "provider-instant-clone" in page.text
-    assert "standardized audition sample is ready" in cloned.json()["message"]
+    assert "standardized sample is ready" in cloned.json()["message"]
+    assert "240 credits" in page.text
+    assert "Audition · eleven_v3" not in page.text
 
 
 def test_instant_clone_keeps_voice_id_when_automatic_audition_fails(monkeypatch):
@@ -906,8 +916,8 @@ def test_instant_clone_keeps_voice_id_when_automatic_audition_fails(monkeypatch)
     assert revised["provider_voice_id"] == "provider-instant-clone"
     assert len(revised["voice_id_candidates"]) == 1
     assert revised["voice_id_candidates"][0]["sample_storage_path"] is None
-    assert "Audition sample missing" in page.text
-    assert "Generate audition" in page.text
+    assert "Generate Sample" in page.text
+    assert "Audition sample missing" not in page.text
 
 
 def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
