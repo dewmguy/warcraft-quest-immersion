@@ -424,7 +424,10 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert 'value="more brightly"' in page.text
     assert page.text.count("Performance method") == 3
     assert page.text.count(">Robust</dd>") == 3
-    assert page.text.count("<dt>ElevenLabs voice ID</dt>") == 3
+    assert page.text.count("<dt>Sample details</dt>") == 3
+    assert page.text.count("1.50 sec · Candidate · 80 credits</dd>") == 3
+    assert page.text.count("Voice ID · <code>provider-voice-test</code>") == 3
+    assert "<dt>ElevenLabs voice ID</dt>" not in page.text
     assert page.text.count("provider-voice-test") >= 3
     assert "ElevenLabs usage cannot be refunded" in page.text
     assert "<audio controls" not in page.text
@@ -438,6 +441,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert "background: var(--success); color: #100f12; filter: none;" in stylesheet
     assert ".delivery-preview-delete:hover" in stylesheet
     assert "background: var(--danger); color: #100f12; filter: none;" in stylesheet
+    assert ".delivery-preview-summary code { color: var(--success);" in stylesheet
     assert deleted.status_code == 200
     assert deleted.json()["message"] == "Delivery sample was deleted from local storage."
     assert not preview_path.exists()

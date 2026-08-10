@@ -174,7 +174,7 @@
       <div class="delivery-preview-list">{% for preview in preset.previews %}<details class="delivery-preview" data-audio-disclosure="delivery-samples">
         <summary>
           <span class="delivery-preview-icon" aria-hidden="true"><i class="fa-solid {{ 'fa-circle-check' if preview.status == 'approved' else 'fa-waveform-lines' }}"></i></span>
-          <span class="delivery-preview-summary"><strong>{{ preset.delivery | title }} sample {{ loop.index }}</strong><small>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status | title }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} credits{% endif %}</small></span>
+          <span class="delivery-preview-summary"><strong>{{ preset.delivery | title }} sample {{ loop.index }}</strong><small>Voice ID · <code>{{ preview.baseline_voice_id }}</code></small></span>
           <span class="delivery-preview-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
         </summary>
         <div class="delivery-preview-body">
@@ -187,7 +187,7 @@
           <dl class="delivery-preview-metadata">
             {% if preview.actor_notes %}<div><dt>Voice actor notes</dt><dd>{{ preview.actor_notes }}</dd></div>{% endif %}
             <div><dt>Performance method</dt><dd>{{ preview.performance_method_label }}</dd></div>
-            <div><dt>ElevenLabs voice ID</dt><dd><code>{{ preview.baseline_voice_id }}</code></dd></div>
+            <div><dt>Sample details</dt><dd>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status | title }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} credits{% endif %}</dd></div>
           </dl>
           <div class="delivery-preview-footer"><small>{{ preview.created_at[:19] | replace('T', ' ') }} UTC</small><div class="delivery-preview-actions">{% if preview.status == 'candidate' %}<button type="button" class="icon-button delivery-sample-approve" title="Approve {{ preset.delivery }} sample {{ loop.index }}" aria-label="Approve {{ preset.delivery }} sample {{ loop.index }}" data-action data-confirm-required data-confirm="Approve this {{ preset.delivery }} sample? This will mark it ready for future dialogue using this delivery preset." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST"><i class="fa-solid fa-check" aria-hidden="true"></i></button>{% endif %}<button type="button" class="secondary icon-button delivery-preview-delete" title="Delete {{ preset.delivery }} sample {{ loop.index }}" aria-label="Delete {{ preset.delivery }} sample {{ loop.index }}" data-action data-confirm-required data-confirm="Permanently delete this {{ preset.delivery }} sample from local storage?{% if preview.status == 'approved' %} This will remove its approval; approve another sample when you are satisfied.{% endif %} ElevenLabs usage cannot be refunded." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div></div>
         </div>
