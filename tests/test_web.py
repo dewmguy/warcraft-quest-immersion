@@ -1408,6 +1408,8 @@ def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):
     assert "Current Voice · Baseline" in dormant_page.text
     assert "Saved Alternative · Dormant" in dormant_page.text
     assert unique["name"] in dormant_queue.text
+    assert "Dormant unique profile" not in dormant_queue.text
+    assert f'href="/alpha/voices/{unique["voice_id"]}"' not in dormant_queue.text
     assert web.alpha_store.get_voice(unique["voice_id"])["status"] == "dormant"
 
 
