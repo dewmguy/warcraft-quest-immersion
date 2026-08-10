@@ -178,6 +178,53 @@ def test_quest_page_links_to_other_phases_without_affecting_single_phase_or_goss
     assert 'id="other-quest-phases"' not in gossip_page.text
 
 
+def test_quest_page_replaces_unavailable_generation_controls_with_voice_profile_action(
+    monkeypatch,
+):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(web, "elevenlabs", ConfiguredElevenLabs())
+    with TestClient(web.app) as client:
+        row = next(
+            item
+            for item in web.alpha_store.list_dialogue(source="quest", page_size=10)["rows"]
+            if item["speaker_name"] == "Marshal Rowan"
+        )
+        unique = web.alpha_store.create_unique_voice(row["speaker_id"])
+        blocked = client.get(f"/alpha/dialogue/{row['dialogue_id']}")
+
+        web.alpha_store.update_voice(
+            unique["voice_id"],
+            {
+                "description": unique["description"],
+                "creation_method": "external",
+                "provider_voice_id": "provider-marshal-rowan",
+            },
+        )
+        ready = client.get(f"/alpha/dialogue/{row['dialogue_id']}")
+
+    assert blocked.status_code == 200
+    assert "delivers this line through a <strong>unique NPC voice profile</strong>" in blocked.text
+    assert "Marshal Rowan</strong>" not in blocked.text
+    assert "Audio Sample Generation Is Unavailable" in blocked.text
+    assert 'href="#voice-assignment" aria-label="Review audio availability"' in blocked.text
+    assert "needs an ElevenLabs Voice ID for the Neutral delivery" in blocked.text
+    assert blocked.text.count("Go to the Active Voice Profile") == 1
+    assert f'href="/alpha/voices/{unique["voice_id"]}"' in blocked.text
+    assert "Open voice profile" not in blocked.text
+    assert "Create or assign the missing provider voice" not in blocked.text
+    assert 'id="generation"' not in blocked.text
+    assert 'name="delivery"' not in blocked.text
+    assert "Save Delivery" not in blocked.text
+
+    assert ready.status_code == 200
+    assert "Audio Sample Generation Is Unavailable" not in ready.text
+    assert ready.text.count("Go to the Active Voice Profile") == 1
+    assert 'id="generation"' in ready.text
+    assert 'name="delivery"' in ready.text
+    assert "Save Delivery" in ready.text
+    assert "Generate One Sample" in ready.text
+
+
 def test_paid_generation_requires_separate_confirmation_and_configuration(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:

@@ -266,6 +266,33 @@ def _alpha_context(**values) -> dict:
     }
 
 
+def _dialogue_generation_availability(dialogue: dict) -> tuple[bool, str]:
+    if not dialogue.get("revision_id"):
+        return False, "Prepare the spoken text before generating an audio sample."
+    if dialogue.get("warnings"):
+        return False, "Resolve the spoken-text warnings above before generating an audio sample."
+    if not dialogue.get("voice_id"):
+        return False, "Assign an active voice profile to this NPC before generating audio."
+    if not dialogue.get("provider_voice_id"):
+        delivery = str(dialogue.get("delivery") or "neutral").replace("_", " ").title()
+        return (
+            False,
+            "The active voice profile needs an ElevenLabs Voice ID for the "
+            f"{delivery} delivery before audio can be generated.",
+        )
+    if not elevenlabs.configured:
+        return False, "ElevenLabs is not configured, so audio samples cannot be generated."
+    if dialogue.get("production_state") == "approved":
+        return False, "Production audio has already been approved for this quest phase."
+    if dialogue.get("production_state") not in {
+        "ready_to_generate",
+        "generation_failed",
+        "audio_to_review",
+    }:
+        return False, "Audio sample generation is unavailable for this quest's current state."
+    return True, ""
+
+
 def _subscription_summary(payload: dict) -> dict:
     used = payload.get("character_count")
     limit = payload.get("character_limit")
@@ -467,6 +494,9 @@ def alpha_dialogue(
         dialogue = alpha_store.get_dialogue(dialogue_id)
         if dialogue["source"] != "gossip" and dialogue["revision_id"] is None:
             dialogue = alpha_store.ensure_spoken_text(dialogue_id)
+        can_generate_audio, generation_blocker = _dialogue_generation_availability(dialogue)
+        dialogue["can_generate_audio"] = can_generate_audio
+        dialogue["generation_blocker"] = generation_blocker
         return templates.TemplateResponse(
             request=request,
             name="alpha-dialogue.html",

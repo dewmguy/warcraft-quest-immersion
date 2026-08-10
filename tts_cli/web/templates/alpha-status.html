@@ -3,6 +3,8 @@
   {% set label = state | replace('_',' ') | title %}
   {% if state == 'needs_text' %}
     <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
+  {% elif row.can_generate_audio is defined and not row.can_generate_audio and state != 'approved' %}
+    <a class="work-status status-needs_voice status-action" href="#voice-assignment" aria-label="Review audio availability">Audio Unavailable &rarr;</a>
   {% elif state == 'needs_voice' and row.voice_id %}
     <a class="work-status status-{{ state }} status-action" href="{{ '/alpha/races/' if row.voice_scope == 'baseline' else '/alpha/voices/' }}{{ row.voice_id }}#provider-creation" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
   {% elif state == 'needs_voice' %}
