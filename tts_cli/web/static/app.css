@@ -239,15 +239,15 @@ dialog .actions { justify-content: flex-end; }
 .alpha-page-heading h1 { margin: 4px 0 5px; color: #fff3d3; font-family: Georgia, serif; font-size: clamp(2.2rem, 5vw, 4.5rem); line-height: 1; }
 .alpha-page-heading p, .panel-heading p { margin: 0; color: #a9a2ad; }
 .record-heading h1 { font-size: clamp(2rem, 4vw, 3.6rem); }
-.npc-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.npc-title-row h1 { margin-right: 2px; }
-.npc-unique-toggle { width: 42px; min-height: 42px !important; border-color: #8b713a !important; padding: 0 !important; background: transparent !important; color: #d6b35d !important; font-size: 1.08rem; }
-.npc-unique-toggle:hover, .npc-unique-toggle:focus-visible { border-color: #efc867 !important; background: #2b2417 !important; color: #ffe090 !important; }
-.npc-unique-toggle.is-unique { border-color: #d1a640 !important; background: #2c2414 !important; color: #f2c557 !important; }
-.npc-unique-toggle:disabled { border-color: #4b4650 !important; background: #252229 !important; color: #77717b !important; }
-.npc-unique-profile-link, .back-to-npc { color: #dec274; font-size: .82rem; font-weight: 700; text-decoration: none; }
+.npc-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: .18em; font-size: clamp(2rem, 4vw, 3.6rem); }
+.npc-title-row h1 { margin-right: 2px; font-size: 1em; }
+.npc-unique-toggle { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 1em; min-height: 0 !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important; background: transparent !important; box-shadow: none !important; color: #d6b35d !important; font-size: 1em; line-height: 1; }
+.npc-unique-toggle:hover, .npc-unique-toggle:focus-visible { border: 0 !important; background: transparent !important; color: #ffe090 !important; filter: drop-shadow(0 0 5px rgb(239 200 103 / 45%)); }
+.npc-unique-toggle.is-unique { border: 0 !important; background: transparent !important; color: #f2c557 !important; }
+.npc-unique-toggle:disabled { border: 0 !important; background: transparent !important; color: #77717b !important; filter: none; }
+.back-to-npc { color: #dec274; font-size: .82rem; font-weight: 700; text-decoration: none; }
 .back-to-npc { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; }
-.npc-unique-profile-link:hover, .back-to-npc:hover { color: #f2d68f; text-decoration: underline; }
+.back-to-npc:hover { color: #f2d68f; text-decoration: underline; }
 .record-statuses { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .source-banner { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 18px; border: 1px solid #3a3540; border-radius: 9px; padding: 16px 18px; background: #1b191e; }
 .source-banner > div { display: grid; gap: 3px; }

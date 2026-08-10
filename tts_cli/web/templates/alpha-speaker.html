@@ -9,13 +9,12 @@
     <div>
       <span class="alpha-kicker">NPC {{ npc.entity_id }}</span>
       <div class="npc-title-row">
-        <h1>{{ npc.name }}</h1>
         {% if npc.voice_scope == 'unique' %}
           <button class="npc-unique-toggle is-unique" type="button" data-action data-url="/api/alpha/npcs/{{ npc.speaker_id }}/baseline-voice" data-method="POST" data-confirm-required data-confirm="Return {{ npc.name }} to {{ record.baseline_voice.name if record.baseline_voice else 'the race / gender baseline' }}? The unique profile will remain dormant and nothing will be deleted." aria-label="Deactivate unique voice for {{ npc.name }}" title="Use the race / gender baseline" {% if not record.baseline_voice %}disabled{% endif %}><i class="fa-solid fa-star" aria-hidden="true"></i></button>
         {% else %}
           <button class="npc-unique-toggle" type="button" data-action data-url="/api/alpha/npcs/{{ npc.speaker_id }}/unique-voice" data-method="POST" aria-label="Give {{ npc.name }} a unique voice" title="Use a unique NPC voice"><i class="fa-regular fa-star" aria-hidden="true"></i></button>
         {% endif %}
-        {% if record.unique_voice %}<a class="npc-unique-profile-link" href="/alpha/voices/{{ record.unique_voice.voice_id }}">{{ 'Active' if record.unique_voice.is_active else 'Dormant' }} unique profile &rarr;</a>{% endif %}
+        <h1>{{ npc.name }}</h1>
       </div>
       <p>{{ npc.race_name | title }} · {{ npc.gender_name | title }} · {{ record.dialogue|length }} quest or gossip line{{ '' if record.dialogue|length == 1 else 's' }}</p>
     </div>

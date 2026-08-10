@@ -1187,11 +1187,18 @@ def test_npc_profile_uses_star_toggle_and_normalized_form_layout(monkeypatch):
 
     assert 'class="npc-unique-toggle"' in page.text
     assert 'class="fa-regular fa-star"' in page.text
+    title_row = page.text[page.text.index('class="npc-title-row"') :]
+    assert title_row.index('class="npc-unique-toggle"') < title_row.index("<h1>")
+    assert 'class="npc-unique-profile-link"' not in page.text
     assert "Distinctive enough for a unique voice?" not in page.text
     assert "Faction" in page.text
     assert "Affiliation" not in page.text
     assert 'class="form-grid npc-form-grid"' in page.text
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".npc-title-row h1 { margin-right: 2px; font-size: 1em; }" in stylesheet
+    assert ".npc-unique-toggle { display: inline-flex;" in stylesheet
+    assert "border: 0 !important;" in stylesheet
+    assert "font-size: 1em;" in stylesheet
     assert ".npc-form-grid label { grid-template-rows:" in stylesheet
     assert ".npc-form-grid select, .npc-form-grid input { min-height: 42px;" in stylesheet
 
@@ -1277,12 +1284,13 @@ def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):
 
     assert page.status_code == 200
     assert 'class="npc-unique-toggle is-unique"' in page.text
-    assert "Active unique profile" in page.text
+    assert "Unique NPC Profile · Active" in page.text
+    assert f'href="/alpha/voices/{unique["voice_id"]}"' in page.text
     assert "Distinctive enough for a unique voice?" not in page.text
     assert reset.status_code == 200
     assert reset.json()["speaker"]["speaker"]["voice_scope"] == "baseline"
     assert 'class="npc-unique-toggle"' in dormant_page.text
-    assert "Dormant unique profile" in dormant_page.text
+    assert "Unique NPC Profile · Dormant" in dormant_page.text
     assert unique["name"] in dormant_queue.text
     assert web.alpha_store.get_voice(unique["voice_id"])["status"] == "dormant"
 
