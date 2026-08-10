@@ -40,14 +40,33 @@
     </section>
 
     <section class="alpha-panel" id="voice-approach">
-      <div class="panel-heading"><div><h2>Voice Approach</h2><p>Applied and available profiles for this NPC.</p></div></div>
+      <div class="panel-heading"><div><h2>Voice Assignment</h2><p>The voice currently used by this NPC and the available alternative.</p></div></div>
       <div class="npc-voice-map">
-        <article>
-          <span>Currently Applied</span>
-          {% if npc.voice_id %}<strong>{{ npc.voice_name }}</strong><a href="{{ '/alpha/races/' if npc.voice_scope == 'baseline' else '/alpha/voices/' }}{{ npc.voice_id }}">Open {{ npc.voice_scope | title }} profile &rarr;</a>{% else %}<strong>Unassigned</strong>{% endif %}
+        <article class="is-current">
+          <div>
+            <span>Current Voice · {{ 'Unique' if npc.voice_scope == 'unique' else 'Baseline' if npc.voice_scope == 'baseline' else 'Unassigned' }}</span>
+            <strong>{{ npc.voice_name or 'No voice assigned' }}</strong>
+            <small>{% if npc.voice_scope == 'unique' %}This NPC uses its own unique voice.{% elif npc.voice_scope == 'baseline' %}This NPC uses the shared {{ record.baseline_voice.name if record.baseline_voice else (npc.race_name | title) ~ ' ' ~ (npc.gender_name | lower) }} baseline.{% else %}This NPC needs a baseline or unique voice assignment.{% endif %}</small>
+          </div>
+          {% if npc.voice_id %}<a href="{{ '/alpha/races/' if npc.voice_scope == 'baseline' else '/alpha/voices/' }}{{ npc.voice_id }}">Open current profile &rarr;</a>{% endif %}
         </article>
-        {% if record.baseline_voice %}<article><span>Race / Gender Baseline</span><strong>{{ record.baseline_voice.name }}</strong><a href="/alpha/races/{{ record.baseline_voice.voice_id }}">Open baseline profile &rarr;</a></article>{% endif %}
-        {% if record.unique_voice %}<article class="{{ 'is-active' if record.unique_voice.is_active else 'is-dormant' }}"><span>Unique NPC Profile · {{ 'Active' if record.unique_voice.is_active else 'Dormant' }}</span><strong>{{ record.unique_voice.name }}</strong><a href="/alpha/voices/{{ record.unique_voice.voice_id }}">Open unique profile &rarr;</a></article>{% endif %}
+        {% if npc.voice_scope == 'unique' %}
+        {% if record.baseline_voice %}
+        <article>
+          <div><span>Baseline Fallback</span><strong>{{ record.baseline_voice.name }}</strong><small>Used if the solid star beside the NPC name is turned off.</small></div>
+          <a href="/alpha/races/{{ record.baseline_voice.voice_id }}">Open baseline profile &rarr;</a>
+        </article>
+        {% endif %}
+        {% elif record.unique_voice %}
+        <article class="is-dormant">
+          <div><span>Saved Alternative · Dormant</span><strong>{{ record.unique_voice.name }}</strong><small>Preserved but not currently used. Select the hollow star beside the NPC name to reactivate it.</small></div>
+          <a href="/alpha/voices/{{ record.unique_voice.voice_id }}">Open unique profile &rarr;</a>
+        </article>
+        {% else %}
+        <article class="is-available">
+          <div><span>Unique Option · Not Created</span><strong>No unique profile yet</strong><small>Select the hollow star beside the NPC name to create one.</small></div>
+        </article>
+        {% endif %}
       </div>
     </section>
   </div>

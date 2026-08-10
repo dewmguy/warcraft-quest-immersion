@@ -1191,6 +1191,11 @@ def test_npc_profile_uses_star_toggle_and_normalized_form_layout(monkeypatch):
     assert title_row.index('class="npc-unique-toggle"') < title_row.index("<h1>")
     assert 'class="npc-unique-profile-link"' not in page.text
     assert "Distinctive enough for a unique voice?" not in page.text
+    assert "Voice Assignment" in page.text
+    assert "Current Voice · Baseline" in page.text
+    assert "Unique Option · Not Created" in page.text
+    assert "Currently Applied" not in page.text
+    assert "Voice Approach" not in page.text
     assert "Faction" in page.text
     assert "Affiliation" not in page.text
     assert 'class="form-grid npc-form-grid"' in page.text
@@ -1284,13 +1289,15 @@ def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):
 
     assert page.status_code == 200
     assert 'class="npc-unique-toggle is-unique"' in page.text
-    assert "Unique NPC Profile · Active" in page.text
+    assert "Current Voice · Unique" in page.text
+    assert "Baseline Fallback" in page.text
     assert f'href="/alpha/voices/{unique["voice_id"]}"' in page.text
     assert "Distinctive enough for a unique voice?" not in page.text
     assert reset.status_code == 200
     assert reset.json()["speaker"]["speaker"]["voice_scope"] == "baseline"
     assert 'class="npc-unique-toggle"' in dormant_page.text
-    assert "Unique NPC Profile · Dormant" in dormant_page.text
+    assert "Current Voice · Baseline" in dormant_page.text
+    assert "Saved Alternative · Dormant" in dormant_page.text
     assert unique["name"] in dormant_queue.text
     assert web.alpha_store.get_voice(unique["voice_id"])["status"] == "dormant"
 

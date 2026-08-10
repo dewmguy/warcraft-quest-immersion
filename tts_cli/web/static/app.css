@@ -319,11 +319,15 @@ dialog .actions { justify-content: flex-end; }
 .npc-form-grid small { align-self: start; margin: 0; color: #938c97; font-size: .76rem; line-height: 1.4; }
 .npc-context-form > button { justify-self: start; }
 .npc-voice-map { display: grid; gap: 10px; }
-.npc-voice-map article { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(170px, 1fr) auto; align-items: center; gap: 12px; border: 1px solid #39343d; border-radius: 8px; padding: 13px 14px; background: #131116; }
-.npc-voice-map article > span { color: #918a95; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.npc-voice-map article { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; border: 1px solid #39343d; border-radius: 8px; padding: 14px 16px; background: #131116; }
+.npc-voice-map article > div { display: grid; gap: 3px; }
+.npc-voice-map article > div > span { color: #918a95; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.npc-voice-map article > div > strong { color: #f1eadb; font-size: 1rem; }
+.npc-voice-map article > div > small { color: #9f98a4; line-height: 1.45; }
 .npc-voice-map article > a { justify-self: end; }
-.npc-voice-map article.is-active { border-color: #3e775c; background: #142019; }
+.npc-voice-map article.is-current { border-color: #3e775c; background: #142019; }
 .npc-voice-map article.is-dormant { border-color: #514a56; opacity: .88; }
+.npc-voice-map article.is-available { border-style: dashed; }
 .npc-profile-context { border-color: #4b4230; }
 .npc-context-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .npc-context-summary { margin-top: 18px; border-top: 1px solid #37323a; padding-top: 16px; }
