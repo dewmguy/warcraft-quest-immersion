@@ -573,6 +573,7 @@ def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):
     assert "data-alpha-message-elapsed" in voice_page.text
     assert "data-alpha-message-progress" in voice_page.text
     assert "data-alpha-message-close" in voice_page.text
+    assert 'aria-label="Dismiss notification"' in voice_page.text
     assert 'aria-live="polite"' in voice_page.text
     assert voice_page.text.count("data-paid") == voice_page.text.count("data-provider-operation")
     assert dialogue_page.text.count("data-paid") == dialogue_page.text.count(
@@ -588,7 +589,10 @@ def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):
     assert "window.setInterval(renderElevenLabsProgress, 1000)" in script
     assert "the request remains active" in script
     assert 'startElevenLabsRequest("Checking ElevenLabs account", null, true)' in script
-    assert 'alphaMessageClose.hidden = state !== "failed"' in script
+    assert "const ALPHA_MESSAGE_DISMISS_MS = 10_000" in script
+    assert "window.setTimeout(hideAlphaMessage, ALPHA_MESSAGE_DISMISS_MS)" in script
+    assert 'if (state === "failed")' in script
+    assert "alphaMessageClose.hidden" not in script
     assert 'alphaMessageClose.addEventListener("click"' in script
     assert script.count("alphaMessage.hidden = true") == 1
 
@@ -706,6 +710,7 @@ def test_reusable_voice_id_candidate_survives_new_design_previews(monkeypatch):
     assert "Voice Design #2" in selected_page.text
     assert "Profile default" not in selected_page.text
     assert "Use as default" not in selected_page.text
+    assert "candidate-assign" not in selected_page.text
     assert "Voice Design · eleven_ttv_v3" not in selected_page.text
     assert candidate["provider_voice_id"] in selected_page.text
     assert regenerated.status_code == 200

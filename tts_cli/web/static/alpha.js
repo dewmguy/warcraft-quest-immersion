@@ -5,11 +5,30 @@ const alphaMessageElapsed = alphaMessage.querySelector("[data-alpha-message-elap
 const alphaMessageProgress = alphaMessage.querySelector("[data-alpha-message-progress]");
 const alphaMessageClose = alphaMessage.querySelector("[data-alpha-message-close]");
 const providerUsageIndicator = document.querySelector("[data-provider-usage-indicator]");
+const ALPHA_MESSAGE_DISMISS_MS = 10_000;
 let alphaProviderTimer = null;
 const alphaProviderRequests = new Map();
 let alphaProviderRequestSequence = 0;
 let providerStatusRequest = null;
 let providerUsageRefreshTimer = null;
+let alphaMessageDismissTimer = null;
+let alphaMessageDismissed = false;
+
+function clearAlphaMessageDismissTimer() {
+  if (alphaMessageDismissTimer !== null) window.clearTimeout(alphaMessageDismissTimer);
+  alphaMessageDismissTimer = null;
+}
+
+function hideAlphaMessage() {
+  clearAlphaMessageDismissTimer();
+  alphaMessage.hidden = true;
+  alphaMessageDismissed = true;
+}
+
+function beginAlphaMessage() {
+  clearAlphaMessageDismissTimer();
+  alphaMessageDismissed = false;
+}
 
 function stopAlphaProviderTimer() {
   if (alphaProviderTimer !== null) window.clearInterval(alphaProviderTimer);
@@ -23,6 +42,7 @@ function formatElapsedTime(seconds) {
 }
 
 function renderAlphaMessage({ title, detail = "", state = "working", elapsed = "", provider = false }) {
+  if (alphaMessageDismissed) return;
   alphaMessage.hidden = false;
   alphaMessage.dataset.state = state;
   if (provider) alphaMessage.dataset.provider = "true";
@@ -33,7 +53,11 @@ function renderAlphaMessage({ title, detail = "", state = "working", elapsed = "
   alphaMessageElapsed.textContent = elapsed;
   alphaMessageElapsed.hidden = !elapsed;
   alphaMessageProgress.hidden = !provider || state !== "working";
-  alphaMessageClose.hidden = state !== "failed";
+  if (state === "failed") {
+    clearAlphaMessageDismissTimer();
+  } else if (alphaMessageDismissTimer === null) {
+    alphaMessageDismissTimer = window.setTimeout(hideAlphaMessage, ALPHA_MESSAGE_DISMISS_MS);
+  }
 }
 
 function providerProgressDetail(request, elapsedSeconds) {
@@ -70,6 +94,7 @@ function renderElevenLabsProgress() {
 }
 
 function startElevenLabsRequest(operation, estimate = null, readOnly = false) {
+  beginAlphaMessage();
   const requestId = `provider-request-${++alphaProviderRequestSequence}`;
   alphaProviderRequests.set(requestId, {
     operation: operation || "Processing an ElevenLabs request",
@@ -98,12 +123,11 @@ function showAlphaMessage(text, state = "working") {
     renderElevenLabsProgress();
     return;
   }
+  beginAlphaMessage();
   renderAlphaMessage({ title: text, state });
 }
 
-alphaMessageClose.addEventListener("click", () => {
-  alphaMessage.hidden = true;
-});
+alphaMessageClose.addEventListener("click", hideAlphaMessage);
 
 async function parseAlphaResponse(response) {
   const payload = await response.json().catch(() => ({}));
