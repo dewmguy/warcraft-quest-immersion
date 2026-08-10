@@ -137,6 +137,9 @@ def test_quest_gossip_and_npc_filters_apply_immediately_and_use_one_clear_button
         assert 'class="text-link"' not in page.text
         assert "fa-filter-circle-xmark" in page.text
 
+    assert "<th>Status</th>" in pages[2].text
+    assert "<th>Readiness</th>" not in pages[2].text
+
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
     assert 'document.querySelectorAll("[data-instant-filters]")' in script
     assert 'select.addEventListener("change", applyFilters)' in script
