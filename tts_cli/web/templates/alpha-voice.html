@@ -97,7 +97,14 @@
   <section class="alpha-panel creation-workspace" id="provider-creation">
     <div class="creation-workspace-grid">
       <div class="creation-controls">
-        <div class="panel-heading"><div><span class="panel-step">Provider Creation</span><h2>Generate a Reusable Voice ID</h2><p>Create and retain ElevenLabs voice IDs.</p></div></div>
+        <div class="panel-heading provider-creation-panel-heading">
+          <div><span class="panel-step">Provider Creation</span><h2>Generate a Reusable Voice ID</h2><p>Create and retain ElevenLabs voice IDs.</p></div>
+          <div class="metering-preview compact delivery-section-metering provider-creation-metering" data-metering="voice-design" data-metered-characters="{{ voice_id_audition_text | trim | length }}">
+            <span><strong data-estimate-characters>--</strong> chars</span>
+            <span><strong data-estimate-credits>--</strong> credits</span>
+            <span><strong data-estimate-duration>--</strong></span>
+          </div>
+        </div>
         <div data-method-panel="unselected" {% if voice.creation_method != 'unselected' %}hidden{% endif %}><p class="empty-copy">Choose a creation path above.</p></div>
         <form data-json-form data-paid data-provider-operation="Generating three Voice Design previews" data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="designed" {% if voice.creation_method != 'designed' %}hidden{% endif %}>
           <input type="hidden" name="creation_method" value="designed">
@@ -105,7 +112,6 @@
           <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="1000" required>{{ voice.description }}</textarea></label>
           {% if voice.prompt_versions %}<details class="prompt-history"><summary><span>Prompt History</span><small>{{ voice.prompt_versions|length }} prior</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><ol>{% for version in voice.prompt_versions %}<li><p>{{ version.description }}</p><div><small>Version {{ version.version_number }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</small><button type="button" data-action data-url="/api/alpha/voices/{{ voice.voice_id }}/prompts/{{ version.version_id }}/restore" data-method="POST">Restore</button></div></li>{% endfor %}</ol></details>{% endif %}
           {{ voice_design_advanced() }}
-          <div class="metering-preview"><span><strong data-estimate-characters>--</strong> input characters</span><span><strong data-estimate-credits>--</strong> estimated credits</span><span><strong data-estimate-duration>--</strong> per preview</span><small>Three previews are returned; audition text is charged once.</small></div>
           <button type="submit" {% if not provider_configured %}disabled{% endif %}>Generate three previews</button>
         </form>
         <form data-json-form data-paid data-provider-operation="Generating three reference-guided previews" data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="reference_design" {% if voice.creation_method != 'reference_design' %}hidden{% endif %}>
@@ -116,7 +122,6 @@
           <label><span>Required Reference Clip</span><select name="reference_clip_id" required><option value="">Select one clip</option>{% for clip in voice.clips %}<option value="{{ clip.clip_id }}">{{ clip.original_name }}</option>{% endfor %}</select></label>
           <label class="reference-balance"><span>Prompt vs. Reference Balance <output data-range-output>0.5</output></span><input name="prompt_strength" type="range" min="0" max="1" step="0.05" value="0.5"><small><span>Reference</span><span>Prompt</span></small></label>
           {{ voice_design_advanced() }}
-          <div class="metering-preview"><span><strong data-estimate-characters>--</strong> input characters</span><span><strong data-estimate-credits>--</strong> estimated credits</span><span><strong data-estimate-duration>--</strong> per preview</span><small>Three previews are returned; audition text is charged once.</small></div>
           <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Generate three previews</button>
         </form>
         <form data-json-form data-paid data-provider-operation="Generating an instant-clone voice ID and sample" data-url="/api/alpha/voices/{{ voice.voice_id }}/clone" data-method="POST" data-method-panel="instant_clone" {% if voice.creation_method != 'instant_clone' %}hidden{% endif %}>

@@ -245,8 +245,8 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert page.text.count("Generate sample") == 5
     assert "Preset Settings" in page.text
     assert '<span class="delivery-preset-section-label">Sample</span>' not in page.text
-    assert page.text.count("metering-preview compact delivery-section-metering") == 1
-    assert page.text.count("data-metered-characters") == 1
+    assert page.text.count("metering-preview compact delivery-section-metering") == 2
+    assert page.text.count("data-metered-characters") == 2
     assert "Generate all samples" in page.text
     assert "Sample Script" in page.text
     assert "<blockquote>" in page.text
@@ -287,9 +287,19 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     template = (web.WEB_DIR / "templates" / "alpha-voice.html").read_text(encoding="utf-8")
     assert (
         '<div class="creation-controls">\n'
-        '        <div class="panel-heading"><div><span class="panel-step">Provider Creation</span>'
+        '        <div class="panel-heading provider-creation-panel-heading">'
         in template
     )
+    assert (
+        'class="metering-preview compact delivery-section-metering '
+        'provider-creation-metering"'
+        in template
+    )
+    assert (
+        'data-metered-characters="{{ voice_id_audition_text | trim | length }}"'
+        in template
+    )
+    assert template.count('<div class="metering-preview"><span>') == 0
 
 
 def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
