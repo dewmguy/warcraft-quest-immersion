@@ -113,6 +113,34 @@ def test_voice_design_exposes_provider_cost_metadata():
     assert result.request_id == "request-1"
     assert result.character_cost == 19
     assert session.calls[0][1].endswith("/v1/text-to-voice/design")
+    payload = session.calls[0][2]["json"]
+    assert payload["guidance_scale"] == 5.0
+    assert payload["loudness"] == 0.5
+    assert "quality" not in payload
+    assert "seed" not in payload
+
+
+def test_voice_design_sends_explicit_advanced_controls():
+    session = FakeSession()
+    client = ElevenLabsClient(
+        settings=Settings(elevenlabs_api_key="test-key"),
+        session=session,
+    )
+
+    client.design_voice(
+        description="A deliberate Warcraft test voice with a grounded tone.",
+        preview_text="This comparison passage is intentionally long enough for a useful preview.",
+        guidance_scale=12,
+        loudness=-0.25,
+        quality=0.7,
+        seed=8675309,
+    )
+
+    payload = session.calls[0][2]["json"]
+    assert payload["guidance_scale"] == 12
+    assert payload["loudness"] == -0.25
+    assert payload["quality"] == 0.7
+    assert payload["seed"] == 8675309
 
 
 def test_voice_clone_preserves_each_reference_files_mime_type(tmp_path):
@@ -136,6 +164,27 @@ def test_voice_clone_preserves_each_reference_files_mime_type(tmp_path):
     multipart = session.calls[0][2]["files"]
     assert multipart[0][1][2] == "audio/mpeg"
     assert multipart[1][1][2] in {"audio/wav", "audio/x-wav"}
+    assert session.calls[0][2]["data"]["remove_background_noise"] == "false"
+
+
+def test_voice_clone_can_request_background_noise_removal(tmp_path):
+    sample = tmp_path / "noisy.wav"
+    sample.write_bytes(b"wav")
+    session = FakeSession()
+    client = ElevenLabsClient(
+        settings=Settings(elevenlabs_api_key="test-key"),
+        session=session,
+    )
+
+    client.clone_voice(
+        name="Test voice",
+        description="A controlled test voice.",
+        labels={"language": "en"},
+        files=[sample],
+        remove_background_noise=True,
+    )
+
+    assert session.calls[0][2]["data"]["remove_background_noise"] == "true"
 
 
 def test_voice_delete_uses_the_provider_voice_endpoint():

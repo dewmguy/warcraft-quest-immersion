@@ -18,6 +18,22 @@
     'joyful': 'Warm, positive energy.',
     'proclaiming': 'Projected authority.'
   } %}
+  {% macro voice_design_advanced() -%}
+    <details class="provider-advanced">
+      <summary><span><i class="fa-solid fa-sliders" aria-hidden="true"></i> Advanced Voice Design</span><small>Provider defaults</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+      <div class="provider-advanced-body">
+        <div class="provider-advanced-grid">
+          <label><span>Guidance Scale <output data-range-output>5</output></span><input name="guidance_scale" type="range" min="0" max="100" step="1" value="5"><small>Prompt adherence</small></label>
+          <label><span>Loudness <output data-range-output>0.5</output></span><input name="loudness" type="range" min="-1" max="1" step="0.05" value="0.5"><small>Preview and saved voice volume</small></label>
+          <div class="provider-optional-control" data-optional-provider-control>
+            <label class="check-row provider-override"><input type="checkbox" name="quality_override" data-provider-override><span>Override Quality</span></label>
+            <label><span>Quality <output data-range-output>0</output></span><input name="quality" type="range" min="-1" max="1" step="0.05" value="0" data-provider-override-range><small>Quality versus variety</small></label>
+          </div>
+          <label><span>Seed (Optional)</span><input name="seed" type="number" min="0" max="2147483647" step="1" inputmode="numeric" placeholder="Random"><small>Reuse a number for repeatable input</small></label>
+        </div>
+      </div>
+    </details>
+  {%- endmacro %}
   <nav class="breadcrumbs"><a href="/alpha/voices">Voices</a><span>›</span><span>{{ voice.name }}</span></nav>
   <section class="alpha-page-heading record-heading">
     <div><span class="alpha-kicker">{{ voice.scope | title }} Voice Profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} dialogue records · {{ voice.missing_dialogue_count }} missing audio</p></div>
@@ -86,24 +102,30 @@
         <form data-json-form data-paid data-provider-operation="Generating three Voice Design previews" data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="designed" {% if voice.creation_method != 'designed' %}hidden{% endif %}>
           <input type="hidden" name="creation_method" value="designed">
           <input type="hidden" name="preview_text" value="{{ voice_id_audition_text }}" data-metered-text>
-          <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="5000" required>{{ voice.description }}</textarea></label>
+          <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="1000" required>{{ voice.description }}</textarea></label>
           {% if voice.prompt_versions %}<details class="prompt-history"><summary><span>Prompt History</span><small>{{ voice.prompt_versions|length }} prior</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><ol>{% for version in voice.prompt_versions %}<li><p>{{ version.description }}</p><div><small>Version {{ version.version_number }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</small><button type="button" data-action data-url="/api/alpha/voices/{{ voice.voice_id }}/prompts/{{ version.version_id }}/restore" data-method="POST">Restore</button></div></li>{% endfor %}</ol></details>{% endif %}
+          {{ voice_design_advanced() }}
           <div class="metering-preview"><span><strong data-estimate-characters>--</strong> input characters</span><span><strong data-estimate-credits>--</strong> estimated credits</span><span><strong data-estimate-duration>--</strong> per preview</span><small>Three previews are returned; audition text is charged once.</small></div>
           <button type="submit" {% if not provider_configured %}disabled{% endif %}>Generate three previews</button>
         </form>
         <form data-json-form data-paid data-provider-operation="Generating three reference-guided previews" data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="reference_design" {% if voice.creation_method != 'reference_design' %}hidden{% endif %}>
           <input type="hidden" name="creation_method" value="reference_design">
           <input type="hidden" name="preview_text" value="{{ voice_id_audition_text }}" data-metered-text>
-          <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="5000" required>{{ voice.description }}</textarea></label>
+          <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="1000" required>{{ voice.description }}</textarea></label>
           {% if voice.prompt_versions %}<details class="prompt-history"><summary><span>Prompt History</span><small>{{ voice.prompt_versions|length }} prior</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><ol>{% for version in voice.prompt_versions %}<li><p>{{ version.description }}</p><div><small>Version {{ version.version_number }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</small><button type="button" data-action data-url="/api/alpha/voices/{{ voice.voice_id }}/prompts/{{ version.version_id }}/restore" data-method="POST">Restore</button></div></li>{% endfor %}</ol></details>{% endif %}
           <label><span>Required Reference Clip</span><select name="reference_clip_id" required><option value="">Select one clip</option>{% for clip in voice.clips %}<option value="{{ clip.clip_id }}">{{ clip.original_name }}</option>{% endfor %}</select></label>
-          <label><span>Prompt Influence <output data-range-output>0.5</output></span><input name="prompt_strength" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+          <label class="reference-balance"><span>Prompt vs. Reference Balance <output data-range-output>0.5</output></span><input name="prompt_strength" type="range" min="0" max="1" step="0.05" value="0.5"><small><span>Reference</span><span>Prompt</span></small></label>
+          {{ voice_design_advanced() }}
           <div class="metering-preview"><span><strong data-estimate-characters>--</strong> input characters</span><span><strong data-estimate-credits>--</strong> estimated credits</span><span><strong data-estimate-duration>--</strong> per preview</span><small>Three previews are returned; audition text is charged once.</small></div>
           <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Generate three previews</button>
         </form>
         <form data-json-form data-paid data-provider-operation="Generating an instant-clone voice ID and sample" data-url="/api/alpha/voices/{{ voice.voice_id }}/clone" data-method="POST" data-method-panel="instant_clone" {% if voice.creation_method != 'instant_clone' %}hidden{% endif %}>
           <input type="hidden" name="creation_method" value="instant_clone">
           <fieldset><legend>Reference Clips to Clone</legend>{% for clip in voice.clips %}<label class="check-row"><input type="checkbox" name="clip_ids" value="{{ clip.clip_id }}" data-array><span>{{ clip.original_name }} · {{ "%.2f"|format(clip.duration_seconds or 0) }} sec</span></label>{% else %}<p class="empty-copy">Upload 1–2 minutes of clean, consistent, single-speaker audio first.</p>{% endfor %}</fieldset>
+          <details class="provider-advanced">
+            <summary><span><i class="fa-solid fa-sliders" aria-hidden="true"></i> Advanced Instant Voice Clone</span><small>Provider default</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+            <div class="provider-advanced-body"><label class="check-row provider-noise-control"><input type="checkbox" name="remove_background_noise"><span><strong>Remove Background Noise</strong><small>Enable only when the selected clips contain audible background noise.</small></span></label></div>
+          </details>
           <p class="form-help">The selected clips define the clone. A sample is generated automatically.</p>
           <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Generate Voice ID</button>
         </form>

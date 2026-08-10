@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import re
 import secrets
@@ -300,6 +301,38 @@ def _provider_clone_description(value: str, limit: int = 500) -> str:
         return normalized
     shortened = normalized[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
     return f"{shortened or normalized[: limit - 1]}…"
+
+
+def _bounded_provider_float(
+    payload: dict,
+    key: str,
+    *,
+    default: float,
+    minimum: float,
+    maximum: float,
+    label: str,
+) -> float:
+    raw_value = payload.get(key, default)
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError) as error:
+        raise AlphaError(f"{label} must be a number.") from error
+    if not math.isfinite(value) or not minimum <= value <= maximum:
+        raise AlphaError(f"{label} must be between {minimum:g} and {maximum:g}.")
+    return value
+
+
+def _optional_provider_seed(payload: dict) -> int | None:
+    raw_value = payload.get("seed")
+    if raw_value in (None, ""):
+        return None
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError) as error:
+        raise AlphaError("Seed must be a whole number.") from error
+    if not 0 <= value <= 2_147_483_647:
+        raise AlphaError("Seed must be between 0 and 2,147,483,647.")
+    return value
 
 
 def _usage_snapshot(subscription: dict, character_cost: int | None) -> dict:
@@ -1077,8 +1110,8 @@ def api_design_voice(
         if creation_method not in {"designed", "reference_design"}:
             raise AlphaError("Select a Voice Design method before generating design candidates.")
         description = str(payload.get("description", voice["description"])).strip()
-        if not 20 <= len(description) <= 5000:
-            raise AlphaError("Voice Design prompt context must contain 20–5,000 characters.")
+        if not 20 <= len(description) <= 1000:
+            raise AlphaError("Voice Design prompt context must contain 20–1,000 characters.")
         preview_text = str(payload.get("preview_text", "")).strip()
         if not 100 <= len(preview_text) <= 1000:
             raise AlphaError("Voice preview text must contain 100–1,000 characters.")
@@ -1096,12 +1129,51 @@ def api_design_voice(
         design_model = alpha_store.get_app_settings()["voice_design_model_id"]
         if reference_audio is not None and design_model != "eleven_ttv_v3":
             raise AlphaError("Reference-guided Voice Design requires the v3 design model.")
+        prompt_strength = _bounded_provider_float(
+            payload,
+            "prompt_strength",
+            default=0.5,
+            minimum=0,
+            maximum=1,
+            label="Prompt versus reference balance",
+        )
+        guidance_scale = _bounded_provider_float(
+            payload,
+            "guidance_scale",
+            default=5,
+            minimum=0,
+            maximum=100,
+            label="Guidance scale",
+        )
+        loudness = _bounded_provider_float(
+            payload,
+            "loudness",
+            default=0.5,
+            minimum=-1,
+            maximum=1,
+            label="Loudness",
+        )
+        quality = None
+        if payload.get("quality_override") is True:
+            quality = _bounded_provider_float(
+                payload,
+                "quality",
+                default=0,
+                minimum=-1,
+                maximum=1,
+                label="Quality",
+            )
+        seed = _optional_provider_seed(payload)
         result = elevenlabs.design_voice(
             description=description,
             preview_text=preview_text,
             model_id=design_model,
             reference_audio=reference_audio,
-            prompt_strength=float(payload.get("prompt_strength", 0.5)),
+            prompt_strength=prompt_strength,
+            guidance_scale=guidance_scale,
+            loudness=loudness,
+            quality=quality,
+            seed=seed,
         )
         try:
             subscription = elevenlabs.subscription()
@@ -1236,6 +1308,7 @@ def api_clone_voice(
                 "language": "en",
             },
             files=[clip["path"] for clip in clips],
+            remove_background_noise=payload.get("remove_background_noise") is True,
         )
         provider_voice_id = str(result.get("voice_id", "")).strip()
         if not provider_voice_id:

@@ -111,13 +111,23 @@ class ElevenLabsClient:
         model_id: str = "eleven_ttv_v3",
         reference_audio: bytes | None = None,
         prompt_strength: float = 0.5,
+        guidance_scale: float = 5.0,
+        loudness: float = 0.5,
+        quality: float | None = None,
+        seed: int | None = None,
     ) -> VoiceDesignResponse:
         payload: dict[str, Any] = {
             "voice_description": description,
             "text": preview_text,
             "model_id": model_id,
             "auto_generate_text": False,
+            "guidance_scale": guidance_scale,
+            "loudness": loudness,
         }
+        if quality is not None:
+            payload["quality"] = quality
+        if seed is not None:
+            payload["seed"] = seed
         if reference_audio is not None:
             payload["reference_audio_base64"] = base64.b64encode(reference_audio).decode("ascii")
             payload["prompt_strength"] = prompt_strength
@@ -167,6 +177,7 @@ class ElevenLabsClient:
         description: str,
         labels: dict[str, str],
         files: list[Path],
+        remove_background_noise: bool = False,
     ) -> dict[str, Any]:
         opened_files = []
         try:
@@ -179,7 +190,12 @@ class ElevenLabsClient:
             response = self.session.post(
                 f"{self.base_url}/v1/voices/add",
                 headers=self._headers(),
-                data={"name": name, "description": description, "labels": json.dumps(labels)},
+                data={
+                    "name": name,
+                    "description": description,
+                    "labels": json.dumps(labels),
+                    "remove_background_noise": str(remove_background_noise).lower(),
+                },
                 files=multipart_files,
                 timeout=180,
             )

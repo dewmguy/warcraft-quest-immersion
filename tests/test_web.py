@@ -41,7 +41,11 @@ class ConfiguredElevenLabs:
 
 
 class DesigningElevenLabs(ConfiguredElevenLabs):
-    def design_voice(self, **_kwargs):
+    def __init__(self):
+        self.design_kwargs = None
+
+    def design_voice(self, **kwargs):
+        self.design_kwargs = kwargs
         return SimpleNamespace(
             payload={
                 "previews": [
@@ -260,6 +264,17 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "https://kit.fontawesome.com/666b0b7246.js" in page.text
     assert "MP3 should be 192 kbps or higher" in page.text
     assert "candidate-generation-note" not in page.text
+    assert page.text.count("Advanced Voice Design") == 2
+    assert "Advanced Instant Voice Clone" in page.text
+    assert 'name="guidance_scale"' in page.text
+    assert 'name="loudness"' in page.text
+    assert 'name="quality_override"' in page.text
+    assert 'name="quality"' in page.text
+    assert 'name="seed"' in page.text
+    assert "Prompt vs. Reference Balance" in page.text
+    assert 'name="remove_background_noise"' in page.text
+    assert 'maxlength="5000"' not in page.text
+    assert page.text.count('maxlength="1000"') == 2
 
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
     assert 'grid-template-areas: "heading review" "settings review"' in stylesheet
@@ -679,6 +694,37 @@ def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
     assert not former_path.exists()
 
 
+def test_voice_design_accepts_validated_advanced_controls(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    provider = DesigningElevenLabs()
+    monkeypatch.setattr(web, "elevenlabs", provider)
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        response = client.post(
+            f"/api/alpha/voices/{voice_id}/design",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+            json={
+                "creation_method": "designed",
+                "preview_text": web.VOICE_ID_AUDITION_TEXT,
+                "guidance_scale": "12",
+                "loudness": "-0.25",
+                "quality_override": True,
+                "quality": "0.7",
+                "seed": "8675309",
+            },
+        )
+
+    assert response.status_code == 200
+    assert provider.design_kwargs is not None
+    assert provider.design_kwargs["guidance_scale"] == 12
+    assert provider.design_kwargs["loudness"] == -0.25
+    assert provider.design_kwargs["quality"] == 0.7
+    assert provider.design_kwargs["seed"] == 8675309
+
+
 def test_reusable_voice_id_candidate_survives_new_design_previews(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())
@@ -888,6 +934,7 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
             json={
                 "creation_method": "instant_clone",
                 "clip_ids": [clip["clip_id"]],
+                "remove_background_noise": True,
             },
         )
         revised = web.alpha_store.get_voice(voice_id)
@@ -907,6 +954,7 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
     assert instant_candidate["sample_text"] == web.VOICE_ID_AUDITION_TEXT
     assert instant_candidate["sample_model_id"] == "eleven_v3"
     assert provider.clone_kwargs is not None
+    assert provider.clone_kwargs["remove_background_noise"] is True
     assert provider.tts_kwargs is not None
     assert provider.tts_kwargs["voice_id"] == "provider-instant-clone"
     assert provider.tts_kwargs["text"] == web.VOICE_ID_AUDITION_TEXT

@@ -658,6 +658,19 @@ for (const input of document.querySelectorAll('input[type="range"]')) {
   sync();
 }
 
+for (const control of document.querySelectorAll("[data-optional-provider-control]")) {
+  const checkbox = control.querySelector("[data-provider-override]");
+  const range = control.querySelector("[data-provider-override-range]");
+  if (!checkbox || !range) continue;
+  const sync = () => control.classList.toggle("is-enabled", checkbox.checked);
+  checkbox.addEventListener("change", sync);
+  range.addEventListener("input", () => {
+    checkbox.checked = true;
+    sync();
+  });
+  sync();
+}
+
 const methodController = document.querySelector("[data-method-controller]");
 if (methodController) {
   const selector = methodController.querySelector('[name="creation_method"]');
