@@ -305,6 +305,18 @@ dialog .actions { justify-content: flex-end; }
 .breadcrumbs { display: flex; gap: 9px; margin-bottom: 20px; color: #8f8894; font-size: .85rem; }
 .record-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .source-copy blockquote { margin: 0 0 22px; border-left: 3px solid #a98136; padding: 16px 18px; background: #121014; color: #f0e9dc; font-family: Georgia, serif; font-size: 1.08rem; line-height: 1.65; }
+.quest-text-panel { display: grid; gap: 0; }
+.dialogue-text-label { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.dialogue-text-label strong { color: #d5a84d; font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; }
+.dialogue-text-label span { color: #8f8894; font-size: .76rem; }
+.quest-spoken-review { border-top: 1px solid #37323a; padding-top: 20px; }
+.spoken-text-blockquote-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+.source-copy .quest-spoken-review blockquote { margin: 0; border-left-color: #4e8464; }
+[data-spoken-edit-form][hidden], [data-spoken-display][hidden] { display: none !important; }
+.alpha-body .spoken-text-edit-button { min-height: 36px; padding: 7px 11px; background: transparent; color: #dec274; }
+.quest-spoken-review form { margin-top: 0; }
+.form-actions { display: flex; gap: 9px; }
+.quest-source-facts { margin-top: 22px; border-top: 1px solid #37323a; padding-top: 18px; }
 .record-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .record-facts div { display: grid; gap: 3px; }
 .record-facts dt { color: #8f8894; font-size: .72rem; text-transform: uppercase; }
@@ -623,4 +635,6 @@ dialog .actions { justify-content: flex-end; }
   .delivery-preset-settings > .delivery-preset-section-label, .delivery-preset-settings > button { grid-column: auto; }
   .npc-voice-map article { grid-template-columns: 1fr; }
   .npc-voice-map article > a { justify-self: start; }
+  .spoken-text-blockquote-row { grid-template-columns: 1fr; }
+  .spoken-text-edit-button { justify-self: start; }
 }

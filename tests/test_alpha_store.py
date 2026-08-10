@@ -52,16 +52,13 @@ def test_initialize_adds_new_columns_to_existing_alpha_database(tmp_path: Path):
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(voice_previews)")}
         voice_columns = {row["name"] for row in connection.execute("PRAGMA table_info(voices)")}
         preset_columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(voice_delivery_presets)")
+            row["name"] for row in connection.execute("PRAGMA table_info(voice_delivery_presets)")
         }
         delivery_preview_columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(voice_delivery_previews)")
+            row["name"] for row in connection.execute("PRAGMA table_info(voice_delivery_previews)")
         }
         voice_id_candidate_columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(voice_id_candidates)")
+            row["name"] for row in connection.execute("PRAGMA table_info(voice_id_candidates)")
         }
 
     assert "creation_method" in columns
@@ -101,7 +98,7 @@ def test_initialize_backfills_current_provider_voice_into_candidate_registry(sto
     } == {"active-instant-clone"}
 
 
-def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore):
+def test_import_prepares_quest_spoken_text_but_leaves_gossip_for_review(store: AlphaStore):
     dashboard = store.dashboard()
     listing = store.list_dialogue(page_size=10)
 
@@ -109,8 +106,16 @@ def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore
     assert dashboard["counts"]["speakers"] == 3
     assert dashboard["counts"]["npcs"] == 2
     assert dashboard["counts"]["baseline_voices"] == 46
-    assert dashboard["states"] == {"needs_text": 4}
-    assert all(row["revision_id"] is None for row in listing["rows"])
+    assert dashboard["states"] == {"needs_text": 1, "needs_voice": 3}
+    assert all(
+        (row["revision_id"] is not None) == (row["source"] != "gossip") for row in listing["rows"]
+    )
+    accept = next(row for row in listing["rows"] if row["source"] == "accept")
+    assert "Adventurer" in store.get_dialogue(accept["dialogue_id"])["spoken_text"]
+    store.save_spoken_text(accept["dialogue_id"], "A reviewed manual revision.")
+    repeated_import = store.import_csv(SAMPLE_DATA_PATH, source_name="sample.csv")
+    assert repeated_import["prepared_spoken_texts"] == 0
+    assert store.get_dialogue(accept["dialogue_id"])["spoken_text"] == "A reviewed manual revision."
     assert store.progress() == {
         "voices": {
             "label": "Baseline deliveries",
@@ -175,16 +180,15 @@ def test_unique_npc_progress_tracks_ready_active_profiles(store: AlphaStore):
     assert store.progress()["unique_npcs"]["total"] == 0
 
 
-def test_spoken_text_is_created_only_by_explicit_action(store: AlphaStore):
-    row = _first_dialogue(store)
+def test_gossip_spoken_text_is_created_only_by_explicit_action(store: AlphaStore):
+    row = store.list_dialogue(source="gossip", page_size=10)["rows"][0]
     original = row["original_text"]
 
     prepared = store.prepare_spoken_text(row["dialogue_id"])
 
     assert prepared["original_text"] == original
     assert prepared["revision_number"] == 1
-    assert "$N" not in prepared["spoken_text"]
-    assert "Adventurer" in prepared["spoken_text"]
+    assert prepared["spoken_text"] == original
     with pytest.raises(AlphaError, match="already been prepared"):
         store.prepare_spoken_text(row["dialogue_id"])
 
@@ -192,9 +196,7 @@ def test_spoken_text_is_created_only_by_explicit_action(store: AlphaStore):
 def test_quest_detail_lists_only_other_phases_of_the_same_quest(store: AlphaStore):
     rows = store.list_dialogue(source="quest", page_size=10)["rows"]
     accept = next(row for row in rows if row["quest_id"] == 101 and row["source"] == "accept")
-    complete = next(
-        row for row in rows if row["quest_id"] == 101 and row["source"] == "complete"
-    )
+    complete = next(row for row in rows if row["quest_id"] == 101 and row["source"] == "complete")
     single_phase = next(row for row in rows if row["quest_id"] == 102)
     gossip = store.list_dialogue(source="gossip", page_size=10)["rows"][0]
 
@@ -228,7 +230,7 @@ def test_text_voice_generation_and_approval_are_separate_records(
 ):
     row = _first_dialogue(store)
     dialogue_id = row["dialogue_id"]
-    prepared = store.prepare_spoken_text(dialogue_id)
+    prepared = store.get_dialogue(dialogue_id)
     voice = store.get_voice(prepared["voice_id"])
     store.update_voice(
         voice["voice_id"],
@@ -337,7 +339,6 @@ def test_voice_lifecycle_is_derived_from_readiness_and_production(
 
     monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
     for index, row in enumerate(dialogue, start=1):
-        store.prepare_spoken_text(row["dialogue_id"])
         generation = store.begin_generation(row["dialogue_id"])
         audio = store.complete_generation(
             generation["generation_id"],
@@ -593,7 +594,7 @@ def test_voice_candidate_can_be_deleted_without_changing_other_voice_data(
 
 def test_delivery_presets_are_voice_metadata_used_for_dialogue(store: AlphaStore):
     row = _first_dialogue(store)
-    prepared = store.prepare_spoken_text(row["dialogue_id"])
+    prepared = store.get_dialogue(row["dialogue_id"])
     store.set_delivery(row["dialogue_id"], "angry")
     store.update_delivery_preset(
         prepared["voice_id"],
@@ -650,11 +651,14 @@ def test_each_delivery_preset_can_target_a_different_voice_id_candidate(store: A
     assert request["baseline_voice_id"] == "provider-sorrowful"
     assert preset["provider_voice_id"] == "provider-sorrowful"
     assert preset["effective_provider_voice_id"] == "provider-sorrowful"
-    assert next(
-        item
-        for item in revised["voice_id_candidates"]
-        if item["provider_voice_id"] == "provider-sorrowful"
-    )["display_name"] == "Grieving Noble"
+    assert (
+        next(
+            item
+            for item in revised["voice_id_candidates"]
+            if item["provider_voice_id"] == "provider-sorrowful"
+        )["display_name"]
+        == "Grieving Noble"
+    )
     assert len(revised["voice_id_candidates"]) == 2
     assert {item["provider_voice_id"] for item in revised["voice_id_candidates"]} == {
         "provider-default",
@@ -866,7 +870,9 @@ def test_existing_delivery_samples_receive_stable_numbers_during_migration(
     store.initialize()
 
     angry = next(
-        item for item in store.get_voice(voice_id)["delivery_presets"] if item["delivery"] == "angry"
+        item
+        for item in store.get_voice(voice_id)["delivery_presets"]
+        if item["delivery"] == "angry"
     )
     assert [
         (preview["preview_id"], preview["generation_number"]) for preview in angry["previews"]
@@ -959,14 +965,14 @@ def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
 
 
 def test_filters_isolate_work_by_status_and_content(store: AlphaStore):
-    row = _first_dialogue(store)
-    store.prepare_spoken_text(row["dialogue_id"])
+    gossip_row = store.list_dialogue(source="gossip", page_size=10)["rows"][0]
+    store.prepare_spoken_text(gossip_row["dialogue_id"])
 
     needs_voice = store.list_dialogue(state="needs_voice", page_size=10)
     quests = store.list_dialogue(source="quest", page_size=10)
     gossip = store.list_dialogue(source="gossip", page_size=10)
 
-    assert needs_voice["total"] == 1
+    assert needs_voice["total"] == 4
     assert quests["total"] == 3
     assert all(row["source"] != "gossip" for row in quests["rows"])
     assert gossip["total"] == 1

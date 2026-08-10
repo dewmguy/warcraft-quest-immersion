@@ -13,34 +13,65 @@
     {{ dialogue_status(dialogue) }}
   </section>
 
+  {% if dialogue.source != 'gossip' %}
+  <section class="alpha-panel source-copy quest-text-panel" id="spoken-text">
+    <div class="panel-heading"><div><span class="panel-step">Quest Text</span><h2>Original and Spoken Text</h2></div><span>Revision {{ dialogue.revision_number }}</span></div>
+    <div class="quest-text-original">
+      <div class="dialogue-text-label"><strong>Original Text</strong><span>Immutable</span></div>
+      <blockquote>{{ dialogue.original_text }}</blockquote>
+    </div>
+    <div class="quest-spoken-review" data-spoken-review>
+      <div class="dialogue-text-label"><strong>Spoken Text</strong><span>Prepared for voice generation</span></div>
+      <div class="spoken-text-blockquote-row" data-spoken-display>
+        <blockquote data-spoken-text-display>{{ dialogue.spoken_text }}</blockquote>
+        <button class="spoken-text-edit-button" type="button" data-spoken-edit aria-expanded="false" aria-controls="spoken-text-editor"><i class="fa-solid fa-pen" aria-hidden="true"></i><span>Edit</span></button>
+      </div>
+      <form id="spoken-text-editor" data-json-form data-spoken-edit-form data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/spoken-text" data-method="PATCH" hidden>
+        <label><span>Spoken Text</span><textarea name="spoken_text" rows="7" required>{{ dialogue.spoken_text }}</textarea></label>
+        <div class="form-actions"><button type="submit"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>Save</span></button><button type="button" class="secondary" data-spoken-edit-cancel>Cancel</button></div>
+      </form>
+      {% if dialogue.warnings %}<aside class="inline-warning"><strong>Review Required</strong><ul>{% for warning in dialogue.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></aside>{% endif %}
+      {% if dialogue.changes %}<details><summary>Preparation Changes</summary><ul>{% for change in dialogue.changes %}<li>{{ change }}</li>{% endfor %}</ul></details>{% endif %}
+    </div>
+    <dl class="record-facts quest-source-facts">
+      <div><dt>NPC</dt><dd><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></dd></div>
+      <div><dt>Database Key</dt><dd>{{ dialogue.dialogue_id }}</dd></div>
+      {% if dialogue.source_record_id %}<div><dt>Source Record</dt><dd>{{ dialogue.source_record_id }}</dd></div>{% endif %}
+      <div><dt>Expansion</dt><dd>{{ dialogue.expansion }} · {{ dialogue.locale }}</dd></div>
+      <div><dt>Addon Key</dt><dd><code>{{ dialogue.addon_file_key }}</code></dd></div>
+    </dl>
+    {% if dialogue.metadata %}<details><summary>Additional Source Fields</summary><dl class="record-facts">{% for key, value in dialogue.metadata.items() %}<div><dt>{{ key | replace('_',' ') | title }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>{% endif %}
+  </section>
+  {% else %}
   <div class="record-grid">
     <section class="alpha-panel source-copy">
-      <div class="panel-heading"><div><span class="panel-step">Source</span><h2>Original text</h2></div><span>Immutable</span></div>
+      <div class="panel-heading"><div><span class="panel-step">Source</span><h2>Original Text</h2></div><span>Immutable</span></div>
       <blockquote>{{ dialogue.original_text }}</blockquote>
       <dl class="record-facts">
         <div><dt>NPC</dt><dd><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></dd></div>
-        <div><dt>Database key</dt><dd>{{ dialogue.dialogue_id }}</dd></div>
-        {% if dialogue.source_record_id %}<div><dt>Source record</dt><dd>{{ dialogue.source_record_id }}</dd></div>{% endif %}
+        <div><dt>Database Key</dt><dd>{{ dialogue.dialogue_id }}</dd></div>
+        {% if dialogue.source_record_id %}<div><dt>Source Record</dt><dd>{{ dialogue.source_record_id }}</dd></div>{% endif %}
         <div><dt>Expansion</dt><dd>{{ dialogue.expansion }} · {{ dialogue.locale }}</dd></div>
-        <div><dt>Addon key</dt><dd><code>{{ dialogue.addon_file_key }}</code></dd></div>
+        <div><dt>Addon Key</dt><dd><code>{{ dialogue.addon_file_key }}</code></dd></div>
       </dl>
-      {% if dialogue.metadata %}<details><summary>Additional source fields</summary><dl class="record-facts">{% for key, value in dialogue.metadata.items() %}<div><dt>{{ key | replace('_',' ') | title }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>{% endif %}
+      {% if dialogue.metadata %}<details><summary>Additional Source Fields</summary><dl class="record-facts">{% for key, value in dialogue.metadata.items() %}<div><dt>{{ key | replace('_',' ') | title }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>{% endif %}
     </section>
 
     <section class="alpha-panel spoken-copy" id="spoken-text">
-      <div class="panel-heading"><div><span class="panel-step">Preparation</span><h2>Spoken text</h2></div>{% if dialogue.revision_id %}<span>Revision {{ dialogue.revision_number }}</span>{% endif %}</div>
+      <div class="panel-heading"><div><span class="panel-step">Preparation</span><h2>Spoken Text</h2></div>{% if dialogue.revision_id %}<span>Revision {{ dialogue.revision_number }}</span>{% endif %}</div>
       {% if not dialogue.revision_id %}
-        <div class="empty-action"><p>No spoken text exists. Preparing it applies deterministic token and markup cleanup; it does not call an AI service.</p><button type="button" data-action data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/prepare-spoken-text" data-method="POST">Prepare spoken text</button></div>
+        <div class="empty-action"><p>No spoken text exists. Preparing it applies deterministic token and markup cleanup; it does not call an AI service.</p><button type="button" data-action data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/prepare-spoken-text" data-method="POST">Prepare Spoken Text</button></div>
       {% else %}
         <form data-json-form data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/spoken-text" data-method="PATCH">
-          <label><span>What ElevenLabs will speak</span><textarea name="spoken_text" rows="9" required>{{ dialogue.spoken_text }}</textarea></label>
-          {% if dialogue.changes %}<details><summary>Preparation changes</summary><ul>{% for change in dialogue.changes %}<li>{{ change }}</li>{% endfor %}</ul></details>{% endif %}
-          {% if dialogue.warnings %}<aside class="inline-warning"><strong>Review required</strong><ul>{% for warning in dialogue.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></aside>{% endif %}
-          <button type="submit">Save new revision</button>
+          <label><span>What ElevenLabs Will Speak</span><textarea name="spoken_text" rows="9" required>{{ dialogue.spoken_text }}</textarea></label>
+          {% if dialogue.changes %}<details><summary>Preparation Changes</summary><ul>{% for change in dialogue.changes %}<li>{{ change }}</li>{% endfor %}</ul></details>{% endif %}
+          {% if dialogue.warnings %}<aside class="inline-warning"><strong>Review Required</strong><ul>{% for warning in dialogue.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></aside>{% endif %}
+          <button type="submit">Save New Revision</button>
         </form>
       {% endif %}
     </section>
   </div>
+  {% endif %}
 
   <div class="record-grid">
     <section class="alpha-panel" id="voice-assignment">

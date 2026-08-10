@@ -367,6 +367,37 @@ for (const form of document.querySelectorAll("[data-auto-save-form]")) {
   }
 }
 
+for (const review of document.querySelectorAll("[data-spoken-review]")) {
+  const display = review.querySelector("[data-spoken-display]");
+  const editButton = review.querySelector("[data-spoken-edit]");
+  const form = review.querySelector("[data-spoken-edit-form]");
+  const cancelButton = review.querySelector("[data-spoken-edit-cancel]");
+  const textarea = form?.querySelector('textarea[name="spoken_text"]');
+  if (!display || !editButton || !form || !cancelButton || !textarea) continue;
+
+  const setEditing = (editing) => {
+    display.hidden = editing;
+    form.hidden = !editing;
+    editButton.setAttribute("aria-expanded", String(editing));
+    if (editing) {
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }
+  };
+
+  editButton.addEventListener("click", () => setEditing(true));
+  cancelButton.addEventListener("click", () => {
+    form.reset();
+    setEditing(false);
+  });
+  textarea.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    form.reset();
+    setEditing(false);
+  });
+}
+
 for (const form of document.querySelectorAll("[data-json-form]")) {
   if (form.dataset.deliveryGeneration !== undefined) continue;
   if (form.dataset.autoSaveForm !== undefined) continue;

@@ -47,7 +47,9 @@ Exit gate:
 - accept and version a complete quest and gossip export;
 - replace the four-row demonstration source with a joined AzerothCore corpus;
 - infer reviewable NPC role, affiliation, zone, story reach, and concise context;
-- leave spoken text empty until explicitly prepared;
+- prepare missing quest spoken text deterministically during import while
+  preserving existing reviewed revisions, and leave gossip preparation
+  explicit;
 - assign baseline or unique voices at the NPC level;
 - keep delivery at the dialogue level;
 - require separate confirmation for every provider request;

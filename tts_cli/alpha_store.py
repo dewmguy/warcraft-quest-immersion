@@ -647,8 +647,7 @@ class AlphaStore:
                 "INTEGER NOT NULL DEFAULT 0"
             )
         delivery_preview_columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(voice_delivery_previews)")
+            row["name"] for row in connection.execute("PRAGMA table_info(voice_delivery_previews)")
         }
         voice_id_candidate_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(voice_id_candidates)")
@@ -740,16 +739,14 @@ class AlphaStore:
         connection: sqlite3.Connection, voice_id: str, delivery: str
     ) -> int:
         row = connection.execute(
-            "SELECT sample_sequence FROM voice_delivery_presets "
-            "WHERE voice_id=? AND delivery=?",
+            "SELECT sample_sequence FROM voice_delivery_presets WHERE voice_id=? AND delivery=?",
             (voice_id, delivery),
         ).fetchone()
         if not row:
             raise AlphaError("Delivery preset was not found.")
         generation_number = int(row["sample_sequence"] or 0) + 1
         connection.execute(
-            "UPDATE voice_delivery_presets SET sample_sequence=? "
-            "WHERE voice_id=? AND delivery=?",
+            "UPDATE voice_delivery_presets SET sample_sequence=? WHERE voice_id=? AND delivery=?",
             (generation_number, voice_id, delivery),
         )
         return generation_number
@@ -1047,6 +1044,7 @@ class AlphaStore:
         now = utc_now()
         imported_ids: set[str] = set()
         imported_speaker_ids: set[str] = set()
+        prepared_spoken_texts = 0
         with self.connect() as connection:
             connection.execute(
                 "UPDATE source_snapshots SET is_active=0 WHERE expansion=? AND locale=?",
@@ -1172,6 +1170,12 @@ class AlphaStore:
                         now,
                     ),
                 )
+                if str(row["source"]) != "gossip" and self._ensure_spoken_text_revision(
+                    connection,
+                    dialogue_id,
+                    str(row["original_text"]),
+                ):
+                    prepared_spoken_texts += 1
             for speaker_id in imported_speaker_ids:
                 self._refresh_speaker_inference(connection, speaker_id)
         return {
@@ -1179,6 +1183,7 @@ class AlphaStore:
             "source_hash": source_hash,
             "rows_received": len(dataframe),
             "dialogue_records": len(imported_ids),
+            "prepared_spoken_texts": prepared_spoken_texts,
         }
 
     @staticmethod
@@ -1530,8 +1535,7 @@ class AlphaStore:
                 f"SELECT COUNT(*) FROM ({base}) WHERE {where}", parameters
             ).fetchone()[0]
             rows = connection.execute(
-                f"SELECT * FROM ({base}) WHERE {where} ORDER BY name, entity_id "
-                "LIMIT ? OFFSET ?",
+                f"SELECT * FROM ({base}) WHERE {where} ORDER BY name, entity_id LIMIT ? OFFSET ?",
                 [*parameters, page_size, max(page - 1, 0) * page_size],
             ).fetchall()
             races = connection.execute(
@@ -1619,6 +1623,43 @@ class AlphaStore:
         )
         return int(cursor.lastrowid)
 
+    def _ensure_spoken_text_revision(
+        self,
+        connection: sqlite3.Connection,
+        dialogue_id: str,
+        original_text: str,
+    ) -> bool:
+        existing = connection.execute(
+            "SELECT 1 FROM spoken_text_revisions WHERE dialogue_id=? AND is_current=1",
+            (dialogue_id,),
+        ).fetchone()
+        if existing:
+            return False
+        text, changes, warnings = self.prepare_text(original_text)
+        self._insert_revision(
+            connection,
+            dialogue_id,
+            text,
+            "deterministic-cleaner-v1",
+            changes,
+            warnings,
+        )
+        return True
+
+    def ensure_spoken_text(self, dialogue_id: str) -> dict[str, Any]:
+        """Create deterministic spoken text when a legacy quest record is missing it."""
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT source, original_text FROM dialogue_entries WHERE dialogue_id=?",
+                (dialogue_id,),
+            ).fetchone()
+            if not row:
+                raise AlphaError("Dialogue record was not found.")
+            if row["source"] == "gossip":
+                raise AlphaError("Gossip spoken text is prepared through its review workflow.")
+            self._ensure_spoken_text_revision(connection, dialogue_id, row["original_text"])
+        return self.get_dialogue(dialogue_id)
+
     def prepare_spoken_text(self, dialogue_id: str) -> dict[str, Any]:
         with self.connect() as connection:
             row = connection.execute(
@@ -1632,10 +1673,7 @@ class AlphaStore:
             ).fetchone()
             if existing:
                 raise AlphaError("Spoken text has already been prepared; save a revision instead.")
-            text, changes, warnings = self.prepare_text(row["original_text"])
-            self._insert_revision(
-                connection, dialogue_id, text, "deterministic-cleaner-v1", changes, warnings
-            )
+            self._ensure_spoken_text_revision(connection, dialogue_id, row["original_text"])
         return self.get_dialogue(dialogue_id)
 
     def save_spoken_text(self, dialogue_id: str, spoken_text: str) -> dict[str, Any]:
@@ -1690,7 +1728,7 @@ class AlphaStore:
         if role not in ROLE_OPTIONS:
             raise AlphaError("Unknown role or occupation.")
         if faction not in AFFILIATION_OPTIONS:
-                raise AlphaError("Unknown faction.")
+            raise AlphaError("Unknown faction.")
         voice_id = str(payload.get("voice_id", existing["voice_id"] or "")).strip() or None
         with self.connect() as connection:
             if (
@@ -1785,7 +1823,9 @@ class AlphaStore:
             )
             if unique_summary:
                 unique_payload["status"] = unique_summary["status"]
-            unique_payload["is_active"] = speaker_payload.get("voice_id") == unique_payload["voice_id"]
+            unique_payload["is_active"] = (
+                speaker_payload.get("voice_id") == unique_payload["voice_id"]
+            )
         record = {
             "speaker": speaker_payload,
             "npc": speaker_payload,
@@ -2151,9 +2191,7 @@ class AlphaStore:
             raise AlphaError("ElevenLabs returned audio whose duration could not be validated.")
         now = utc_now()
         with self.connect() as connection:
-            generation_number = self._reserve_delivery_sample_number(
-                connection, voice_id, delivery
-            )
+            generation_number = self._reserve_delivery_sample_number(connection, voice_id, delivery)
             connection.execute(
                 "INSERT INTO voice_delivery_previews(preview_id, voice_id, delivery, "
                 "generation_number, storage_path, sha256, duration_seconds, sample_text, "
@@ -2210,9 +2248,7 @@ class AlphaStore:
             )
         return self.get_voice(preview["voice_id"])
 
-    def update_delivery_preview_name(
-        self, preview_id: str, display_name: Any
-    ) -> dict[str, Any]:
+    def update_delivery_preview_name(self, preview_id: str, display_name: Any) -> dict[str, Any]:
         normalized = _normalize_display_name(display_name)
         with self.connect() as connection:
             preview = connection.execute(
@@ -2435,9 +2471,7 @@ class AlphaStore:
             payload["npc"]["importance_score"] = IMPORTANCE_SCORES.get(
                 payload["npc"]["importance"], 0
             )
-            payload["npc"]["is_unique_voice_active"] = (
-                payload["npc"].get("voice_id") == voice_id
-            )
+            payload["npc"]["is_unique_voice_active"] = payload["npc"].get("voice_id") == voice_id
         payload["baseline_voice"] = dict(baseline_voice) if baseline_voice else None
         preview_payloads = [dict(row) for row in delivery_previews]
         for preview in preview_payloads:

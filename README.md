@@ -68,7 +68,8 @@ generated CSV and manifest artifacts with:
 
 The web application now opens at `/alpha`. Its persistent production database
 provides a filterable queue for every imported quest and gossip record, NPC
-context, baseline-or-unique voice assignment, on-demand spoken-text revisions,
+context, baseline-or-unique voice assignment, deterministically prepared quest
+spoken-text revisions,
 versioned voices and reference clips, guarded ElevenLabs actions, delivery
 presets, audio review, and production approval.
 
@@ -76,8 +77,10 @@ The bundled CSV contains only four safe demonstration rows. Upload complete
 validated exports through Alpha to populate the full corpus. Sources for
 1.12.1, 2.4.3, 3.3.5, and current Classic coexist in one production database;
 replacing one expansion/locale does not deactivate the others. Joined source
-fields are retained as record metadata. Importing never creates spoken text or
-contacts ElevenLabs. The uploaded sources, SQLite database, reference clips,
+fields are retained as record metadata. Importing creates missing deterministic
+spoken-text revisions for quests without overwriting reviewed revisions or
+contacting ElevenLabs. Gossip spoken text remains explicitly prepared. The
+uploaded sources, SQLite database, reference clips,
 voice previews, and generated audio remain outside Git under `data/`.
 
 ## Container layout
@@ -124,7 +127,8 @@ The Alpha portal is the working production surface:
    faction, and area data, then validate it through **Import / Export**.
 2. Filter the complete queue by expansion, status, content type, race, gender,
    NPC, quest, or text.
-3. Prepare spoken text on demand, then review or edit the revision.
+3. Review the automatically prepared quest spoken text and edit it only when
+   needed. Prepare gossip spoken text explicitly.
 4. Review the inferred NPC role, affiliation, zone, story reach, and concise
    context; assign a baseline or versioned unique voice. Returning an NPC to
    baseline retires its unused unique profile without deleting its history.

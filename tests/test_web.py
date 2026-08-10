@@ -121,24 +121,34 @@ def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatc
     assert ">Voices<" not in response.text
 
 
-def test_alpha_starts_with_empty_spoken_text_and_prepares_only_on_click(monkeypatch):
+def test_quest_page_backfills_missing_spoken_text_and_hides_it_behind_edit_control(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
-        row = web.alpha_store.list_dialogue(page_size=10)["rows"][0]
+        row = web.alpha_store.list_dialogue(source="quest", page_size=10)["rows"][0]
+        with web.alpha_store.connect() as connection:
+            connection.execute(
+                "DELETE FROM spoken_text_revisions WHERE dialogue_id=?",
+                (row["dialogue_id"],),
+            )
         page = client.get(f"/alpha/dialogue/{row['dialogue_id']}")
-        missing_confirmation = client.post(
-            f"/api/alpha/dialogue/{row['dialogue_id']}/prepare-spoken-text"
-        )
-        prepared = client.post(
-            f"/api/alpha/dialogue/{row['dialogue_id']}/prepare-spoken-text",
-            headers={"X-WQI-Action": "confirmed"},
-        )
+        prepared = web.alpha_store.get_dialogue(row["dialogue_id"])
 
     assert page.status_code == 200
-    assert "No spoken text exists" in page.text
-    assert missing_confirmation.status_code == 400
-    assert prepared.status_code == 200
-    assert prepared.json()["dialogue"]["revision_number"] == 1
+    assert prepared["revision_number"] == 1
+    assert "Original and Spoken Text" in page.text
+    assert row["original_text"] in page.text
+    assert prepared["spoken_text"] in page.text
+    assert "No spoken text exists" not in page.text
+    assert "data-spoken-display" in page.text
+    assert "data-spoken-edit" in page.text
+    assert "data-spoken-edit-form" in page.text
+    assert "data-spoken-edit-form data-url=" in page.text
+    assert 'data-method="PATCH" hidden' in page.text
+
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+    assert 'document.querySelectorAll("[data-spoken-review]")' in script
+    assert 'editButton.addEventListener("click"' in script
+    assert 'cancelButton.addEventListener("click"' in script
 
 
 def test_quest_page_links_to_other_phases_without_affecting_single_phase_or_gossip(
@@ -147,9 +157,7 @@ def test_quest_page_links_to_other_phases_without_affecting_single_phase_or_goss
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
         rows = web.alpha_store.list_dialogue(page_size=10)["rows"]
-        accept = next(
-            row for row in rows if row["quest_id"] == 101 and row["source"] == "accept"
-        )
+        accept = next(row for row in rows if row["quest_id"] == 101 and row["source"] == "accept")
         complete = next(
             row for row in rows if row["quest_id"] == 101 and row["source"] == "complete"
         )
@@ -319,18 +327,13 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     template = (web.WEB_DIR / "templates" / "alpha-voice.html").read_text(encoding="utf-8")
     assert (
         '<div class="creation-controls">\n'
-        '        <div class="panel-heading provider-creation-panel-heading">'
-        in template
+        '        <div class="panel-heading provider-creation-panel-heading">' in template
     )
     assert (
         'class="metering-preview compact delivery-section-metering '
-        'provider-creation-metering"'
-        in template
+        'provider-creation-metering"' in template
     )
-    assert (
-        'data-metered-characters="{{ voice_id_audition_text | trim | length }}"'
-        in template
-    )
+    assert 'data-metered-characters="{{ voice_id_audition_text | trim | length }}"' in template
     assert template.count('<div class="metering-preview"><span>') == 0
 
 
@@ -1117,8 +1120,8 @@ def test_audio_disclosures_play_on_expand_and_collapse_the_previous_item():
 def test_actionable_statuses_link_to_the_work_that_resolves_them(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
-        row = web.alpha_store.list_dialogue(page_size=10)["rows"][0]
-        queue = client.get("/alpha")
+        row = web.alpha_store.list_dialogue(source="gossip", page_size=10)["rows"][0]
+        queue = client.get("/alpha/gossip")
         dialogue = client.get(f"/alpha/dialogue/{row['dialogue_id']}")
         speaker = client.get(f"/alpha/npcs/{row['entity_type']}/{row['entity_id']}")
         voices = client.get("/alpha/races")
@@ -1318,7 +1321,10 @@ def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):
 
     assert page.status_code == 200
     assert 'class="npc-unique-toggle is-unique"' in page.text
-    assert 'data-confirm="Return Sentinel Amara to the Night Elf · Female voice baseline?"' in page.text
+    assert (
+        'data-confirm="Return Sentinel Amara to the Night Elf · Female voice baseline?"'
+        in page.text
+    )
     assert "unique profile will remain dormant" not in page.text
     assert "Current Voice · Unique" in page.text
     assert "Baseline Fallback" in page.text

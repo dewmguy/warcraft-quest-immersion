@@ -9,17 +9,20 @@ workflow.
 1. Import the complete validated quest and gossip source.
 2. Find a dialogue record in the work queue.
 3. Review the NPC, object, or item delivering it.
-4. Click **Prepare spoken text** when a speech revision is wanted.
-5. Review or edit that revision and assign the speaker's voice.
+4. Quest spoken text is prepared deterministically during import. Open the quest
+   to review it and edit it only when needed. Prepare gossip spoken text
+   explicitly.
+5. Review the prepared revision and assign the NPC's voice.
 6. Select the line delivery.
 7. Explicitly confirm one paid generation request.
 8. Review the returned audio candidate.
 9. Approve an exact candidate as the production asset.
 10. Export approved audio and its deterministic addon manifest.
 
-Import does not populate spoken text, generate voice candidates, create provider
-voices, clone voices, or generate dialogue audio. Each operation requires a
-separate user action.
+Import populates only missing deterministic quest spoken text. It preserves
+existing reviewed revisions and does not generate voice candidates, create
+provider voices, clone voices, or generate dialogue audio. Gossip preparation
+and each provider operation require separate user actions.
 
 ## Primary records
 

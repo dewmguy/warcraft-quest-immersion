@@ -464,12 +464,13 @@ def alpha_dialogue(
     _: Annotated[str, Depends(require_auth)],
 ):
     try:
+        dialogue = alpha_store.get_dialogue(dialogue_id)
+        if dialogue["source"] != "gossip" and dialogue["revision_id"] is None:
+            dialogue = alpha_store.ensure_spoken_text(dialogue_id)
         return templates.TemplateResponse(
             request=request,
             name="alpha-dialogue.html",
-            context=_alpha_context(
-                dialogue=alpha_store.get_dialogue(dialogue_id), deliveries=DELIVERIES
-            ),
+            context=_alpha_context(dialogue=dialogue, deliveries=DELIVERIES),
         )
     except AlphaError as error:
         raise _alpha_error(error, 404) from error
@@ -926,9 +927,7 @@ def api_generate_delivery_preview(
             subscription=usage,
         )
         return {
-            "message": (
-                f"Generated {delivery} sample #{preview['generation_number']} for review."
-            ),
+            "message": (f"Generated {delivery} sample #{preview['generation_number']} for review."),
             **preview,
         }
     except (AlphaError, ElevenLabsError) as error:
