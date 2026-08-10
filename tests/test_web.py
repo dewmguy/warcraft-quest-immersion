@@ -146,6 +146,20 @@ def test_quest_gossip_and_npc_filters_apply_immediately_and_use_one_clear_button
     assert script.count("window.location.assign") >= 2
 
 
+def test_quest_and_gossip_queues_omit_spoken_text_column(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        quests = client.get("/alpha")
+        gossip = client.get("/alpha/gossip")
+        empty_quests = client.get("/alpha?q=does-not-exist")
+        empty_gossip = client.get("/alpha/gossip?q=does-not-exist")
+
+    assert "<th>Spoken text</th>" not in quests.text
+    assert "<th>Spoken text</th>" not in gossip.text
+    assert '<td colspan="4" class="empty-cell">' in empty_quests.text
+    assert '<td colspan="4" class="empty-cell">' in empty_gossip.text
+
+
 def test_quest_page_backfills_missing_spoken_text_and_hides_it_behind_edit_control(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:

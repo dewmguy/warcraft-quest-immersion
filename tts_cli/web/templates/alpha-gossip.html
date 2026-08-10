@@ -37,17 +37,16 @@
 
     <div class="alpha-table-wrap">
       <table class="alpha-table dialogue-table">
-        <thead><tr><th>Gossip</th><th>NPC</th><th>Spoken text</th><th>Voice</th><th>Status</th></tr></thead>
+        <thead><tr><th>Gossip</th><th>NPC</th><th>Voice</th><th>Status</th></tr></thead>
         <tbody>
           {% for row in listing.rows %}
           <tr>
             <td><a class="record-link" href="/alpha/dialogue/{{ row.dialogue_id }}"><strong>{{ row.original_text[:90] }}{% if row.original_text|length > 90 %}…{% endif %}</strong><span>Gossip · {{ row.source_record_id or row.dialogue_id }}</span></a></td>
             <td><a href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}">{{ row.speaker_name }}</a><span class="cell-detail">{{ row.race_name | title }} · {{ row.gender_name | title }}</span></td>
-            <td>{% if row.revision_id %}Prepared{% else %}<a class="cell-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text">Not prepared &rarr;</a>{% endif %}</td>
             <td>{{ row.voice_name or 'Unassigned' }}{% if row.voice_name and not row.provider_voice_id %}<a class="cell-detail cell-action" href="{{ '/alpha/races/' if row.voice_scope == 'baseline' else '/alpha/voices/' }}{{ row.voice_id }}#provider-creation">Provider voice needed &rarr;</a>{% elif not row.voice_name %}<a class="cell-detail cell-action" href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}#voice-approach">Assign a voice &rarr;</a>{% endif %}</td>
             <td>{{ dialogue_status(row) }}</td>
           </tr>
-          {% else %}<tr><td colspan="5" class="empty-cell">No gossip lines match these filters.</td></tr>{% endfor %}
+          {% else %}<tr><td colspan="4" class="empty-cell">No gossip lines match these filters.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>
