@@ -422,6 +422,9 @@ dialog .actions { justify-content: flex-end; }
 .delivery-sample-script blockquote { max-width: 820px; margin: 0; border-left: 3px solid #b68b3d; padding: 10px 14px; color: #ddd1bb; background: #14110d; font-family: Georgia, "Times New Roman", serif; font-size: 1rem; font-style: italic; line-height: 1.65; }
 .delivery-preset-batch-actions { display: flex !important; align-items: center; justify-content: flex-end; gap: 12px !important; }
 .delivery-preset-batch-actions button { min-height: 36px; padding: 7px 11px; white-space: nowrap; }
+.delivery-presets-heading-summary { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.delivery-presets-heading-summary > span { color: #9f98a4; font-size: .8rem; white-space: nowrap; }
+.delivery-section-metering { min-width: 290px; }
 .delivery-preset-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .delivery-preset-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(275px, .34fr); grid-template-areas: "heading review" "settings review"; grid-template-rows: auto 1fr; align-items: start; column-gap: 24px; row-gap: 16px; border: 1px solid #39343d; border-radius: 8px; padding: 16px; background: #131216; }
 .delivery-preset-card[id] { scroll-margin-top: 92px; }
@@ -561,6 +564,8 @@ dialog .actions { justify-content: flex-end; }
   .delivery-preset-explainer { align-items: flex-start; flex-direction: column; }
   .delivery-preset-batch-actions { width: 100%; align-items: stretch; flex-direction: column; }
   .delivery-preset-batch-actions button { width: 100%; }
+  .delivery-presets-heading-summary { width: 100%; align-items: flex-start; justify-content: flex-start; flex-direction: column; }
+  .delivery-section-metering { width: 100%; min-width: 0; }
   .delivery-preset-heading { grid-template-columns: 1fr; }
   .delivery-preset-settings > .delivery-preset-section-label, .delivery-preset-settings > button { grid-column: auto; }
 }

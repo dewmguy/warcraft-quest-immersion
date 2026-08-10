@@ -240,7 +240,9 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert 'class="fa-solid fa-floppy-disk"' not in page.text
     assert page.text.count("Generate sample") == 5
     assert "Preset Settings" in page.text
-    assert "Sample" in page.text
+    assert '<span class="delivery-preset-section-label">Sample</span>' not in page.text
+    assert page.text.count("metering-preview compact delivery-section-metering") == 1
+    assert page.text.count("data-metered-characters") == 1
     assert "Generate all samples" in page.text
     assert "Sample Script" in page.text
     assert "<blockquote>" in page.text

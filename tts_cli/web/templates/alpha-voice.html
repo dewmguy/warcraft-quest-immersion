@@ -147,7 +147,7 @@
   </section>
 
   <section class="alpha-panel">
-    <div class="panel-heading"><div><span class="panel-step">Race / Gender Delivery</span><h2>Emotional Delivery Presets</h2><p>Define and test emotional performances.</p></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div>
+    <div class="panel-heading delivery-presets-panel-heading"><div><span class="panel-step">Race / Gender Delivery</span><h2>Emotional Delivery Presets</h2><p>Define and test emotional performances.</p></div><div class="delivery-presets-heading-summary"><div class="metering-preview compact delivery-section-metering" data-metering="speech" data-metered-characters="{{ delivery_sample_text | trim | length }}"><span><strong data-estimate-characters>--</strong> chars</span><span><strong data-estimate-credits>--</strong> credits</span><span><strong data-estimate-duration>--</strong></span></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div></div>
     <div class="delivery-preset-explainer">
       <div class="delivery-sample-script"><span>Sample Script</span><blockquote>{{ delivery_sample_text }}</blockquote></div>
       <div class="delivery-preset-batch-actions">
@@ -169,10 +169,8 @@
         </select></label>
       </form>
       <div class="delivery-preset-review">
-      <span class="delivery-preset-section-label">Sample</span>
       <form data-json-form data-delivery-generation data-delivery-name="{{ preset.delivery | title }}" data-paid data-provider-operation="Generating {{ preset.delivery | title }} delivery sample" data-metering="speech" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form">
         <input type="hidden" name="sample_text" data-metered-text value="{{ delivery_sample_text }}">
-        <div class="metering-preview compact"><span><strong data-estimate-characters>--</strong> chars</span><span><strong data-estimate-credits>--</strong> credits</span><span><strong data-estimate-duration>--</strong></span></div>
         <button type="submit" {% if not provider_configured or not preset.effective_provider_voice_id %}disabled{% endif %}>Generate sample</button>
       </form>
       {% if preset.previews %}<div class="reference-library-separator delivery-sample-separator" role="separator"><span>Stored Samples</span></div>{% endif %}
