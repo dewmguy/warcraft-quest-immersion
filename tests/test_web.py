@@ -163,7 +163,7 @@ def test_quest_and_gossip_queues_omit_spoken_text_column(monkeypatch):
     assert '<td colspan="4" class="empty-cell">' in empty_gossip.text
 
 
-def test_quest_and_gossip_queues_identify_unique_npc_voice_profiles(monkeypatch):
+def test_quest_gossip_and_npc_queues_share_voice_cell_treatment(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
         quest_row = web.alpha_store.list_dialogue(source="quest", page_size=10)["rows"][0]
@@ -178,12 +178,30 @@ def test_quest_and_gossip_queues_identify_unique_npc_voice_profiles(monkeypatch)
         ).json()
         quests = client.get("/alpha")
         gossip = client.get("/alpha/gossip")
+        npcs = client.get("/alpha/npcs")
 
-    for page, unique in ((quests, quest_unique), (gossip, gossip_unique)):
+    for page, unique in (
+        (quests, quest_unique),
+        (gossip, gossip_unique),
+        (npcs, quest_unique),
+        (npcs, gossip_unique),
+    ):
         assert "Provider voice needed" not in page.text
+        assert f'href="/alpha/voices/{unique["voice_id"]}">Unique Profile</a>' in page.text
+
+    for page in (quests, gossip):
         assert 'class="npc-table-unique-marker"' in page.text
         assert 'class="fa-solid fa-star"' in page.text
-        assert f'href="/alpha/voices/{unique["voice_id"]}">Unique Profile</a>' in page.text
+
+    assert "Applied Voice" not in npcs.text
+    assert "Provider voice ready" not in npcs.text
+    assert "Needs provider voice" not in npcs.text
+    assert "Voice Ready" in npcs.text
+    assert "<th>Voice</th>" in npcs.text
+    assert (
+        f'href="/alpha/voices/{quest_unique["voice_id"]}#provider-creation">Needs Voice &rarr;</a>'
+        in npcs.text
+    )
 
 
 def test_quest_page_backfills_missing_spoken_text_and_hides_it_behind_edit_control(monkeypatch):

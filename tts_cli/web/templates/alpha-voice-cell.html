@@ -1,0 +1,8 @@
+{% macro voice_cell(record) -%}
+  {{ record.voice_name or 'Unassigned' }}
+  {% if record.voice_scope == 'unique' %}
+    <a class="cell-detail cell-action" href="/alpha/voices/{{ record.voice_id }}">Unique Profile</a>
+  {% elif not record.voice_name %}
+    <a class="cell-detail cell-action" href="/alpha/npcs/{{ record.entity_type }}/{{ record.entity_id }}#voice-approach">Assign a voice &rarr;</a>
+  {% endif %}
+{%- endmacro %}

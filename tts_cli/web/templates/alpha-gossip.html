@@ -1,5 +1,6 @@
 {% extends "alpha-base.html" %}
 {% from "alpha-status.html" import dialogue_status %}
+{% from "alpha-voice-cell.html" import voice_cell %}
 {% set active_nav = "gossip" %}
 {% block title %}Gossip{% endblock %}
 {% block content %}
@@ -43,7 +44,7 @@
           <tr>
             <td><a class="record-link" href="/alpha/dialogue/{{ row.dialogue_id }}"><strong>{{ row.original_text[:90] }}{% if row.original_text|length > 90 %}…{% endif %}</strong><span>Gossip · {{ row.source_record_id or row.dialogue_id }}</span></a></td>
             <td><a href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}">{{ row.speaker_name }}</a>{% if row.voice_scope == 'unique' %}<span class="npc-table-unique-marker" title="Unique voice profile" aria-label="Unique voice profile"><i class="fa-solid fa-star" aria-hidden="true"></i></span>{% endif %}<span class="cell-detail">{{ row.race_name | title }} · {{ row.gender_name | title }}</span></td>
-            <td>{{ row.voice_name or 'Unassigned' }}{% if row.voice_scope == 'unique' %}<a class="cell-detail cell-action" href="/alpha/voices/{{ row.voice_id }}">Unique Profile</a>{% elif not row.voice_name %}<a class="cell-detail cell-action" href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}#voice-approach">Assign a voice &rarr;</a>{% endif %}</td>
+            <td>{{ voice_cell(row) }}</td>
             <td>{{ dialogue_status(row) }}</td>
           </tr>
           {% else %}<tr><td colspan="4" class="empty-cell">No gossip lines match these filters.</td></tr>{% endfor %}

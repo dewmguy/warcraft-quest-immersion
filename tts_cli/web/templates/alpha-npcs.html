@@ -1,4 +1,5 @@
 {% extends "alpha-base.html" %}
+{% from "alpha-voice-cell.html" import voice_cell %}
 {% set active_nav = "npcs" %}
 {% block title %}NPCs{% endblock %}
 {% block content %}
@@ -16,21 +17,21 @@
       <label><span>Faction</span><select name="faction"><option value="">All</option>{% for value in faction_options %}<option value="{{ value }}" {% if filters.faction == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select></label>
       <label><span>Story reach</span><select name="importance"><option value="">All</option>{% for value, score in importance_scores.items() %}<option value="{{ value }}" {% if filters.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select></label>
       <label><span>Voice approach</span><select name="voice_approach"><option value="">All</option>{% for value, label in [('baseline','Baseline'),('unique','Active unique'),('dormant','Dormant unique'),('unassigned','Unassigned')] %}<option value="{{ value }}" {% if filters.voice_approach == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-      <label><span>Voice readiness</span><select name="voice_state"><option value="">All</option><option value="needs_voice" {% if filters.voice_state == 'needs_voice' %}selected{% endif %}>Needs provider voice</option><option value="ready" {% if filters.voice_state == 'ready' %}selected{% endif %}>Provider voice ready</option></select></label>
+      <label><span>Voice readiness</span><select name="voice_state"><option value="">All</option><option value="needs_voice" {% if filters.voice_state == 'needs_voice' %}selected{% endif %}>Needs Voice</option><option value="ready" {% if filters.voice_state == 'ready' %}selected{% endif %}>Voice Ready</option></select></label>
       <button type="button" class="secondary" data-filter-clear><i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Clear</span></button>
     </form>
 
     <div class="alpha-table-wrap">
       <table class="alpha-table npc-table">
-        <thead><tr><th>NPC</th><th>Context</th><th>Quest / Gossip</th><th>Applied Voice</th><th>Status</th></tr></thead>
+        <thead><tr><th>NPC</th><th>Context</th><th>Quest / Gossip</th><th>Voice</th><th>Status</th></tr></thead>
         <tbody>
           {% for npc in listing.rows %}
           <tr>
             <td><a class="record-link" href="/alpha/npcs/{{ npc.entity_type }}/{{ npc.entity_id }}"><strong>{{ npc.name }}</strong><span>NPC {{ npc.entity_id }} · {{ npc.race_name | title }} · {{ npc.gender_name | title }}</span></a></td>
             <td>{{ npc.role | replace('_',' ') | title }}<span class="cell-detail">{{ npc.faction | replace('_',' ') | title }}{% if npc.zone %} · {{ npc.zone }}{% endif %}</span><span class="cell-detail">{{ npc.importance | replace('_',' ') | title }} · {{ npc.importance_score }}</span></td>
             <td><strong>{{ npc.dialogue_count }} line{{ '' if npc.dialogue_count == 1 else 's' }}</strong><span class="cell-detail">{{ npc.quest_count }} quest · {{ npc.gossip_count }} gossip</span></td>
-            <td>{% if npc.voice_id %}<a href="{{ '/alpha/races/' if npc.voice_scope == 'baseline' else '/alpha/voices/' }}{{ npc.voice_id }}">{{ npc.voice_name }}</a><span class="cell-detail">{{ npc.voice_scope | title }}</span>{% else %}<span>Unassigned</span>{% endif %}</td>
-            <td>{% if not npc.voice_id or not npc.provider_voice_id %}<a class="work-status status-needs_voice status-action" href="/alpha/npcs/{{ npc.entity_type }}/{{ npc.entity_id }}#voice-approach">Provider voice needed &rarr;</a>{% else %}<span class="work-status status-approved">Provider voice ready</span>{% endif %}</td>
+            <td>{{ voice_cell(npc) }}</td>
+            <td>{% if not npc.voice_id or not npc.provider_voice_id %}<a class="work-status status-needs_voice status-action" href="{% if npc.voice_id %}{{ '/alpha/races/' if npc.voice_scope == 'baseline' else '/alpha/voices/' }}{{ npc.voice_id }}#provider-creation{% else %}/alpha/npcs/{{ npc.entity_type }}/{{ npc.entity_id }}#voice-approach{% endif %}">Needs Voice &rarr;</a>{% else %}<span class="work-status status-approved">Voice Ready</span>{% endif %}</td>
           </tr>
           {% else %}<tr><td colspan="5" class="empty-cell">No NPCs match these filters.</td></tr>{% endfor %}
         </tbody>
