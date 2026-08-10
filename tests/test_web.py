@@ -817,6 +817,7 @@ def test_alpha_message_tracks_every_elevenlabs_request(monkeypatch):
     assert "window.setInterval(renderElevenLabsProgress, 1000)" in script
     assert "the request remains active" in script
     assert 'startElevenLabsRequest("Checking ElevenLabs account", null, true)' in script
+    assert "No audio is being generated" not in script
     assert "const ALPHA_MESSAGE_DISMISS_MS = 10_000" in script
     assert "window.setTimeout(hideAlphaMessage, ALPHA_MESSAGE_DISMISS_MS)" in script
     assert 'if (state === "failed")' in script
@@ -1409,7 +1410,8 @@ def test_provider_status_verifies_account_without_a_paid_action(monkeypatch):
     assert payload["account"]["credits_remaining"] == 7500
     assert payload["account"]["percent_used"] == 25.0
     assert payload["account"]["refresh_period"] == "monthly_period"
-    assert "did not generate audio" in payload["message"]
+    assert payload["message"] == "ElevenLabs accepted the configured API key."
+    assert "generate audio" not in payload["message"]
 
 
 def test_alpha_header_keeps_subscription_credit_usage_at_eye_level(monkeypatch):

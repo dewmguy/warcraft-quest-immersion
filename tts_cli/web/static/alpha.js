@@ -117,7 +117,7 @@ function renderAlphaMessage({ title, detail = "", state = "working", elapsed = "
 }
 
 function providerProgressDetail(request, elapsedSeconds) {
-  if (request.readOnly) return "Reading the configured account and current usage. No audio is being generated.";
+  if (request.readOnly) return "Reading the configured account and current usage.";
   const estimate = request.estimate
     ? ` Estimated finished audio: ${formatSeconds(request.estimate.seconds)}${request.estimate.kind === "voice-design" ? " per candidate" : ""}.`
     : "";

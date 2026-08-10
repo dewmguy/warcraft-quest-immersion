@@ -672,7 +672,7 @@ def api_alpha_provider_status(_: Annotated[str, Depends(require_auth)]) -> dict:
     return {
         "configured": True,
         "provider": "ElevenLabs",
-        "message": "ElevenLabs accepted the configured API key. This check did not generate audio.",
+        "message": "ElevenLabs accepted the configured API key.",
         "account": _subscription_summary(subscription),
     }
 
