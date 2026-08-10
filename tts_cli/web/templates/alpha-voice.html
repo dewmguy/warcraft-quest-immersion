@@ -21,12 +21,12 @@
   <nav class="breadcrumbs"><a href="/alpha/voices">Voices</a><span>›</span><span>{{ voice.name }}</span></nav>
   <section class="alpha-page-heading record-heading">
     <div><span class="alpha-kicker">{{ voice.scope | title }} voice profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} dialogue records · {{ voice.missing_dialogue_count }} missing audio</p></div>
-    <div class="record-statuses"><span class="work-status lifecycle-status lifecycle-{{ voice.status }}" title="{{ voice.lifecycle_reason }}">Lifecycle · {{ voice.status | title }}</span>{% if voice.provider_voice_id %}<span class="work-status status-approved">Reusable voice ready</span>{% else %}<a class="work-status status-needs_voice status-action" href="#provider-creation">Provider voice missing &rarr;</a>{% endif %}</div>
+    <div class="record-statuses"><span class="work-status lifecycle-status lifecycle-{{ voice.status }}" title="{{ voice.lifecycle_reason }}">Lifecycle · {{ voice.status | title }}</span>{% if voice.voice_id_candidates %}<span class="work-status status-approved">{{ voice.voice_id_candidates|length }} reusable voice ID{{ 's' if voice.voice_id_candidates|length != 1 else '' }}</span>{% else %}<a class="work-status status-needs_voice status-action" href="#provider-creation">Voice ID needed &rarr;</a>{% endif %}</div>
   </section>
 
   <div class="record-grid voice-grid">
     <section class="alpha-panel">
-      <div class="panel-heading"><div><h2>Voice definition</h2><p>Saving creates a new version only when a value actually changes.</p></div><span>Version {{ voice.version_number }}</span></div>
+      <div class="panel-heading"><div><h2>Voice definition</h2><p>Choose a creation path to show its matching provider controls below.</p></div><span>Version {{ voice.version_number }}</span></div>
       <form data-method-controller>
         <label><span>Creation path</span><select name="creation_method" id="creation-method">
           <option value="unselected" {% if voice.creation_method == 'unselected' %}selected{% endif %}>Choose a creation path</option>

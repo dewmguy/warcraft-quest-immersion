@@ -215,7 +215,7 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert page.text.count(web.VOICE_ID_AUDITION_TEXT) == 3
     assert 'name="status"' not in page.text
     assert "Lifecycle status</span><select" not in page.text
-    assert "Provider voice missing" in page.text
+    assert "Voice ID needed" in page.text
     assert "Reusable ElevenLabs voice</span><strong>Connected" not in page.text
     assert "Reference-guided Voice Design" in page.text
     assert "Instant Voice Clone" in page.text
