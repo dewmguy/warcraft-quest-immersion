@@ -1289,6 +1289,8 @@ def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):
 
     assert page.status_code == 200
     assert 'class="npc-unique-toggle is-unique"' in page.text
+    assert 'data-confirm="Return Sentinel Amara to the Night Elf · Female voice baseline?"' in page.text
+    assert "unique profile will remain dormant" not in page.text
     assert "Current Voice · Unique" in page.text
     assert "Baseline Fallback" in page.text
     assert f'href="/alpha/voices/{unique["voice_id"]}"' in page.text
