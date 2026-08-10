@@ -141,6 +141,35 @@ def test_alpha_starts_with_empty_spoken_text_and_prepares_only_on_click(monkeypa
     assert prepared.json()["dialogue"]["revision_number"] == 1
 
 
+def test_quest_page_links_to_other_phases_without_affecting_single_phase_or_gossip(
+    monkeypatch,
+):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        rows = web.alpha_store.list_dialogue(page_size=10)["rows"]
+        accept = next(
+            row for row in rows if row["quest_id"] == 101 and row["source"] == "accept"
+        )
+        complete = next(
+            row for row in rows if row["quest_id"] == 101 and row["source"] == "complete"
+        )
+        single_phase = next(row for row in rows if row["quest_id"] == 102)
+        gossip = next(row for row in rows if row["source"] == "gossip")
+        quest_page = client.get(f"/alpha/dialogue/{accept['dialogue_id']}")
+        single_page = client.get(f"/alpha/dialogue/{single_phase['dialogue_id']}")
+        gossip_page = client.get(f"/alpha/dialogue/{gossip['dialogue_id']}")
+
+    phase_section = quest_page.text[quest_page.text.index('id="other-quest-phases"') :]
+    assert "Other Phases of This Quest" in phase_section
+    assert "1 other phase" in phase_section
+    assert f'href="/alpha/dialogue/{complete["dialogue_id"]}"' in phase_section
+    assert f'href="/alpha/dialogue/{accept["dialogue_id"]}"' not in phase_section
+    assert "Complete" in phase_section
+    assert "Marshal Rowan" in phase_section
+    assert 'id="other-quest-phases"' not in single_page.text
+    assert 'id="other-quest-phases"' not in gossip_page.text
+
+
 def test_paid_generation_requires_separate_confirmation_and_configuration(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:

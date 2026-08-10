@@ -1401,6 +1401,21 @@ class AlphaStore:
                 "SELECT * FROM generations WHERE dialogue_id=? ORDER BY created_at DESC LIMIT 20",
                 (dialogue_id,),
             ).fetchall()
+            quest_phases: list[sqlite3.Row] = []
+            if row["quest_id"] is not None and row["source"] != "gossip":
+                quest_phases = connection.execute(
+                    f"{self._dialogue_select()} WHERE d.active=1 AND d.quest_id=? "
+                    "AND d.expansion=? AND d.locale=? AND d.dialogue_id<>? "
+                    "AND d.source<>'gossip' ORDER BY CASE d.source "
+                    "WHEN 'accept' THEN 1 WHEN 'progress' THEN 2 "
+                    "WHEN 'complete' THEN 3 ELSE 4 END, s.name",
+                    (
+                        row["quest_id"],
+                        row["expansion"],
+                        row["locale"],
+                        dialogue_id,
+                    ),
+                ).fetchall()
             voices = connection.execute(
                 "SELECT v.voice_id, v.name, v.scope, vv.provider_voice_id, vv.status, "
                 "vv.version_number FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id "
@@ -1413,6 +1428,7 @@ class AlphaStore:
         payload["voice_settings"] = _loads(payload.get("settings_json"), {})
         payload["revisions"] = [dict(item) for item in revisions]
         payload["candidates"] = [dict(item) for item in candidates]
+        payload["quest_phases"] = [dict(item) for item in quest_phases]
         payload["generations"] = []
         for item in generations:
             generation = dict(item)

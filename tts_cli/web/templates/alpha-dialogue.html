@@ -82,4 +82,25 @@
   </section>
 
   {% if dialogue.revisions or dialogue.generations %}<details class="alpha-history"><summary>Revision, generation, and usage history</summary><div>{% for revision in dialogue.revisions %}<p><strong>Text revision {{ revision.revision_number }}</strong> · {{ revision.processor }} · {{ revision.created_at[:19] | replace('T',' ') }} UTC</p>{% endfor %}{% for generation in dialogue.generations %}<p><strong>Generation {{ generation.generation_id[:8] }}</strong> · {{ generation.status }} · {{ generation.character_count }} input characters{% if generation.subscription.get('request_character_cost') is not none %} · provider reported {{ "{:,}".format(generation.subscription.request_character_cost) }} credits{% endif %}{% if generation.subscription.get('character_count') is not none %} · subscription after request: {{ "{:,}".format(generation.subscription.character_count) }} / {{ "{:,}".format(generation.subscription.get('character_limit', 0)) }} credits used{% endif %}{% if generation.error %} · {{ generation.error }}{% endif %}</p>{% endfor %}</div></details>{% endif %}
+
+  {% if dialogue.quest_phases %}
+  <section class="alpha-panel" id="other-quest-phases">
+    <div class="panel-heading"><div><h2>Other Phases of This Quest</h2></div><span>{{ dialogue.quest_phases|length }} other phase{{ '' if dialogue.quest_phases|length == 1 else 's' }}</span></div>
+    <div class="alpha-table-wrap">
+      <table class="alpha-table">
+        <thead><tr><th>Phase</th><th>NPC</th><th>Source Text</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for phase in dialogue.quest_phases %}
+          <tr>
+            <td><a class="record-link" href="/alpha/dialogue/{{ phase.dialogue_id }}"><strong>{{ phase.source | title }}</strong><span>Quest {{ phase.quest_id }}</span></a></td>
+            <td><a href="/alpha/npcs/{{ phase.entity_type }}/{{ phase.entity_id }}">{{ phase.speaker_name }}</a></td>
+            <td>{{ phase.original_text[:120] }}{% if phase.original_text|length > 120 %}…{% endif %}</td>
+            <td>{{ dialogue_status(phase) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
 {% endblock %}

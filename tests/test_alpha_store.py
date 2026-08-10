@@ -189,6 +189,23 @@ def test_spoken_text_is_created_only_by_explicit_action(store: AlphaStore):
         store.prepare_spoken_text(row["dialogue_id"])
 
 
+def test_quest_detail_lists_only_other_phases_of_the_same_quest(store: AlphaStore):
+    rows = store.list_dialogue(source="quest", page_size=10)["rows"]
+    accept = next(row for row in rows if row["quest_id"] == 101 and row["source"] == "accept")
+    complete = next(
+        row for row in rows if row["quest_id"] == 101 and row["source"] == "complete"
+    )
+    single_phase = next(row for row in rows if row["quest_id"] == 102)
+    gossip = store.list_dialogue(source="gossip", page_size=10)["rows"][0]
+
+    related = store.get_dialogue(accept["dialogue_id"])["quest_phases"]
+
+    assert [phase["dialogue_id"] for phase in related] == [complete["dialogue_id"]]
+    assert related[0]["source"] == "complete"
+    assert store.get_dialogue(single_phase["dialogue_id"])["quest_phases"] == []
+    assert store.get_dialogue(gossip["dialogue_id"])["quest_phases"] == []
+
+
 def test_provider_usage_ledger_records_exact_reported_cost(store: AlphaStore):
     event = store.record_provider_usage(
         action="dialogue_tts",
