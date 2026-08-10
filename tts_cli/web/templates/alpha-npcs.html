@@ -8,8 +8,8 @@
 
   <section class="alpha-panel">
     <div class="panel-heading"><div><h2>NPC Directory</h2><p>{{ "{:,}".format(listing.total) }} matching NPC{{ '' if listing.total == 1 else 's' }}</p></div></div>
-    <form class="filter-bar npc-filter-bar" method="get" action="/alpha/npcs">
-      <label class="search-field"><span>Search</span><input name="q" value="{{ filters.q }}" placeholder="Name, ID, role, faction, zone, or context"></label>
+    <form class="filter-bar npc-filter-bar" method="get" action="/alpha/npcs" data-instant-filters>
+      <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ filters.q }}" placeholder="Name, ID, role, faction, zone, or context"></label>
       <label><span>Race</span><select name="race_id"><option value="">All</option>{% for race in listing.races %}<option value="{{ race.race_id }}" {% if filters.race_id == race.race_id|string %}selected{% endif %}>{{ race.race_name | replace('nightelf','Night Elf') | title }}</option>{% endfor %}</select></label>
       <label><span>Gender</span><select name="gender_id"><option value="">All</option><option value="0" {% if filters.gender_id == '0' %}selected{% endif %}>Male</option><option value="1" {% if filters.gender_id == '1' %}selected{% endif %}>Female</option></select></label>
       <label><span>Role</span><select name="role"><option value="">All</option>{% for value in role_options %}<option value="{{ value }}" {% if filters.role == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select></label>
@@ -17,8 +17,7 @@
       <label><span>Story reach</span><select name="importance"><option value="">All</option>{% for value, score in importance_scores.items() %}<option value="{{ value }}" {% if filters.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select></label>
       <label><span>Voice approach</span><select name="voice_approach"><option value="">All</option>{% for value, label in [('baseline','Baseline'),('unique','Active unique'),('dormant','Dormant unique'),('unassigned','Unassigned')] %}<option value="{{ value }}" {% if filters.voice_approach == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
       <label><span>Voice readiness</span><select name="voice_state"><option value="">All</option><option value="needs_voice" {% if filters.voice_state == 'needs_voice' %}selected{% endif %}>Needs provider voice</option><option value="ready" {% if filters.voice_state == 'ready' %}selected{% endif %}>Provider voice ready</option></select></label>
-      <button type="submit">Filter</button>
-      <a class="text-link" href="/alpha/npcs">Clear</a>
+      <button type="button" class="secondary" data-filter-clear><i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Clear</span></button>
     </form>
 
     <div class="alpha-table-wrap">

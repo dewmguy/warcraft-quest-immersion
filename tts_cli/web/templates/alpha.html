@@ -23,8 +23,8 @@
     <div class="panel-heading">
       <div><h2>Work queue</h2><p>{{ "{:,}".format(listing.total) }} matching records</p></div>
     </div>
-    <form class="filter-bar" method="get" action="/alpha">
-      <label class="search-field"><span>Search</span><input name="q" value="{{ filters.q }}" placeholder="NPC, quest title, text, or quest ID"></label>
+    <form class="filter-bar" method="get" action="/alpha" data-instant-filters>
+      <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ filters.q }}" placeholder="NPC, quest title, text, or quest ID"></label>
       <label><span>Work status</span><select name="production_state">
         <option value="">All</option>
         {% for value, label in [('needs_text','Needs text'),('needs_voice','Needs voice'),('ready_to_generate','Ready to generate'),('generation_failed','Generation failed'),('audio_to_review','Audio to review'),('approved','Approved')] %}
@@ -35,8 +35,7 @@
       <label><span>Expansion</span><select name="expansion"><option value="">All</option>{% for value in ['1.12.1','2.4.3','3.3.5','classic'] %}<option value="{{ value }}" {% if filters.expansion == value %}selected{% endif %}>{{ 'Current Classic' if value == 'classic' else value }}</option>{% endfor %}</select></label>
       <label><span>Race</span><select name="race_id"><option value="">All</option>{% for race in listing.races %}<option value="{{ race.race_id }}" {% if filters.race_id == race.race_id|string %}selected{% endif %}>{{ race.race_name | replace('nightelf','Night Elf') | title }}</option>{% endfor %}</select></label>
       <label><span>Gender</span><select name="gender_id"><option value="">All</option><option value="0" {% if filters.gender_id == '0' %}selected{% endif %}>Male</option><option value="1" {% if filters.gender_id == '1' %}selected{% endif %}>Female</option></select></label>
-      <button type="submit">Filter</button>
-      <a class="text-link" href="/alpha">Clear</a>
+      <button type="button" class="secondary" data-filter-clear><i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Clear</span></button>
     </form>
 
     <div class="alpha-table-wrap">

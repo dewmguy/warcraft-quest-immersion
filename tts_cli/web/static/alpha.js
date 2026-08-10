@@ -14,6 +14,62 @@ let providerUsageRefreshTimer = null;
 let alphaMessageDismissTimer = null;
 let alphaMessageDismissed = false;
 
+for (const form of document.querySelectorAll("[data-instant-filters]")) {
+  const search = form.querySelector('input[name="q"]');
+  const clearButton = form.querySelector("[data-filter-clear]");
+  let searchTimer = null;
+
+  const filteredUrl = () => {
+    const url = new URL(form.action || window.location.href, window.location.origin);
+    url.search = "";
+    for (const [name, value] of new FormData(form).entries()) {
+      const normalized = String(value).trim();
+      if (normalized) url.searchParams.set(name, normalized);
+    }
+    return url;
+  };
+
+  const filtersAreActive = () => [...new FormData(form).values()].some(
+    (value) => String(value).trim(),
+  );
+
+  const syncClearButton = () => {
+    if (clearButton) clearButton.disabled = !filtersAreActive();
+  };
+
+  const applyFilters = () => {
+    if (searchTimer !== null) window.clearTimeout(searchTimer);
+    searchTimer = null;
+    const url = filteredUrl();
+    if (`${url.pathname}${url.search}` === `${window.location.pathname}${window.location.search}`) return;
+    form.setAttribute("aria-busy", "true");
+    window.location.assign(url);
+  };
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    applyFilters();
+  });
+  for (const select of form.querySelectorAll("select")) {
+    select.addEventListener("change", applyFilters);
+  }
+  if (search) {
+    search.addEventListener("input", () => {
+      syncClearButton();
+      if (searchTimer !== null) window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(applyFilters, 300);
+    });
+  }
+  if (clearButton) {
+    clearButton.addEventListener("click", () => {
+      if (searchTimer !== null) window.clearTimeout(searchTimer);
+      form.setAttribute("aria-busy", "true");
+      window.location.assign(new URL(form.action || window.location.pathname, window.location.origin));
+    });
+  }
+  syncClearButton();
+}
+
 function clearAlphaMessageDismissTimer() {
   if (alphaMessageDismissTimer !== null) window.clearTimeout(alphaMessageDismissTimer);
   alphaMessageDismissTimer = null;

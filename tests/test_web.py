@@ -121,6 +121,31 @@ def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatc
     assert ">Voices<" not in response.text
 
 
+def test_quest_gossip_and_npc_filters_apply_immediately_and_use_one_clear_button(
+    monkeypatch,
+):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        pages = [client.get(path) for path in ("/alpha", "/alpha/gossip", "/alpha/npcs")]
+
+    for page in pages:
+        assert page.status_code == 200
+        assert page.text.count("data-instant-filters") == 1
+        assert page.text.count("data-filter-clear") == 1
+        assert 'type="search" name="q"' in page.text
+        assert ">Filter</button>" not in page.text
+        assert 'class="text-link"' not in page.text
+        assert "fa-filter-circle-xmark" in page.text
+
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+    assert 'document.querySelectorAll("[data-instant-filters]")' in script
+    assert 'select.addEventListener("change", applyFilters)' in script
+    assert 'search.addEventListener("input"' in script
+    assert "window.setTimeout(applyFilters, 300)" in script
+    assert 'clearButton.addEventListener("click"' in script
+    assert script.count("window.location.assign") >= 2
+
+
 def test_quest_page_backfills_missing_spoken_text_and_hides_it_behind_edit_control(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
