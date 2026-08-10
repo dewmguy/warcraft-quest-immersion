@@ -14,8 +14,10 @@
         <strong>Alpha production database</strong>
       </a>
       <nav aria-label="Alpha workspaces">
-        <a href="/alpha" {% if active_nav == 'dialogue' %}aria-current="page"{% endif %}>Dialogue</a>
-        <a href="/alpha/voices" {% if active_nav == 'voices' %}aria-current="page"{% endif %}>Voices</a>
+        <a href="/alpha" {% if active_nav == 'quests' %}aria-current="page"{% endif %}>Quests</a>
+        <a href="/alpha/gossip" {% if active_nav == 'gossip' %}aria-current="page"{% endif %}>Gossip</a>
+        <a href="/alpha/npcs" {% if active_nav == 'npcs' %}aria-current="page"{% endif %}>NPCs</a>
+        <a href="/alpha/races" {% if active_nav == 'races' %}aria-current="page"{% endif %}>Races</a>
         <a href="/alpha/import-export" {% if active_nav == 'import_export' %}aria-current="page"{% endif %}>Import / Export</a>
         <a href="/alpha/settings" {% if active_nav == 'settings' %}aria-current="page"{% endif %}>Settings</a>
       </nav>

@@ -231,7 +231,7 @@ def dashboard(_: Annotated[str, Depends(require_auth)]):
 
 @app.get("/voices", response_class=RedirectResponse)
 def voice_profiles(_: Annotated[str, Depends(require_auth)]):
-    return RedirectResponse("/alpha/voices", status_code=307)
+    return RedirectResponse("/alpha/races", status_code=307)
 
 
 @app.get("/api/status")
@@ -387,6 +387,9 @@ def alpha_dashboard(
     page: int = 1,
 ):
     try:
+        if source == "gossip":
+            return RedirectResponse("/alpha/gossip", status_code=307)
+        quest_source = source if source in {"accept", "progress", "complete"} else "quest"
         return templates.TemplateResponse(
             request=request,
             name="alpha.html",
@@ -395,7 +398,7 @@ def alpha_dashboard(
                 listing=alpha_store.list_dialogue(
                     query=q,
                     state=production_state,
-                    source=source,
+                    source=quest_source,
                     expansion=expansion,
                     race_id=race_id,
                     gender_id=gender_id,
@@ -404,7 +407,46 @@ def alpha_dashboard(
                 filters={
                     "q": q,
                     "production_state": production_state,
-                    "source": source,
+                    "source": quest_source if quest_source != "quest" else "",
+                    "expansion": expansion,
+                    "race_id": race_id,
+                    "gender_id": gender_id,
+                },
+            ),
+        )
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
+@app.get("/alpha/gossip", response_class=HTMLResponse)
+def alpha_gossip(
+    request: Request,
+    _: Annotated[str, Depends(require_auth)],
+    q: str = "",
+    production_state: str = "",
+    expansion: str = "",
+    race_id: str = "",
+    gender_id: str = "",
+    page: int = 1,
+):
+    try:
+        return templates.TemplateResponse(
+            request=request,
+            name="alpha-gossip.html",
+            context=_alpha_context(
+                dashboard=alpha_store.dashboard(),
+                listing=alpha_store.list_dialogue(
+                    query=q,
+                    state=production_state,
+                    source="gossip",
+                    expansion=expansion,
+                    race_id=race_id,
+                    gender_id=gender_id,
+                    page=max(page, 1),
+                ),
+                filters={
+                    "q": q,
+                    "production_state": production_state,
                     "expansion": expansion,
                     "race_id": race_id,
                     "gender_id": gender_id,
@@ -433,8 +475,13 @@ def alpha_dialogue(
         raise _alpha_error(error, 404) from error
 
 
-@app.get("/alpha/speakers/{entity_type}/{entity_id}", response_class=HTMLResponse)
-def alpha_speaker(
+@app.get("/alpha/npcs/{entity_type}/{entity_id}", response_class=HTMLResponse)
+@app.get(
+    "/alpha/speakers/{entity_type}/{entity_id}",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+def alpha_npc(
     entity_type: str,
     entity_id: int,
     request: Request,
@@ -455,11 +502,59 @@ def alpha_speaker(
         raise _alpha_error(error, 404) from error
 
 
-@app.get("/alpha/voices", response_class=HTMLResponse)
-def alpha_voices(
+@app.get("/alpha/npcs", response_class=HTMLResponse)
+def alpha_npcs(
     request: Request,
     _: Annotated[str, Depends(require_auth)],
-    scope: str = "",
+    q: str = "",
+    race_id: str = "",
+    gender_id: str = "",
+    role: str = "",
+    faction: str = "",
+    importance: str = "",
+    voice_approach: str = "",
+    voice_state: str = "",
+    page: int = 1,
+):
+    try:
+        return templates.TemplateResponse(
+            request=request,
+            name="alpha-npcs.html",
+            context=_alpha_context(
+                listing=alpha_store.list_npcs(
+                    query=q,
+                    race_id=race_id,
+                    gender_id=gender_id,
+                    role=role,
+                    faction=faction,
+                    importance=importance,
+                    voice_approach=voice_approach,
+                    voice_state=voice_state,
+                    page=max(page, 1),
+                ),
+                filters={
+                    "q": q,
+                    "race_id": race_id,
+                    "gender_id": gender_id,
+                    "role": role,
+                    "faction": faction,
+                    "importance": importance,
+                    "voice_approach": voice_approach,
+                    "voice_state": voice_state,
+                },
+                role_options=ROLE_OPTIONS,
+                faction_options=AFFILIATION_OPTIONS,
+                importance_scores=IMPORTANCE_SCORES,
+            ),
+        )
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
+@app.get("/alpha/races", response_class=HTMLResponse)
+def alpha_races(
+    request: Request,
+    _: Annotated[str, Depends(require_auth)],
     completion: str = "",
 ):
     try:
@@ -467,8 +562,7 @@ def alpha_voices(
             request=request,
             name="alpha-voices.html",
             context=_alpha_context(
-                voices=alpha_store.list_voices(scope, completion),
-                scope=scope,
+                voices=alpha_store.list_voices("baseline", completion),
                 completion=completion,
             ),
         )
@@ -476,6 +570,19 @@ def alpha_voices(
         raise _alpha_error(error) from error
 
 
+@app.get("/alpha/voices", response_class=RedirectResponse, include_in_schema=False)
+def legacy_alpha_voices(
+    _: Annotated[str, Depends(require_auth)],
+    scope: str = "",
+    completion: str = "",
+):
+    if scope == "unique":
+        return RedirectResponse("/alpha/npcs?voice_approach=unique", status_code=307)
+    suffix = f"?completion={completion}" if completion else ""
+    return RedirectResponse(f"/alpha/races{suffix}", status_code=307)
+
+
+@app.get("/alpha/races/{voice_id}", response_class=HTMLResponse)
 @app.get("/alpha/voices/{voice_id}", response_class=HTMLResponse)
 def alpha_voice(
     voice_id: str,
@@ -658,23 +765,27 @@ def api_set_delivery(
         raise _alpha_error(error) from error
 
 
-@app.patch("/api/alpha/speakers/{speaker_id}")
-def api_update_speaker(
+@app.patch("/api/alpha/npcs/{speaker_id}")
+@app.patch("/api/alpha/speakers/{speaker_id}", include_in_schema=False)
+def api_update_npc(
     speaker_id: str,
     payload: Annotated[dict, Body()],
     _: Annotated[str, Depends(require_auth)],
     __: Annotated[None, Depends(require_action_header)],
 ) -> dict:
     try:
+        record = alpha_store.update_speaker(speaker_id, payload)
         return {
-            "message": "Speaker context and voice assignment were saved.",
-            "speaker": alpha_store.update_speaker(speaker_id, payload),
+            "message": "NPC context was saved.",
+            "npc": record,
+            "speaker": record,
         }
     except AlphaError as error:
         raise _alpha_error(error) from error
 
 
-@app.post("/api/alpha/speakers/{speaker_id}/unique-voice")
+@app.post("/api/alpha/npcs/{speaker_id}/unique-voice")
+@app.post("/api/alpha/speakers/{speaker_id}/unique-voice", include_in_schema=False)
 def api_create_unique_voice(
     speaker_id: str,
     _: Annotated[str, Depends(require_auth)],
@@ -683,14 +794,15 @@ def api_create_unique_voice(
     try:
         voice = alpha_store.create_unique_voice(speaker_id)
         return {
-            "message": f"Created the unique voice record {voice['name']}.",
+            "message": f"{voice['name']} now uses its unique voice profile.",
             "voice_id": voice["voice_id"],
         }
     except AlphaError as error:
         raise _alpha_error(error) from error
 
 
-@app.post("/api/alpha/speakers/{speaker_id}/baseline-voice")
+@app.post("/api/alpha/npcs/{speaker_id}/baseline-voice")
+@app.post("/api/alpha/speakers/{speaker_id}/baseline-voice", include_in_schema=False)
 def api_use_baseline_voice(
     speaker_id: str,
     _: Annotated[str, Depends(require_auth)],
@@ -700,7 +812,11 @@ def api_use_baseline_voice(
         record = alpha_store.use_baseline_voice(speaker_id)
         baseline = record["baseline_voice"]
         return {
-            "message": f"Assigned {record['speaker']['name']} to {baseline['name']}.",
+            "message": (
+                f"{record['npc']['name']} now uses {baseline['name']}; "
+                "the unique profile remains dormant."
+            ),
+            "npc": record,
             "speaker": record,
         }
     except AlphaError as error:

@@ -1,19 +1,19 @@
 {% extends "alpha-base.html" %}
-{% set active_nav = "voices" %}
-{% block title %}Voices{% endblock %}
+{% set active_nav = "races" %}
+{% block title %}Races{% endblock %}
 {% block content %}
-  <section class="alpha-page-heading"><div><span class="alpha-kicker">Cast library</span><h1>Voices</h1><p>Maintain reusable race-and-gender profiles, their delivery presets, and NPC-specific voices independently from dialogue.</p></div></section>
-  <nav class="scope-tabs"><a href="/alpha/voices" {% if not scope and not completion %}aria-current="page"{% endif %}>All</a><a href="/alpha/voices?scope=baseline" {% if scope == 'baseline' and not completion %}aria-current="page"{% endif %}>Baseline</a><a href="/alpha/voices?scope=baseline&completion=incomplete" {% if scope == 'baseline' and completion == 'incomplete' %}aria-current="page"{% endif %}>Incomplete baseline</a><a href="/alpha/voices?scope=unique" {% if scope == 'unique' %}aria-current="page"{% endif %}>Unique NPC</a></nav>
+  <section class="alpha-page-heading"><div><span class="alpha-kicker">Race / gender library</span><h1>Races</h1><p>Maintain reusable race-and-gender baselines and their emotional delivery presets.</p></div></section>
+  <nav class="scope-tabs"><a href="/alpha/races" {% if not completion %}aria-current="page"{% endif %}>All Baselines</a><a href="/alpha/races?completion=incomplete" {% if completion == 'incomplete' %}aria-current="page"{% endif %}>Incomplete</a><a href="/alpha/races?completion=complete" {% if completion == 'complete' %}aria-current="page"{% endif %}>Complete</a></nav>
   <section class="alpha-panel">
-    <div class="panel-heading"><div><h2>{{ 'Incomplete baseline profiles' if completion == 'incomplete' else 'Voice profiles' }}</h2></div><span>{{ voices|length }} profiles</span></div>
-    <div class="alpha-table-wrap"><table class="alpha-table voice-table"><thead><tr><th>Voice profile</th><th>Lifecycle</th><th>Creation path</th><th>Matching work</th><th>Delivery presets</th><th>Provider state</th></tr></thead><tbody>
+    <div class="panel-heading"><div><h2>{{ 'Incomplete race / gender profiles' if completion == 'incomplete' else 'Race / Gender Profiles' }}</h2></div><span>{{ voices|length }} profiles</span></div>
+    <div class="alpha-table-wrap"><table class="alpha-table voice-table"><thead><tr><th>Race / Gender</th><th>Lifecycle</th><th>Creation path</th><th>Matching work</th><th>Delivery presets</th><th>Provider state</th></tr></thead><tbody>
       {% for voice in voices %}<tr>
-        <td><a class="record-link" href="/alpha/voices/{{ voice.voice_id }}"><strong>{{ voice.name }}</strong><span>{{ voice.scope | title }} · version {{ voice.version_number }}</span></a></td>
+        <td><a class="record-link" href="/alpha/races/{{ voice.voice_id }}"><strong>{{ voice.name }}</strong><span>Baseline · version {{ voice.version_number }}</span></a></td>
         <td><span class="work-status lifecycle-status lifecycle-{{ voice.status }}" title="{{ voice.lifecycle_reason }}">{{ voice.status | title }}</span></td>
         <td>{{ voice.creation_method | replace('_',' ') | title }}<span class="cell-detail">{{ voice.clip_count }} reference clips</span></td>
-        <td><strong>{{ voice.missing_dialogue_count }} missing audio</strong><span class="cell-detail">{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} records</span></td>
+        <td><strong>{{ voice.missing_dialogue_count }} missing audio</strong><span class="cell-detail">{{ voice.matching_speaker_count }} matching NPCs · {{ voice.dialogue_count }} lines</span></td>
         <td>{{ voice.approved_delivery_count }} / 5 approved</td>
-        <td>{% if voice.provider_voice_id %}<span class="work-status status-approved">Reusable voice ready</span>{% else %}<a class="work-status status-needs_voice status-action" href="/alpha/voices/{{ voice.voice_id }}#provider-creation">Voice not created &rarr;</a>{% endif %}</td>
+        <td>{% if voice.provider_voice_id %}<span class="work-status status-approved">Reusable voice ready</span>{% else %}<a class="work-status status-needs_voice status-action" href="/alpha/races/{{ voice.voice_id }}#provider-creation">Voice not created &rarr;</a>{% endif %}</td>
       </tr>{% endfor %}
     </tbody></table></div>
   </section>

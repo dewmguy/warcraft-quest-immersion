@@ -107,6 +107,7 @@ def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore
 
     assert dashboard["counts"]["dialogue"] == 4
     assert dashboard["counts"]["speakers"] == 3
+    assert dashboard["counts"]["npcs"] == 2
     assert dashboard["counts"]["baseline_voices"] == 46
     assert dashboard["states"] == {"needs_text": 4}
     assert all(row["revision_id"] is None for row in listing["rows"])
@@ -116,21 +117,21 @@ def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore
             "complete": 0,
             "total": 230,
             "percent": 0.0,
-            "href": "/alpha/voices?scope=baseline&completion=incomplete",
+            "href": "/alpha/races?completion=incomplete",
         },
         "quests": {
             "label": "Quest audio",
             "complete": 0,
             "total": 3,
             "percent": 0.0,
-            "href": "/alpha?source=quest",
+            "href": "/alpha",
         },
         "gossip": {
             "label": "Gossip audio",
             "complete": 0,
             "total": 1,
             "percent": 0.0,
-            "href": "/alpha?source=gossip",
+            "href": "/alpha/gossip",
         },
     }
 
@@ -216,6 +217,8 @@ def test_unique_voice_inherits_baseline_and_is_assigned(store: AlphaStore):
 
     assert unique["scope"] == "unique"
     assert unique["parent_voice_id"] == speaker["voice_id"]
+    assert "NPC context:" in unique["description"]
+    assert "story reach:" in unique["description"]
     assert updated["voice_id"] == unique["voice_id"]
     assert updated["uniqueness"] == "unique"
 
@@ -235,9 +238,9 @@ def test_unique_voice_can_return_to_baseline_without_losing_history(store: Alpha
     assert reset["speaker"]["voice_id"] == baseline_voice_id
     assert reset["speaker"]["uniqueness"] == "baseline"
     assert reset["retired_voice_id"] == unique["voice_id"]
-    archived = store.get_voice(unique["voice_id"])
-    assert archived["status"] == "archived"
-    assert archived["stored_status"] == "retired"
+    dormant = store.get_voice(unique["voice_id"])
+    assert dormant["status"] == "dormant"
+    assert dormant["stored_status"] == "retired"
     assert unique["voice_id"] not in {voice["voice_id"] for voice in store.list_voices("unique")}
     assert store.dashboard()["counts"]["unique_voices"] == 0
 
@@ -322,7 +325,8 @@ def test_speaker_context_is_inferred_but_remains_editable(store: AlphaStore):
     assert record["speaker"]["role"] == "officer"
     assert record["speaker"]["importance"] == "stepping_stone"
     assert record["speaker"]["importance_score"] == 25
-    assert "2 spoken record(s)" in record["speaker"]["context_summary"]
+    assert "2 spoken record(s)" in record["npc"]["context_summary"]
+    assert "this NPC" in record["npc"]["context_summary"]
 
     updated = store.update_speaker(
         row["speaker_id"],
@@ -337,6 +341,26 @@ def test_speaker_context_is_inferred_but_remains_editable(store: AlphaStore):
     )
     assert updated["speaker"]["role"] == "soldier"
     assert updated["speaker"]["importance_score"] == 55
+
+
+def test_npc_directory_excludes_objects_and_filters_voice_approach(store: AlphaStore):
+    directory = store.list_npcs(page_size=10)
+
+    assert directory["total"] == 2
+    assert {npc["name"] for npc in directory["rows"]} == {
+        "Marshal Rowan",
+        "Sentinel Amara",
+    }
+    assert "Weathered Tablet" not in {npc["name"] for npc in directory["rows"]}
+    assert store.list_npcs(query="Amara")["total"] == 1
+    assert store.list_npcs(role="officer")["rows"][0]["name"] == "Marshal Rowan"
+
+    store.create_unique_voice("creature-90002")
+    assert store.list_npcs(voice_approach="unique")["rows"][0]["name"] == "Sentinel Amara"
+    store.use_baseline_voice("creature-90002")
+    dormant = store.list_npcs(voice_approach="dormant")
+    assert dormant["rows"][0]["name"] == "Sentinel Amara"
+    assert dormant["rows"][0]["unique_voice_id"] == "unique--creature-90002"
 
 
 def test_voice_versions_only_change_on_delta_and_prompt_can_be_restored(store: AlphaStore):

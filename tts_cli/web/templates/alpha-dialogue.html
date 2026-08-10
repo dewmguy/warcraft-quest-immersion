@@ -1,9 +1,9 @@
 {% extends "alpha-base.html" %}
 {% from "alpha-status.html" import dialogue_status %}
-{% set active_nav = "dialogue" %}
+{% set active_nav = "gossip" if dialogue.source == 'gossip' else "quests" %}
 {% block title %}{{ dialogue.quest_title or dialogue.speaker_name }}{% endblock %}
 {% block content %}
-  <nav class="breadcrumbs"><a href="/alpha">Dialogue</a><span>›</span><a href="/alpha/speakers/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></nav>
+  <nav class="breadcrumbs"><a href="{{ '/alpha/gossip' if dialogue.source == 'gossip' else '/alpha' }}">{{ 'Gossip' if dialogue.source == 'gossip' else 'Quests' }}</a><span>›</span><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></nav>
   <section class="alpha-page-heading record-heading">
     <div>
       <span class="alpha-kicker">{{ dialogue.source | title }}{% if dialogue.quest_id %} · Quest {{ dialogue.quest_id }}{% endif %}</span>
@@ -18,7 +18,7 @@
       <div class="panel-heading"><div><span class="panel-step">Source</span><h2>Original text</h2></div><span>Immutable</span></div>
       <blockquote>{{ dialogue.original_text }}</blockquote>
       <dl class="record-facts">
-        <div><dt>Speaker</dt><dd><a href="/alpha/speakers/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></dd></div>
+        <div><dt>NPC</dt><dd><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></dd></div>
         <div><dt>Database key</dt><dd>{{ dialogue.dialogue_id }}</dd></div>
         {% if dialogue.source_record_id %}<div><dt>Source record</dt><dd>{{ dialogue.source_record_id }}</dd></div>{% endif %}
         <div><dt>Expansion</dt><dd>{{ dialogue.expansion }} · {{ dialogue.locale }}</dd></div>
@@ -44,9 +44,9 @@
 
   <div class="record-grid">
     <section class="alpha-panel" id="voice-assignment">
-      <div class="panel-heading"><div><span class="panel-step">Speaker</span><h2>Voice and delivery</h2></div></div>
-      <p><a href="/alpha/speakers/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a> currently uses <strong>{{ dialogue.voice_name or 'no assigned voice' }}</strong>.</p>
-      {% if dialogue.voice_id %}<p><a href="/alpha/voices/{{ dialogue.voice_id }}">Open voice record</a>{% if not dialogue.provider_voice_id %} · <a class="cell-action" href="/alpha/voices/{{ dialogue.voice_id }}#provider-creation">Create or assign the missing provider voice &rarr;</a>{% endif %}</p>{% endif %}
+      <div class="panel-heading"><div><span class="panel-step">NPC</span><h2>Voice and Delivery</h2></div></div>
+      <p><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a> currently uses <strong>{{ dialogue.voice_name or 'no assigned voice' }}</strong>.</p>
+      {% if dialogue.voice_id %}<p><a href="{{ '/alpha/races/' if dialogue.voice_scope == 'baseline' else '/alpha/voices/' }}{{ dialogue.voice_id }}">Open voice profile</a>{% if not dialogue.provider_voice_id %} · <a class="cell-action" href="{{ '/alpha/races/' if dialogue.voice_scope == 'baseline' else '/alpha/voices/' }}{{ dialogue.voice_id }}#provider-creation">Create or assign the missing provider voice &rarr;</a>{% endif %}</p>{% endif %}
       <form data-json-form data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/delivery" data-method="PATCH" class="compact-form">
         <label><span>Line delivery</span><select name="delivery">{% for delivery in deliveries %}<option value="{{ delivery }}" {% if delivery == dialogue.delivery %}selected{% endif %}>{{ delivery | title }}</option>{% endfor %}</select></label>
         <button type="submit">Save delivery</button>
@@ -58,7 +58,7 @@
       {% if dialogue.revision_id %}<div class="api-input"><span>Exact speech input</span><p>{{ dialogue.generation_text }}</p></div>{% endif %}
       {% if dialogue.revision_id %}<div class="metering-preview"><span><strong>{{ dialogue.generation_text|length }}</strong> input characters</span><span><strong>~{{ dialogue.generation_text|length }}</strong> estimated credits</span><span><strong>{% if dialogue.generation_text|length < 1000 %}{{ "%.0f"|format(dialogue.generation_text|length * 60 / 1000) }} seconds{% else %}{{ "%.1f"|format(dialogue.generation_text|length / 1000) }} minutes{% endif %}</strong> estimated audio</span></div>{% endif %}
       {% if not provider_configured %}<aside class="inline-warning">ElevenLabs is not configured on this deployment. The button remains guarded and no request can be sent.</aside>{% endif %}
-      <button type="button" data-action data-paid data-provider-operation="Generating a dialogue candidate" data-metering="speech" data-metered-characters="{{ dialogue.generation_text|length }}" data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/generate" data-method="POST" {% if dialogue.production_state not in ['ready_to_generate','generation_failed','audio_to_review'] or not provider_configured %}disabled{% endif %}>Generate one ElevenLabs candidate</button>
+      <button type="button" data-action data-paid data-provider-operation="Generating an audio sample" data-metering="speech" data-metered-characters="{{ dialogue.generation_text|length }}" data-url="/api/alpha/dialogue/{{ dialogue.dialogue_id }}/generate" data-method="POST" {% if dialogue.production_state not in ['ready_to_generate','generation_failed','audio_to_review'] or not provider_configured %}disabled{% endif %}>Generate One Sample</button>
       <p class="form-help">This is the only paid line-generation action. It always creates a new attempt and never overwrites an earlier file.</p>
     </section>
   </div>

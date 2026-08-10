@@ -115,7 +115,10 @@ def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatc
     assert response.url.path == "/alpha"
     assert "Alpha production database" in response.text
     assert "Work queue" in response.text
-    assert "4 matching records" in response.text
+    assert "3 matching records" in response.text
+    assert all(label in response.text for label in ("Quests", "Gossip", "NPCs", "Races"))
+    assert ">Dialogue<" not in response.text
+    assert ">Voices<" not in response.text
 
 
 def test_alpha_starts_with_empty_spoken_text_and_prepares_only_on_click(monkeypatch):
@@ -180,7 +183,7 @@ def test_upload_adds_an_expansion_without_replacing_other_sources(monkeypatch):
     assert uploaded.status_code == 200
     assert dashboard["counts"]["dialogue"] == 8
     assert len(dashboard["snapshots"]) == 2
-    assert "4 matching records" in vanilla.text
+    assert "3 matching records" in vanilla.text
 
 
 def test_import_export_explains_demo_data_and_exact_schema(monkeypatch):
@@ -615,7 +618,7 @@ def test_build_actions_skip_confirmation_while_teardown_keeps_it():
     assert len(voice_design_forms) == 2
     assert all("data-confirm=" not in tag for tag in voice_design_forms)
     assert all("data-confirm-required" not in tag for tag in voice_design_forms)
-    assert 'data-provider-operation="Generating a dialogue candidate"' in dialogue_template
+    assert 'data-provider-operation="Generating an audio sample"' in dialogue_template
     assert "data-confirm=" not in instant_clone_form
     assert "data-confirm-required" not in instant_clone_form
     assert "data-confirm=" not in reusable_voice_button
@@ -1088,11 +1091,11 @@ def test_actionable_statuses_link_to_the_work_that_resolves_them(monkeypatch):
         row = web.alpha_store.list_dialogue(page_size=10)["rows"][0]
         queue = client.get("/alpha")
         dialogue = client.get(f"/alpha/dialogue/{row['dialogue_id']}")
-        speaker = client.get(f"/alpha/speakers/{row['entity_type']}/{row['entity_id']}")
-        voices = client.get("/alpha/voices")
+        speaker = client.get(f"/alpha/npcs/{row['entity_type']}/{row['entity_id']}")
+        voices = client.get("/alpha/races")
 
     spoken_text_target = f"/alpha/dialogue/{row['dialogue_id']}#spoken-text"
-    provider_target = f"/alpha/voices/{row['voice_id']}#provider-creation"
+    provider_target = f"/alpha/races/{row['voice_id']}#provider-creation"
     assert f'href="{spoken_text_target}"' in queue.text
     assert 'href="#spoken-text"' not in dialogue.text
     assert f'href="{spoken_text_target}"' in dialogue.text
@@ -1105,18 +1108,90 @@ def test_progress_cards_open_prefiltered_quest_gossip_and_baseline_queues(monkey
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
         dashboard = client.get("/alpha")
-        quests = client.get("/alpha?source=quest")
-        gossip = client.get("/alpha?source=gossip")
-        baselines = client.get("/alpha/voices?scope=baseline&completion=incomplete")
+        quests = client.get("/alpha")
+        gossip = client.get("/alpha/gossip")
+        baselines = client.get("/alpha/races?completion=incomplete")
 
-    assert 'href="/alpha?source=quest"' in dashboard.text
-    assert 'href="/alpha?source=gossip"' in dashboard.text
-    assert 'href="/alpha/voices?scope=baseline&amp;completion=incomplete"' in dashboard.text
+    assert 'href="/alpha"' in dashboard.text
+    assert 'href="/alpha/gossip"' in dashboard.text
+    assert 'href="/alpha/races?completion=incomplete"' in dashboard.text
     assert "3 matching records" in quests.text
-    assert '<option value="quest" selected>Quest · all stages</option>' in quests.text
-    assert "1 matching records" in gossip.text
-    assert "Incomplete baseline profiles" in baselines.text
+    assert "Quest stage" in quests.text
+    assert '<option value="gossip"' not in quests.text
+    assert "1 matching lines" in gossip.text
+    assert "Incomplete race / gender profiles" in baselines.text
     assert "46 profiles" in baselines.text
+
+
+def test_quest_gossip_and_npc_indexes_are_exclusive_and_filterable(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        quests = client.get("/alpha")
+        gossip = client.get("/alpha/gossip")
+        npcs = client.get("/alpha/npcs")
+        amara = client.get("/alpha/npcs?q=Amara")
+
+    assert "A Call to Adventure" in quests.text
+    assert "Keep your eyes open, traveler" not in quests.text
+    assert "Keep your eyes open, traveler" in gossip.text
+    assert "A Call to Adventure" not in gossip.text
+    assert "Marshal Rowan" in npcs.text
+    assert "Sentinel Amara" in npcs.text
+    assert "Weathered Tablet" not in npcs.text
+    assert "1 matching NPC" in amara.text
+    assert "Sentinel Amara" in amara.text
+    assert "Marshal Rowan" not in amara.text
+
+
+def test_unique_voice_profile_links_back_and_reads_live_npc_context(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        npc_id = "creature-90002"
+        existing = web.alpha_store.get_speaker(npc_id)["npc"]
+        saved = client.patch(
+            f"/api/alpha/npcs/{npc_id}",
+            headers={"X-WQI-Action": "confirmed"},
+            json={
+                "role": "soldier",
+                "faction": "alliance",
+                "zone": "Teldrassil",
+                "importance": "zone",
+                "context_summary": "A veteran sentinel guarding the forest road.",
+                "voice_id": existing["voice_id"],
+            },
+        )
+        unique = client.post(
+            f"/api/alpha/npcs/{npc_id}/unique-voice",
+            headers={"X-WQI-Action": "confirmed"},
+        )
+        page = client.get(f"/alpha/voices/{unique.json()['voice_id']}")
+
+    assert saved.status_code == 200
+    assert unique.status_code == 200
+    assert "Back to Sentinel Amara" in page.text
+    assert 'href="/alpha/npcs/creature/90002"' in page.text
+    assert "NPC Context" in page.text
+    assert "Soldier" in page.text
+    assert "Alliance" in page.text
+    assert "Teldrassil" in page.text
+    assert "Zone · 55" in page.text
+    assert "A veteran sentinel guarding the forest road." in page.text
+
+
+def test_npc_profile_uses_star_toggle_and_normalized_form_layout(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        page = client.get("/alpha/npcs/creature/90001")
+
+    assert 'class="npc-unique-toggle"' in page.text
+    assert 'class="fa-regular fa-star"' in page.text
+    assert "Distinctive enough for a unique voice?" not in page.text
+    assert "Faction" in page.text
+    assert "Affiliation" not in page.text
+    assert 'class="form-grid npc-form-grid"' in page.text
+    stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".npc-form-grid label { grid-template-rows:" in stylesheet
+    assert ".npc-form-grid select, .npc-form-grid input { min-height: 42px;" in stylesheet
 
 
 def test_settings_owns_provider_model_selection(monkeypatch):
@@ -1190,19 +1265,24 @@ def test_npc_can_leave_unique_queue_and_return_to_baseline(monkeypatch):
     with TestClient(web.app) as client:
         speaker_id = "creature-90002"
         unique = web.alpha_store.create_unique_voice(speaker_id)
-        page = client.get("/alpha/speakers/creature/90002")
+        page = client.get("/alpha/npcs/creature/90002")
         reset = client.post(
-            f"/api/alpha/speakers/{speaker_id}/baseline-voice",
+            f"/api/alpha/npcs/{speaker_id}/baseline-voice",
             headers={"X-WQI-Action": "confirmed"},
         )
-        unique_queue = client.get("/alpha/voices?scope=unique")
+        dormant_page = client.get("/alpha/npcs/creature/90002")
+        dormant_queue = client.get("/alpha/npcs?voice_approach=dormant")
 
     assert page.status_code == 200
-    assert "Return to the race/gender baseline" in page.text
-    assert "Use Night Elf" in page.text
+    assert 'class="npc-unique-toggle is-unique"' in page.text
+    assert "Active unique profile" in page.text
+    assert "Distinctive enough for a unique voice?" not in page.text
     assert reset.status_code == 200
     assert reset.json()["speaker"]["speaker"]["voice_scope"] == "baseline"
-    assert unique["name"] not in unique_queue.text
+    assert 'class="npc-unique-toggle"' in dormant_page.text
+    assert "Dormant unique profile" in dormant_page.text
+    assert unique["name"] in dormant_queue.text
+    assert web.alpha_store.get_voice(unique["voice_id"])["status"] == "dormant"
 
 
 def test_failed_dwarf_poc_and_old_voice_page_redirect_to_alpha(monkeypatch):
@@ -1214,7 +1294,7 @@ def test_failed_dwarf_poc_and_old_voice_page_redirect_to_alpha(monkeypatch):
     assert dwarf.status_code == 307
     assert dwarf.headers["location"] == "/alpha"
     assert voices.status_code == 307
-    assert voices.headers["location"] == "/alpha/voices"
+    assert voices.headers["location"] == "/alpha/races"
 
 
 def test_phase2_source_artifact_remains_available(monkeypatch):

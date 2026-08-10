@@ -1,0 +1,48 @@
+{% extends "alpha-base.html" %}
+{% set active_nav = "npcs" %}
+{% block title %}NPCs{% endblock %}
+{% block content %}
+  <section class="alpha-page-heading">
+    <div><span class="alpha-kicker">Character directory</span><h1>NPCs</h1><p>Find characters, review inferred context, and trace every applied baseline or unique voice.</p></div>
+  </section>
+
+  <section class="alpha-panel">
+    <div class="panel-heading"><div><h2>NPC Directory</h2><p>{{ "{:,}".format(listing.total) }} matching NPC{{ '' if listing.total == 1 else 's' }}</p></div></div>
+    <form class="filter-bar npc-filter-bar" method="get" action="/alpha/npcs">
+      <label class="search-field"><span>Search</span><input name="q" value="{{ filters.q }}" placeholder="Name, ID, role, faction, zone, or context"></label>
+      <label><span>Race</span><select name="race_id"><option value="">All</option>{% for race in listing.races %}<option value="{{ race.race_id }}" {% if filters.race_id == race.race_id|string %}selected{% endif %}>{{ race.race_name | replace('nightelf','Night Elf') | title }}</option>{% endfor %}</select></label>
+      <label><span>Gender</span><select name="gender_id"><option value="">All</option><option value="0" {% if filters.gender_id == '0' %}selected{% endif %}>Male</option><option value="1" {% if filters.gender_id == '1' %}selected{% endif %}>Female</option></select></label>
+      <label><span>Role</span><select name="role"><option value="">All</option>{% for value in role_options %}<option value="{{ value }}" {% if filters.role == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select></label>
+      <label><span>Faction</span><select name="faction"><option value="">All</option>{% for value in faction_options %}<option value="{{ value }}" {% if filters.faction == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select></label>
+      <label><span>Story reach</span><select name="importance"><option value="">All</option>{% for value, score in importance_scores.items() %}<option value="{{ value }}" {% if filters.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select></label>
+      <label><span>Voice approach</span><select name="voice_approach"><option value="">All</option>{% for value, label in [('baseline','Baseline'),('unique','Active unique'),('dormant','Dormant unique'),('unassigned','Unassigned')] %}<option value="{{ value }}" {% if filters.voice_approach == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      <label><span>Voice readiness</span><select name="voice_state"><option value="">All</option><option value="needs_voice" {% if filters.voice_state == 'needs_voice' %}selected{% endif %}>Needs provider voice</option><option value="ready" {% if filters.voice_state == 'ready' %}selected{% endif %}>Provider voice ready</option></select></label>
+      <button type="submit">Filter</button>
+      <a class="text-link" href="/alpha/npcs">Clear</a>
+    </form>
+
+    <div class="alpha-table-wrap">
+      <table class="alpha-table npc-table">
+        <thead><tr><th>NPC</th><th>Context</th><th>Quest / Gossip</th><th>Applied Voice</th><th>Readiness</th></tr></thead>
+        <tbody>
+          {% for npc in listing.rows %}
+          <tr>
+            <td><a class="record-link" href="/alpha/npcs/{{ npc.entity_type }}/{{ npc.entity_id }}"><strong>{{ npc.name }}</strong><span>NPC {{ npc.entity_id }} · {{ npc.race_name | title }} · {{ npc.gender_name | title }}</span></a></td>
+            <td>{{ npc.role | replace('_',' ') | title }}<span class="cell-detail">{{ npc.faction | replace('_',' ') | title }}{% if npc.zone %} · {{ npc.zone }}{% endif %}</span><span class="cell-detail">{{ npc.importance | replace('_',' ') | title }} · {{ npc.importance_score }}</span></td>
+            <td><strong>{{ npc.dialogue_count }} line{{ '' if npc.dialogue_count == 1 else 's' }}</strong><span class="cell-detail">{{ npc.quest_count }} quest · {{ npc.gossip_count }} gossip</span></td>
+            <td>{% if npc.voice_id %}<a href="{{ '/alpha/races/' if npc.voice_scope == 'baseline' else '/alpha/voices/' }}{{ npc.voice_id }}">{{ npc.voice_name }}</a><span class="cell-detail">{{ npc.voice_scope | title }}</span>{% else %}<span>Unassigned</span>{% endif %}{% if npc.unique_voice_id and npc.voice_scope != 'unique' %}<a class="cell-detail cell-action" href="/alpha/voices/{{ npc.unique_voice_id }}">Dormant unique profile &rarr;</a>{% endif %}</td>
+            <td>{% if not npc.voice_id or not npc.provider_voice_id %}<a class="work-status status-needs_voice status-action" href="/alpha/npcs/{{ npc.entity_type }}/{{ npc.entity_id }}#voice-approach">Provider voice needed &rarr;</a>{% else %}<span class="work-status status-approved">Provider voice ready</span>{% endif %}</td>
+          </tr>
+          {% else %}<tr><td colspan="5" class="empty-cell">No NPCs match these filters.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if listing.page_count > 1 %}
+    <nav class="pagination" aria-label="NPC pages">
+      {% if listing.page > 1 %}<a href="?q={{ filters.q }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&role={{ filters.role }}&faction={{ filters.faction }}&importance={{ filters.importance }}&voice_approach={{ filters.voice_approach }}&voice_state={{ filters.voice_state }}&page={{ listing.page - 1 }}">Previous</a>{% endif %}
+      <span>Page {{ listing.page }} of {{ listing.page_count }}</span>
+      {% if listing.page < listing.page_count %}<a href="?q={{ filters.q }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&role={{ filters.role }}&faction={{ filters.faction }}&importance={{ filters.importance }}&voice_approach={{ filters.voice_approach }}&voice_state={{ filters.voice_state }}&page={{ listing.page + 1 }}">Next</a>{% endif %}
+    </nav>
+    {% endif %}
+  </section>
+{% endblock %}

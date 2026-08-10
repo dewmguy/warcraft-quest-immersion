@@ -133,8 +133,11 @@ def _with_voice_lifecycle(voice: dict[str, Any]) -> dict[str, Any]:
         voice_id_candidate_count = len(voice["voice_id_candidates"])
 
     if voice.get("scope") == "unique" and stored_status == "retired":
-        status = "archived"
-        reason = "Archived because no speaker currently uses this unique voice."
+        status = "dormant"
+        reason = (
+            "Dormant because the NPC currently uses its race / gender baseline; "
+            "all unique-profile work remains stored."
+        )
     elif not voice_id_candidate_count or approved < len(DELIVERIES):
         requirements = []
         if not voice_id_candidate_count:
@@ -1216,7 +1219,7 @@ class AlphaStore:
             context += f" associated with {str(speaker['faction']).replace('_', ' ')}"
         if speaker["zone"]:
             context += f" in {speaker['zone']}"
-        context += f". This source currently assigns {line_count} spoken record(s) to this speaker."
+        context += f". This source currently assigns {line_count} spoken record(s) to this NPC."
         connection.execute(
             "UPDATE speakers SET importance=CASE WHEN importance='unassessed' THEN ? ELSE importance END, "
             "context_summary=CASE WHEN context_summary='' THEN ? ELSE context_summary END "
@@ -1282,6 +1285,9 @@ class AlphaStore:
                     "SELECT COUNT(*) FROM dialogue_entries WHERE active=1"
                 ).fetchone()[0],
                 "speakers": connection.execute("SELECT COUNT(*) FROM speakers").fetchone()[0],
+                "npcs": connection.execute(
+                    "SELECT COUNT(*) FROM speakers WHERE entity_type='creature'"
+                ).fetchone()[0],
                 "baseline_voices": connection.execute(
                     "SELECT COUNT(*) FROM voices WHERE scope='baseline'"
                 ).fetchone()[0],
@@ -1416,6 +1422,120 @@ class AlphaStore:
         payload["generation_text"] = self.generation_text(payload)
         return payload
 
+    def list_npcs(
+        self,
+        *,
+        query: str = "",
+        race_id: str = "",
+        gender_id: str = "",
+        role: str = "",
+        faction: str = "",
+        importance: str = "",
+        voice_approach: str = "",
+        voice_state: str = "",
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict[str, Any]:
+        """List creature-backed NPCs independently from quest and gossip lines."""
+        conditions = ["entity_type = 'creature'"]
+        parameters: list[Any] = []
+        if query.strip():
+            conditions.append(
+                "(name LIKE ? OR role LIKE ? OR faction LIKE ? OR zone LIKE ? "
+                "OR context_summary LIKE ? OR CAST(entity_id AS TEXT) = ?)"
+            )
+            term = f"%{query.strip()}%"
+            parameters.extend([term, term, term, term, term, query.strip()])
+        if race_id:
+            conditions.append("race_id = ?")
+            parameters.append(int(race_id))
+        if gender_id:
+            conditions.append("gender_id = ?")
+            parameters.append(int(gender_id))
+        if role:
+            if role not in ROLE_OPTIONS:
+                raise AlphaError("Unknown NPC role filter.")
+            conditions.append("role = ?")
+            parameters.append(role)
+        if faction:
+            if faction not in AFFILIATION_OPTIONS:
+                raise AlphaError("Unknown NPC faction filter.")
+            conditions.append("faction = ?")
+            parameters.append(faction)
+        if importance:
+            if importance not in IMPORTANCE_SCORES:
+                raise AlphaError("Unknown story reach filter.")
+            conditions.append("importance = ?")
+            parameters.append(importance)
+        if voice_approach:
+            if voice_approach == "baseline":
+                conditions.append("voice_scope = 'baseline'")
+            elif voice_approach == "unique":
+                conditions.append("voice_scope = 'unique'")
+            elif voice_approach == "dormant":
+                conditions.append("unique_voice_id IS NOT NULL AND voice_scope <> 'unique'")
+            elif voice_approach == "unassigned":
+                conditions.append("voice_id IS NULL")
+            else:
+                raise AlphaError("Unknown voice approach filter.")
+        if voice_state:
+            if voice_state == "needs_voice":
+                conditions.append("(voice_id IS NULL OR COALESCE(provider_voice_id, '') = '')")
+            elif voice_state == "ready":
+                conditions.append("voice_id IS NOT NULL AND COALESCE(provider_voice_id, '') <> ''")
+            else:
+                raise AlphaError("Unknown voice readiness filter.")
+
+        base = """
+            SELECT s.*, v.name AS voice_name, v.scope AS voice_scope,
+                vv.provider_voice_id, vv.status AS stored_voice_status,
+                (SELECT COUNT(*) FROM dialogue_entries d
+                    WHERE d.speaker_id=s.speaker_id AND d.active=1) AS dialogue_count,
+                (SELECT COUNT(*) FROM dialogue_entries d
+                    WHERE d.speaker_id=s.speaker_id AND d.active=1 AND d.source<>'gossip')
+                    AS quest_count,
+                (SELECT COUNT(*) FROM dialogue_entries d
+                    WHERE d.speaker_id=s.speaker_id AND d.active=1 AND d.source='gossip')
+                    AS gossip_count,
+                (SELECT uv.voice_id FROM voices uv
+                    WHERE uv.scope='unique' AND uv.npc_speaker_id=s.speaker_id LIMIT 1)
+                    AS unique_voice_id,
+                (SELECT uvv.status FROM voices uv
+                    JOIN voice_versions uvv ON uvv.voice_id=uv.voice_id AND uvv.is_current=1
+                    WHERE uv.scope='unique' AND uv.npc_speaker_id=s.speaker_id LIMIT 1)
+                    AS unique_voice_status
+            FROM speakers s
+            LEFT JOIN voices v ON v.voice_id=s.voice_id
+            LEFT JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1
+        """
+        where = " AND ".join(conditions)
+        with self.connect() as connection:
+            total = connection.execute(
+                f"SELECT COUNT(*) FROM ({base}) WHERE {where}", parameters
+            ).fetchone()[0]
+            rows = connection.execute(
+                f"SELECT * FROM ({base}) WHERE {where} ORDER BY name, entity_id "
+                "LIMIT ? OFFSET ?",
+                [*parameters, page_size, max(page - 1, 0) * page_size],
+            ).fetchall()
+            races = connection.execute(
+                "SELECT DISTINCT race_id, race_name FROM speakers "
+                "WHERE entity_type='creature' ORDER BY race_name"
+            ).fetchall()
+        npc_rows = []
+        for row in rows:
+            npc = dict(row)
+            npc["importance_score"] = IMPORTANCE_SCORES.get(npc["importance"], 0)
+            npc_rows.append(npc)
+        return {
+            "rows": npc_rows,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "page_count": max(1, (total + page_size - 1) // page_size),
+            "races": [dict(row) for row in races],
+        }
+
     @staticmethod
     def prepare_text(original_text: str) -> tuple[str, list[str], list[str]]:
         text = original_text
@@ -1542,7 +1662,7 @@ class AlphaStore:
                 "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
             ).fetchone()
         if not existing:
-            raise AlphaError("Speaker was not found.")
+            raise AlphaError("NPC was not found.")
         importance = str(payload.get("importance", existing["importance"]))
         uniqueness = str(payload.get("uniqueness", existing["uniqueness"]))
         role = str(payload.get("role", existing["role"]))
@@ -1554,7 +1674,7 @@ class AlphaStore:
         if role not in ROLE_OPTIONS:
             raise AlphaError("Unknown role or occupation.")
         if faction not in AFFILIATION_OPTIONS:
-            raise AlphaError("Unknown affiliation.")
+                raise AlphaError("Unknown faction.")
         voice_id = str(payload.get("voice_id", existing["voice_id"] or "")).strip() or None
         with self.connect() as connection:
             if (
@@ -1580,7 +1700,7 @@ class AlphaStore:
                 ),
             )
             if not cursor.rowcount:
-                raise AlphaError("Speaker was not found.")
+                raise AlphaError("NPC was not found.")
         return self.get_speaker(speaker_id)
 
     def get_speaker(self, speaker_id: str) -> dict[str, Any]:
@@ -1594,7 +1714,7 @@ class AlphaStore:
                 (speaker_id,),
             ).fetchone()
             if not speaker:
-                raise AlphaError("Speaker was not found.")
+                raise AlphaError("NPC was not found.")
             lines = connection.execute(
                 f"SELECT * FROM ({self._dialogue_select()}) WHERE speaker_id=? AND active=1 "
                 "ORDER BY quest_id, source",
@@ -1604,15 +1724,23 @@ class AlphaStore:
                 "SELECT v.voice_id, v.name, v.scope, vv.provider_voice_id, vv.status "
                 "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
                 "WHERE (v.scope='baseline' AND v.race_id=? AND v.gender_id=?) OR "
-                "(v.scope='unique' AND v.npc_speaker_id=? AND vv.status<>'retired') "
+                "(v.scope='unique' AND v.npc_speaker_id=?) "
                 "ORDER BY v.scope, v.name",
                 (speaker["race_id"], speaker["gender_id"], speaker_id),
             ).fetchall()
             baseline_voice = connection.execute(
-                "SELECT v.voice_id, v.name FROM voices v JOIN voice_versions vv "
+                "SELECT v.voice_id, v.name, vv.provider_voice_id, vv.status AS stored_status "
+                "FROM voices v JOIN voice_versions vv "
                 "ON vv.voice_id=v.voice_id AND vv.is_current=1 WHERE v.scope='baseline' "
                 "AND v.race_id=? AND v.gender_id=?",
                 (speaker["race_id"], speaker["gender_id"]),
+            ).fetchone()
+            unique_voice = connection.execute(
+                "SELECT v.voice_id, v.name, vv.provider_voice_id, vv.status AS stored_status "
+                "FROM voices v JOIN voice_versions vv "
+                "ON vv.voice_id=v.voice_id AND vv.is_current=1 WHERE v.scope='unique' "
+                "AND v.npc_speaker_id=?",
+                (speaker_id,),
             ).fetchone()
         speaker_payload = dict(speaker)
         speaker_payload["importance_score"] = IMPORTANCE_SCORES.get(
@@ -1629,12 +1757,28 @@ class AlphaStore:
             )
             if voice_summary:
                 speaker_payload["voice_status"] = voice_summary["status"]
-        return {
+        unique_payload = dict(unique_voice) if unique_voice else None
+        if unique_payload:
+            unique_summary = next(
+                (
+                    voice
+                    for voice in self.list_voices(include_retired=True)
+                    if voice["voice_id"] == unique_payload["voice_id"]
+                ),
+                None,
+            )
+            if unique_summary:
+                unique_payload["status"] = unique_summary["status"]
+            unique_payload["is_active"] = speaker_payload.get("voice_id") == unique_payload["voice_id"]
+        record = {
             "speaker": speaker_payload,
+            "npc": speaker_payload,
             "dialogue": [dict(row) for row in lines],
             "voices": [dict(row) for row in voices],
             "baseline_voice": dict(baseline_voice) if baseline_voice else None,
+            "unique_voice": unique_payload,
         }
+        return record
 
     def create_unique_voice(self, speaker_id: str) -> dict[str, Any]:
         now = utc_now()
@@ -1644,7 +1788,7 @@ class AlphaStore:
                 "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
             ).fetchone()
             if not speaker:
-                raise AlphaError("Speaker was not found.")
+                raise AlphaError("NPC was not found.")
             existing = connection.execute(
                 "SELECT voice_id FROM voices WHERE npc_speaker_id=?", (speaker_id,)
             ).fetchone()
@@ -1663,9 +1807,19 @@ class AlphaStore:
                     "WHERE voice_id=? AND is_current=1",
                     (parent_voice_id,),
                 ).fetchone()
-                description = f"Unique voice for {speaker['name']}. " + (
-                    parent["description"] if parent else "Context and direction need review."
-                )
+                npc_context = (
+                    f"{speaker['race_name']} {speaker['gender_name']}; "
+                    f"role: {str(speaker['role']).replace('_', ' ')}; "
+                    f"faction: {str(speaker['faction']).replace('_', ' ')}; "
+                    f"zone: {speaker['zone'] or 'unspecified'}; "
+                    f"story reach: {str(speaker['importance']).replace('_', ' ')}. "
+                    f"{speaker['context_summary']}"
+                ).strip()
+                description = (
+                    f"Unique voice for {speaker['name']}. NPC context: {npc_context} "
+                    f"Baseline direction: "
+                    f"{parent['description'] if parent else 'Context and direction need review.'}"
+                )[:1000]
                 settings = parent["settings_json"] if parent else _json({"stability": 0.5})
                 connection.execute(
                     "INSERT INTO voices(voice_id, name, scope, race_id, gender_id, parent_voice_id, "
@@ -1709,7 +1863,7 @@ class AlphaStore:
                 (speaker_id,),
             ).fetchone()
             if not speaker:
-                raise AlphaError("Speaker was not found.")
+                raise AlphaError("NPC was not found.")
             baseline = connection.execute(
                 "SELECT v.voice_id FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id "
                 "AND vv.is_current=1 WHERE v.scope='baseline' AND v.race_id=? AND v.gender_id=?",
@@ -1845,10 +1999,10 @@ class AlphaStore:
             "voices": item(
                 "Baseline deliveries",
                 voice,
-                "/alpha/voices?scope=baseline&completion=incomplete",
+                "/alpha/races?completion=incomplete",
             ),
-            "quests": item("Quest audio", dialogue["quests"], "/alpha?source=quest"),
-            "gossip": item("Gossip audio", dialogue["gossip"], "/alpha?source=gossip"),
+            "quests": item("Quest audio", dialogue["quests"], "/alpha"),
+            "gossip": item("Gossip audio", dialogue["gossip"], "/alpha/gossip"),
         }
 
     def update_delivery_preset(
@@ -2131,8 +2285,9 @@ class AlphaStore:
                 "(SELECT COUNT(*) FROM speakers s WHERE s.voice_id=v.voice_id) AS speaker_count, "
                 "(SELECT COUNT(*) FROM reference_clips rc WHERE rc.voice_id=v.voice_id) AS clip_count, "
                 "(SELECT COUNT(*) FROM speakers ms WHERE "
-                "(v.scope='baseline' AND ms.race_id=v.race_id AND ms.gender_id=v.gender_id) OR "
-                "(v.scope='unique' AND ms.voice_id=v.voice_id)) AS matching_speaker_count, "
+                "ms.entity_type='creature' AND ((v.scope='baseline' AND ms.race_id=v.race_id "
+                "AND ms.gender_id=v.gender_id) OR "
+                "(v.scope='unique' AND ms.voice_id=v.voice_id))) AS matching_speaker_count, "
                 "(SELECT COUNT(*) FROM dialogue_entries md JOIN speakers ms ON ms.speaker_id=md.speaker_id "
                 "WHERE md.active=1 AND ms.voice_id=v.voice_id) "
                 "AS dialogue_count, "
@@ -2180,10 +2335,24 @@ class AlphaStore:
                 (voice_id,),
             ).fetchall()
             speakers = connection.execute(
-                "SELECT speaker_id, entity_type, entity_id, name FROM speakers WHERE voice_id=? "
+                "SELECT speaker_id, entity_type, entity_id, name FROM speakers "
+                "WHERE voice_id=? AND entity_type='creature' "
                 "ORDER BY name",
                 (voice_id,),
             ).fetchall()
+            npc = None
+            baseline_voice = None
+            if voice["npc_speaker_id"]:
+                npc = connection.execute(
+                    "SELECT * FROM speakers WHERE speaker_id=?",
+                    (voice["npc_speaker_id"],),
+                ).fetchone()
+                if npc:
+                    baseline_voice = connection.execute(
+                        "SELECT v.voice_id, v.name FROM voices v WHERE v.scope='baseline' "
+                        "AND v.race_id=? AND v.gender_id=?",
+                        (npc["race_id"], npc["gender_id"]),
+                    ).fetchone()
             delivery_presets = connection.execute(
                 "SELECT * FROM voice_delivery_presets WHERE voice_id=? "
                 "ORDER BY CASE delivery WHEN 'neutral' THEN 0 WHEN 'angry' THEN 1 "
@@ -2228,6 +2397,16 @@ class AlphaStore:
         }
         payload["voice_id_candidate_groups"] = _candidate_groups(payload["voice_id_candidates"])
         payload["speakers"] = [dict(row) for row in speakers]
+        payload["npcs"] = payload["speakers"]
+        payload["npc"] = dict(npc) if npc else None
+        if payload["npc"]:
+            payload["npc"]["importance_score"] = IMPORTANCE_SCORES.get(
+                payload["npc"]["importance"], 0
+            )
+            payload["npc"]["is_unique_voice_active"] = (
+                payload["npc"].get("voice_id") == voice_id
+            )
+        payload["baseline_voice"] = dict(baseline_voice) if baseline_voice else None
         preview_payloads = [dict(row) for row in delivery_previews]
         for preview in preview_payloads:
             preview["subscription"] = _loads(preview.get("subscription_json"), {})

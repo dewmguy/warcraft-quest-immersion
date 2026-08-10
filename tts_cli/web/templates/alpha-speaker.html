@@ -1,37 +1,60 @@
 {% extends "alpha-base.html" %}
 {% from "alpha-status.html" import dialogue_status %}
-{% set active_nav = "dialogue" %}
-{% set speaker = record.speaker %}
-{% block title %}{{ speaker.name }}{% endblock %}
+{% set active_nav = "npcs" %}
+{% set npc = record.npc %}
+{% block title %}{{ npc.name }}{% endblock %}
 {% block content %}
-  <nav class="breadcrumbs"><a href="/alpha">Dialogue</a><span>›</span><span>{{ speaker.name }}</span></nav>
-  <section class="alpha-page-heading record-heading">
-    <div><span class="alpha-kicker">{{ speaker.entity_type | title }} {{ speaker.entity_id }}</span><h1>{{ speaker.name }}</h1><p>{{ speaker.race_name | title }} · {{ speaker.gender_name | title }} · {{ record.dialogue|length }} dialogue records</p></div>
-    <span class="work-status">{{ speaker.importance | replace('_',' ') | title }} · {{ speaker.importance_score }}</span>
+  <nav class="breadcrumbs"><a href="/alpha/npcs">NPCs</a><span>›</span><span>{{ npc.name }}</span></nav>
+  <section class="alpha-page-heading record-heading npc-record-heading">
+    <div>
+      <span class="alpha-kicker">NPC {{ npc.entity_id }}</span>
+      <div class="npc-title-row">
+        <h1>{{ npc.name }}</h1>
+        {% if npc.voice_scope == 'unique' %}
+          <button class="npc-unique-toggle is-unique" type="button" data-action data-url="/api/alpha/npcs/{{ npc.speaker_id }}/baseline-voice" data-method="POST" data-confirm-required data-confirm="Return {{ npc.name }} to {{ record.baseline_voice.name if record.baseline_voice else 'the race / gender baseline' }}? The unique profile will remain dormant and nothing will be deleted." aria-label="Deactivate unique voice for {{ npc.name }}" title="Use the race / gender baseline" {% if not record.baseline_voice %}disabled{% endif %}><i class="fa-solid fa-star" aria-hidden="true"></i></button>
+        {% else %}
+          <button class="npc-unique-toggle" type="button" data-action data-url="/api/alpha/npcs/{{ npc.speaker_id }}/unique-voice" data-method="POST" aria-label="Give {{ npc.name }} a unique voice" title="Use a unique NPC voice"><i class="fa-regular fa-star" aria-hidden="true"></i></button>
+        {% endif %}
+        {% if record.unique_voice %}<a class="npc-unique-profile-link" href="/alpha/voices/{{ record.unique_voice.voice_id }}">{{ 'Active' if record.unique_voice.is_active else 'Dormant' }} unique profile &rarr;</a>{% endif %}
+      </div>
+      <p>{{ npc.race_name | title }} · {{ npc.gender_name | title }} · {{ record.dialogue|length }} quest or gossip line{{ '' if record.dialogue|length == 1 else 's' }}</p>
+    </div>
+    <div class="record-statuses">
+      <span class="work-status">{{ npc.importance | replace('_',' ') | title }} · {{ npc.importance_score }}</span>
+      {% if npc.voice_id and not npc.provider_voice_id %}<a class="work-status status-needs_voice status-action" href="{{ '/alpha/races/' if npc.voice_scope == 'baseline' else '/alpha/voices/' }}{{ npc.voice_id }}#provider-creation">Provider voice missing &rarr;</a>{% endif %}
+    </div>
   </section>
+
   <div class="record-grid speaker-grid">
     <section class="alpha-panel">
-      <div class="panel-heading"><div><h2>Speaker context</h2><p>Initially inferred from joined database fields, naming, and quest coverage; every value remains reviewable.</p></div></div>
-      <form data-json-form data-url="/api/alpha/speakers/{{ speaker.speaker_id }}" data-method="PATCH">
-        <div class="form-grid">
-          <label><span>Role or occupation</span><select name="role">{% for value in role_options %}<option value="{{ value }}" {% if speaker.role == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select></label>
-          <label><span>Affiliation</span><select name="faction">{% for value in affiliation_options %}<option value="{{ value }}" {% if speaker.faction == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select><small>Political or organizational context such as Alliance, Horde, Kirin Tor, or Scourge.</small></label>
-          <label><span>Zone</span><input name="zone" value="{{ speaker.zone }}" placeholder="Inferred when source area data exists"></label>
-          <label><span>Story reach</span><select name="importance">{% for value,score in importance_scores.items() %}<option value="{{ value }}" {% if speaker.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select><small>The qualitative category maps to an internal 10–100 story-reach score.</small></label>
+      <div class="panel-heading"><div><h2>NPC Context</h2><p>Inferred from source data and quest coverage, then kept editable for review.</p></div></div>
+      <form class="npc-context-form" data-json-form data-url="/api/alpha/npcs/{{ npc.speaker_id }}" data-method="PATCH">
+        <div class="form-grid npc-form-grid">
+          <label><span>Role or Occupation</span><select name="role">{% for value in role_options %}<option value="{{ value }}" {% if npc.role == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select><small>Character function or social position.</small></label>
+          <label><span>Faction</span><select name="faction">{% for value in affiliation_options %}<option value="{{ value }}" {% if npc.faction == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select><small>Political or organizational alignment.</small></label>
+          <label><span>Zone</span><input name="zone" value="{{ npc.zone }}" placeholder="Inferred when source area data exists"><small>Primary location associated with this NPC.</small></label>
+          <label><span>Story Reach</span><select name="importance">{% for value,score in importance_scores.items() %}<option value="{{ value }}" {% if npc.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select><small>Qualitative reach mapped to an internal 10–100 score.</small></label>
         </div>
-        <label><span>Character context</span><textarea name="context_summary" rows="6">{{ speaker.context_summary }}</textarea><small>The initial summary is deliberately conservative and should become richer as the full source is joined.</small></label>
-        <label><span>Assigned voice profile</span><select name="voice_id"><option value="">Unassigned</option>{% for voice in record.voices %}<option value="{{ voice.voice_id }}" {% if speaker.voice_id == voice.voice_id %}selected{% endif %}>{{ voice.name }} · {{ voice.scope }}{% if not voice.provider_voice_id %} · provider voice missing{% endif %}</option>{% endfor %}</select></label>
-        <button type="submit">Save reviewed context</button>
+        <label><span>Character Context</span><textarea name="context_summary" rows="6">{{ npc.context_summary }}</textarea><small>Useful characterization and story context for a unique voice direction.</small></label>
+        <button type="submit"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>Save</span></button>
       </form>
     </section>
+
     <section class="alpha-panel" id="voice-approach">
-      <div class="panel-heading"><div><h2>Voice approach</h2></div></div>
-      {% if speaker.voice_id %}<p><strong>{{ speaker.voice_name }}</strong><br>{{ speaker.voice_scope | title }} · {{ speaker.voice_status | title }}</p><a class="button-link" href="/alpha/voices/{{ speaker.voice_id }}">Open voice profile</a>{% if not speaker.provider_voice_id %}<a class="work-status status-needs_voice status-action" href="/alpha/voices/{{ speaker.voice_id }}#provider-creation">Provider voice missing &rarr;</a>{% endif %}{% else %}<p>No voice profile is assigned.</p>{% endif %}
-      {% if speaker.voice_scope == 'unique' and record.baseline_voice %}<hr><h3>Return to the race/gender baseline</h3><p>This NPC will leave the active unique-voice queue and use <strong>{{ record.baseline_voice.name }}</strong>. The unique profile and its history will be archived, not deleted, and can be restored later.</p><button class="secondary" type="button" data-action data-url="/api/alpha/speakers/{{ speaker.speaker_id }}/baseline-voice" data-method="POST">Use {{ record.baseline_voice.name }} baseline</button>{% elif speaker.voice_scope != 'unique' %}<hr><h3>Distinctive enough for a unique voice?</h3><p>The baseline remains the default. Pivotal or globally important characters are candidates for an NPC-specific profile that inherits the baseline.</p><button type="button" data-action data-url="/api/alpha/speakers/{{ speaker.speaker_id }}/unique-voice" data-method="POST" data-go-to-voice>Create unique voice profile</button>{% endif %}
+      <div class="panel-heading"><div><h2>Voice Approach</h2><p>Applied and available profiles for this NPC.</p></div></div>
+      <div class="npc-voice-map">
+        <article>
+          <span>Currently Applied</span>
+          {% if npc.voice_id %}<strong>{{ npc.voice_name }}</strong><a href="{{ '/alpha/races/' if npc.voice_scope == 'baseline' else '/alpha/voices/' }}{{ npc.voice_id }}">Open {{ npc.voice_scope | title }} profile &rarr;</a>{% else %}<strong>Unassigned</strong>{% endif %}
+        </article>
+        {% if record.baseline_voice %}<article><span>Race / Gender Baseline</span><strong>{{ record.baseline_voice.name }}</strong><a href="/alpha/races/{{ record.baseline_voice.voice_id }}">Open baseline profile &rarr;</a></article>{% endif %}
+        {% if record.unique_voice %}<article class="{{ 'is-active' if record.unique_voice.is_active else 'is-dormant' }}"><span>Unique NPC Profile · {{ 'Active' if record.unique_voice.is_active else 'Dormant' }}</span><strong>{{ record.unique_voice.name }}</strong><a href="/alpha/voices/{{ record.unique_voice.voice_id }}">Open unique profile &rarr;</a></article>{% endif %}
+      </div>
     </section>
   </div>
+
   <section class="alpha-panel">
-    <div class="panel-heading"><div><h2>Dialogue delivered by {{ speaker.name }}</h2></div><span>{{ record.dialogue|length }} records</span></div>
-    <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Quest or gossip</th><th>Type</th><th>Spoken text</th><th>Status</th></tr></thead><tbody>{% for row in record.dialogue %}<tr><td><a href="/alpha/dialogue/{{ row.dialogue_id }}">{{ row.quest_title or row.original_text[:100] }}</a>{% if row.quest_id %}<span class="cell-detail">Quest {{ row.quest_id }}</span>{% endif %}</td><td>{{ row.source | title }}</td><td>{% if row.revision_id %}Prepared{% else %}<a class="cell-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text">Not prepared &rarr;</a>{% endif %}</td><td>{{ dialogue_status(row) }}</td></tr>{% endfor %}</tbody></table></div>
+    <div class="panel-heading"><div><h2>Quest and Gossip Lines Delivered by {{ npc.name }}</h2></div><span>{{ record.dialogue|length }} line{{ '' if record.dialogue|length == 1 else 's' }}</span></div>
+    <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Quest or Gossip</th><th>Type</th><th>Spoken Text</th><th>Status</th></tr></thead><tbody>{% for row in record.dialogue %}<tr><td><a href="/alpha/dialogue/{{ row.dialogue_id }}">{{ row.quest_title or row.original_text[:100] }}</a>{% if row.quest_id %}<span class="cell-detail">Quest {{ row.quest_id }}</span>{% endif %}</td><td>{{ row.source | title }}</td><td>{% if row.revision_id %}Prepared{% else %}<a class="cell-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text">Not prepared &rarr;</a>{% endif %}</td><td>{{ dialogue_status(row) }}</td></tr>{% endfor %}</tbody></table></div>
   </section>
 {% endblock %}

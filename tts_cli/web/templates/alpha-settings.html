@@ -35,7 +35,7 @@
     {% if provider_events %}
       <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Request</th><th>Input text</th><th>Credits spent</th><th>Subscription after request</th><th>Recorded</th></tr></thead><tbody>
       {% for event in provider_events %}<tr>
-        <td>{% if event.action == 'dialogue_tts' %}<a href="/alpha/dialogue/{{ event.subject_id }}">Dialogue speech</a>{% elif event.action == 'voice_design' %}<a href="/alpha/voices/{{ event.subject_id }}#provider-creation">Voice Design</a>{% else %}<a href="/alpha/voices/{{ event.subject_id.split(':')[0] }}#provider-creation">Delivery sample</a>{% endif %}</td>
+        <td>{% if event.action == 'dialogue_tts' %}<a href="/alpha/dialogue/{{ event.subject_id }}">Quest / gossip speech</a>{% elif event.action == 'voice_design' %}<a href="/alpha/voices/{{ event.subject_id }}#provider-creation">Voice Design</a>{% else %}<a href="/alpha/voices/{{ event.subject_id.split(':')[0] }}#provider-creation">Delivery sample</a>{% endif %}</td>
         <td>{{ "{:,}".format(event.input_character_count) }} characters</td>
         <td>{% if event.character_cost is not none %}{{ "{:,}".format(event.character_cost) }} credits{% else %}Not returned{% endif %}</td>
         <td>{% if event.subscription.get('character_count') is not none and event.subscription.get('character_limit') is not none %}{{ "{:,}".format(event.subscription.character_count) }} / {{ "{:,}".format(event.subscription.character_limit) }} credits used{% else %}Not returned{% endif %}</td>
@@ -48,7 +48,7 @@
     <section class="alpha-panel">
       <div class="panel-heading"><div><h2>ElevenLabs models</h2><p>These defaults are recorded with each future request.</p></div></div>
       <form data-json-form data-url="/api/alpha/settings" data-method="PATCH">
-        <label><span>Dialogue speech model</span><select name="tts_model_id">
+        <label><span>Quest and gossip speech model</span><select name="tts_model_id">
           <option value="eleven_v3" {% if app_settings.tts_model_id == 'eleven_v3' %}selected{% endif %}>Eleven v3 · recommended for expressive Warcraft dialogue</option>
           <option value="eleven_multilingual_v2" {% if app_settings.tts_model_id == 'eleven_multilingual_v2' %}selected{% endif %}>Multilingual v2 · stable fallback for long-form output</option>
         </select></label>

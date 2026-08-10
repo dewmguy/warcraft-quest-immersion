@@ -1,67 +1,62 @@
 {% extends "alpha-base.html" %}
 {% from "alpha-status.html" import dialogue_status %}
-{% set active_nav = "quests" %}
-{% block title %}Quests{% endblock %}
+{% set active_nav = "gossip" %}
+{% block title %}Gossip{% endblock %}
 {% block content %}
   <section class="alpha-page-heading">
     <div>
       <span class="alpha-kicker">Production work</span>
-      <h1>Quests</h1>
-      <p>Find quest acceptance, progress, and completion lines and move them toward approved audio.</p>
+      <h1>Gossip</h1>
+      <p>Find NPC interaction lines, prepare their spoken text, and move them toward approved audio.</p>
     </div>
   </section>
 
-  <section class="alpha-metrics" aria-label="Database summary">
-    <article><strong>{{ "{:,}".format(listing.total) }}</strong><span>Quest lines</span></article>
+  <section class="alpha-metrics" aria-label="Gossip summary">
+    <article><strong>{{ "{:,}".format(listing.total) }}</strong><span>Gossip lines</span></article>
     <article><strong>{{ "{:,}".format(dashboard.counts.npcs) }}</strong><span>NPCs</span></article>
     <article><strong>{{ dashboard.counts.baseline_voices }}</strong><span>Race / gender profiles</span></article>
     <article><strong>{{ dashboard.counts.unique_voices }}</strong><span>Active unique profiles</span></article>
-    <article><strong>{{ progress.quests.complete }}</strong><span>Approved quest audio</span></article>
+    <article><strong>{{ progress.gossip.complete }}</strong><span>Approved gossip audio</span></article>
   </section>
 
   <section class="alpha-panel">
-    <div class="panel-heading">
-      <div><h2>Work queue</h2><p>{{ "{:,}".format(listing.total) }} matching records</p></div>
-    </div>
-    <form class="filter-bar" method="get" action="/alpha">
-      <label class="search-field"><span>Search</span><input name="q" value="{{ filters.q }}" placeholder="NPC, quest title, text, or quest ID"></label>
+    <div class="panel-heading"><div><h2>Gossip Work Queue</h2><p>{{ "{:,}".format(listing.total) }} matching lines</p></div></div>
+    <form class="filter-bar content-filter-bar" method="get" action="/alpha/gossip">
+      <label class="search-field"><span>Search</span><input name="q" value="{{ filters.q }}" placeholder="NPC, text, or database ID"></label>
       <label><span>Work status</span><select name="production_state">
         <option value="">All</option>
         {% for value, label in [('needs_text','Needs text'),('needs_voice','Needs voice'),('ready_to_generate','Ready to generate'),('generation_failed','Generation failed'),('audio_to_review','Audio to review'),('approved','Approved')] %}
         <option value="{{ value }}" {% if filters.production_state == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select></label>
-      <label><span>Quest stage</span><select name="source"><option value="">All stages</option>{% for value in ['accept','progress','complete'] %}<option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></label>
       <label><span>Expansion</span><select name="expansion"><option value="">All</option>{% for value in ['1.12.1','2.4.3','3.3.5','classic'] %}<option value="{{ value }}" {% if filters.expansion == value %}selected{% endif %}>{{ 'Current Classic' if value == 'classic' else value }}</option>{% endfor %}</select></label>
       <label><span>Race</span><select name="race_id"><option value="">All</option>{% for race in listing.races %}<option value="{{ race.race_id }}" {% if filters.race_id == race.race_id|string %}selected{% endif %}>{{ race.race_name | replace('nightelf','Night Elf') | title }}</option>{% endfor %}</select></label>
       <label><span>Gender</span><select name="gender_id"><option value="">All</option><option value="0" {% if filters.gender_id == '0' %}selected{% endif %}>Male</option><option value="1" {% if filters.gender_id == '1' %}selected{% endif %}>Female</option></select></label>
       <button type="submit">Filter</button>
-      <a class="text-link" href="/alpha">Clear</a>
+      <a class="text-link" href="/alpha/gossip">Clear</a>
     </form>
 
     <div class="alpha-table-wrap">
       <table class="alpha-table dialogue-table">
-        <thead><tr><th>Quest</th><th>NPC</th><th>Spoken text</th><th>Voice</th><th>Status</th></tr></thead>
+        <thead><tr><th>Gossip</th><th>NPC</th><th>Spoken text</th><th>Voice</th><th>Status</th></tr></thead>
         <tbody>
           {% for row in listing.rows %}
           <tr>
-            <td><a class="record-link" href="/alpha/dialogue/{{ row.dialogue_id }}">{% if row.quest_id %}<strong>#{{ row.quest_id }} · {{ row.quest_title }}</strong><span>{{ row.source | title }}</span>{% else %}<strong>{{ row.source | title }}</strong><span>{{ row.original_text[:90] }}{% if row.original_text|length > 90 %}…{% endif %}</span>{% endif %}</a></td>
+            <td><a class="record-link" href="/alpha/dialogue/{{ row.dialogue_id }}"><strong>{{ row.original_text[:90] }}{% if row.original_text|length > 90 %}…{% endif %}</strong><span>Gossip · {{ row.source_record_id or row.dialogue_id }}</span></a></td>
             <td><a href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}">{{ row.speaker_name }}</a><span class="cell-detail">{{ row.race_name | title }} · {{ row.gender_name | title }}</span></td>
             <td>{% if row.revision_id %}Prepared{% else %}<a class="cell-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text">Not prepared &rarr;</a>{% endif %}</td>
             <td>{{ row.voice_name or 'Unassigned' }}{% if row.voice_name and not row.provider_voice_id %}<a class="cell-detail cell-action" href="{{ '/alpha/races/' if row.voice_scope == 'baseline' else '/alpha/voices/' }}{{ row.voice_id }}#provider-creation">Provider voice needed &rarr;</a>{% elif not row.voice_name %}<a class="cell-detail cell-action" href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}#voice-approach">Assign a voice &rarr;</a>{% endif %}</td>
             <td>{{ dialogue_status(row) }}</td>
           </tr>
-          {% else %}
-          <tr><td colspan="5" class="empty-cell">No quest lines match these filters.</td></tr>
-          {% endfor %}
+          {% else %}<tr><td colspan="5" class="empty-cell">No gossip lines match these filters.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>
     {% if listing.page_count > 1 %}
-    <nav class="pagination" aria-label="Quest pages">
-      {% if listing.page > 1 %}<a href="?q={{ filters.q }}&production_state={{ filters.production_state }}&source={{ filters.source }}&expansion={{ filters.expansion }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&page={{ listing.page - 1 }}">Previous</a>{% endif %}
+    <nav class="pagination" aria-label="Gossip pages">
+      {% if listing.page > 1 %}<a href="?q={{ filters.q }}&production_state={{ filters.production_state }}&expansion={{ filters.expansion }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&page={{ listing.page - 1 }}">Previous</a>{% endif %}
       <span>Page {{ listing.page }} of {{ listing.page_count }}</span>
-      {% if listing.page < listing.page_count %}<a href="?q={{ filters.q }}&production_state={{ filters.production_state }}&source={{ filters.source }}&expansion={{ filters.expansion }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&page={{ listing.page + 1 }}">Next</a>{% endif %}
+      {% if listing.page < listing.page_count %}<a href="?q={{ filters.q }}&production_state={{ filters.production_state }}&expansion={{ filters.expansion }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&page={{ listing.page + 1 }}">Next</a>{% endif %}
     </nav>
     {% endif %}
   </section>

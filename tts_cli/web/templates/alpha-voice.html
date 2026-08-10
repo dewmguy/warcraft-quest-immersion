@@ -1,5 +1,5 @@
 {% extends "alpha-base.html" %}
-{% set active_nav = "voices" %}
+{% set active_nav = "npcs" if voice.scope == 'unique' else "races" %}
 {% block title %}{{ voice.name }}{% endblock %}
 {% block content %}
   {% set candidate_method_labels = {
@@ -34,11 +34,30 @@
       </div>
     </details>
   {%- endmacro %}
-  <nav class="breadcrumbs"><a href="/alpha/voices">Voices</a><span>›</span><span>{{ voice.name }}</span></nav>
+  {% if voice.npc %}
+  <nav class="breadcrumbs"><a href="/alpha/npcs">NPCs</a><span>›</span><a href="/alpha/npcs/{{ voice.npc.entity_type }}/{{ voice.npc.entity_id }}">{{ voice.npc.name }}</a><span>›</span><span>Unique Voice</span></nav>
+  {% else %}
+  <nav class="breadcrumbs"><a href="/alpha/races">Races</a><span>›</span><span>{{ voice.name }}</span></nav>
+  {% endif %}
   <section class="alpha-page-heading record-heading">
-    <div><span class="alpha-kicker">{{ voice.scope | title }} Voice Profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} dialogue records · {{ voice.missing_dialogue_count }} missing audio</p></div>
+    <div><span class="alpha-kicker">{{ voice.scope | title }} Voice Profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching NPCs · {{ voice.dialogue_count }} quest and gossip lines · {{ voice.missing_dialogue_count }} missing audio</p>{% if voice.npc %}<a class="back-to-npc" href="/alpha/npcs/{{ voice.npc.entity_type }}/{{ voice.npc.entity_id }}"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to {{ voice.npc.name }}</a>{% endif %}</div>
     <div class="record-statuses"><span class="work-status lifecycle-status lifecycle-{{ voice.status }}" title="{{ voice.lifecycle_reason }}">Lifecycle · {{ voice.status | title }}</span>{% if voice.voice_id_candidates %}<span class="work-status status-approved">{{ voice.voice_id_candidates|length }} reusable voice ID{{ 's' if voice.voice_id_candidates|length != 1 else '' }}</span>{% else %}<a class="work-status status-needs_voice status-action" href="#provider-creation">Voice ID needed &rarr;</a>{% endif %}</div>
   </section>
+
+  {% if voice.npc %}
+  <section class="alpha-panel npc-profile-context">
+    <div class="panel-heading"><div><span class="panel-step">Unique Voice Direction</span><h2>NPC Context</h2><p>Current character properties from the NPC profile.</p></div><a class="button-link secondary" href="/alpha/npcs/{{ voice.npc.entity_type }}/{{ voice.npc.entity_id }}">Edit NPC Context</a></div>
+    <dl class="record-facts npc-context-facts">
+      <div><dt>Race / Gender</dt><dd>{{ voice.npc.race_name | title }} · {{ voice.npc.gender_name | title }}</dd></div>
+      <div><dt>Role or Occupation</dt><dd>{{ voice.npc.role | replace('_',' ') | title }}</dd></div>
+      <div><dt>Faction</dt><dd>{{ voice.npc.faction | replace('_',' ') | title }}</dd></div>
+      <div><dt>Zone</dt><dd>{{ voice.npc.zone or 'Unspecified' }}</dd></div>
+      <div><dt>Story Reach</dt><dd>{{ voice.npc.importance | replace('_',' ') | title }} · {{ voice.npc.importance_score }}</dd></div>
+      {% if voice.baseline_voice %}<div><dt>Race / Gender Baseline</dt><dd><a href="/alpha/races/{{ voice.baseline_voice.voice_id }}">{{ voice.baseline_voice.name }}</a></dd></div>{% endif %}
+    </dl>
+    <div class="npc-context-summary"><span>Character Context</span><p>{{ voice.npc.context_summary or 'No reviewed character context yet.' }}</p></div>
+  </section>
+  {% endif %}
 
   <div class="record-grid voice-grid">
     <section class="alpha-panel">
@@ -66,8 +85,8 @@
       <details class="reference-upload">
         <summary><span><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i> Add Reference Clips</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
         <form data-upload-form data-url="/api/alpha/voices/{{ voice.voice_id }}/reference-clips">
-          <label><span>Audio Files</span><input type="file" name="file" accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac" multiple required><small>Select up to 20 MP3, WAV, M4A, OGG, or FLAC files. Use clean, single-speaker recordings; MP3 should be 192 kbps or higher.</small></label>
-          <label><span>Description</span><textarea name="provenance" rows="3" placeholder="Source, speaker, scene, and why these clips are representative" required></textarea><small>Applied to every file in this batch.</small></label>
+          <label><span>Audio Files</span><input type="file" name="file" accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac" multiple required><small>Select up to 20 MP3, WAV, M4A, OGG, or FLAC files. Use clean recordings containing one voice; MP3 should be 192 kbps or higher.</small></label>
+          <label><span>Description</span><textarea name="provenance" rows="3" placeholder="Source, NPC or voice, scene, and why these clips are representative" required></textarea><small>Applied to every file in this batch.</small></label>
           <button type="submit"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><span>Store Clips</span></button>
         </form>
       </details>
@@ -126,7 +145,7 @@
         </form>
         <form data-json-form data-paid data-provider-operation="Generating an instant-clone voice ID and sample" data-url="/api/alpha/voices/{{ voice.voice_id }}/clone" data-method="POST" data-method-panel="instant_clone" {% if voice.creation_method != 'instant_clone' %}hidden{% endif %}>
           <input type="hidden" name="creation_method" value="instant_clone">
-          <fieldset><legend>Reference Clips to Clone</legend>{% for clip in voice.clips %}<label class="check-row"><input type="checkbox" name="clip_ids" value="{{ clip.clip_id }}" data-array><span>{{ clip.original_name }} · {{ "%.2f"|format(clip.duration_seconds or 0) }} sec</span></label>{% else %}<p class="empty-copy">Upload 1–2 minutes of clean, consistent, single-speaker audio first.</p>{% endfor %}</fieldset>
+          <fieldset><legend>Reference Clips to Clone</legend>{% for clip in voice.clips %}<label class="check-row"><input type="checkbox" name="clip_ids" value="{{ clip.clip_id }}" data-array><span>{{ clip.original_name }} · {{ "%.2f"|format(clip.duration_seconds or 0) }} sec</span></label>{% else %}<p class="empty-copy">Upload 1–2 minutes of clean, consistent audio containing one voice first.</p>{% endfor %}</fieldset>
           <details class="provider-advanced">
             <summary><span><i class="fa-solid fa-sliders" aria-hidden="true"></i> Advanced Instant Voice Clone</span><small>Provider default</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
             <div class="provider-advanced-body"><label class="check-row provider-noise-control"><input type="checkbox" name="remove_background_noise"><span><strong>Remove Background Noise</strong><small>Enable only when the selected clips contain audible background noise.</small></span></label></div>
@@ -222,12 +241,12 @@
             <div><dt>Performance method</dt><dd>{{ preview.performance_method_label }}</dd></div>
             <div><dt>Sample details</dt><dd>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status | title }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} credits{% endif %}</dd></div>
           </dl>
-          <div class="delivery-preview-footer"><small>{{ preview.created_at[:19] | replace('T', ' ') }} UTC</small><div class="delivery-preview-actions">{% if preview.status == 'candidate' %}<button type="button" class="icon-button delivery-sample-approve" title="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}" aria-label="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}" data-action data-confirm-required data-confirm="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}? This will mark it ready for future dialogue using this delivery preset." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST"><i class="fa-solid fa-check" aria-hidden="true"></i></button>{% endif %}<button type="button" class="secondary icon-button delivery-preview-delete" title="Delete {{ preset.delivery }} sample #{{ preview.generation_number }}" aria-label="Delete {{ preset.delivery }} sample #{{ preview.generation_number }}" data-action data-confirm-required data-confirm="Permanently delete {{ preset.delivery }} sample #{{ preview.generation_number }} from local storage?{% if preview.status == 'approved' %} This will remove its approval; approve another sample when you are satisfied.{% endif %} ElevenLabs usage cannot be refunded." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div></div>
+          <div class="delivery-preview-footer"><small>{{ preview.created_at[:19] | replace('T', ' ') }} UTC</small><div class="delivery-preview-actions">{% if preview.status == 'candidate' %}<button type="button" class="icon-button delivery-sample-approve" title="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}" aria-label="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}" data-action data-confirm-required data-confirm="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}? This will mark it ready for future lines using this delivery preset." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST"><i class="fa-solid fa-check" aria-hidden="true"></i></button>{% endif %}<button type="button" class="secondary icon-button delivery-preview-delete" title="Delete {{ preset.delivery }} sample #{{ preview.generation_number }}" aria-label="Delete {{ preset.delivery }} sample #{{ preview.generation_number }}" data-action data-confirm-required data-confirm="Permanently delete {{ preset.delivery }} sample #{{ preview.generation_number }} from local storage?{% if preview.status == 'approved' %} This will remove its approval; approve another sample when you are satisfied.{% endif %} ElevenLabs usage cannot be refunded." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div></div>
         </div>
       </details>{% endfor %}</div>
       </div>
     </article>{% endfor %}</div>
   </section>
 
-  <section class="alpha-panel"><div class="panel-heading"><div><h2>Assigned Speakers</h2></div><span>{{ voice.speakers|length }}</span></div><ul class="link-list">{% for speaker in voice.speakers %}<li><a href="/alpha/speakers/{{ speaker.entity_type }}/{{ speaker.entity_id }}">{{ speaker.name }}</a></li>{% else %}<li>No speakers directly assigned.</li>{% endfor %}</ul></section>
+  <section class="alpha-panel"><div class="panel-heading"><div><h2>Assigned NPCs</h2></div><span>{{ voice.npcs|length }}</span></div><ul class="link-list">{% for npc in voice.npcs %}<li><a href="/alpha/npcs/{{ npc.entity_type }}/{{ npc.entity_id }}">{{ npc.name }}</a></li>{% else %}<li>No NPCs directly assigned.</li>{% endfor %}</ul></section>
 {% endblock %}
