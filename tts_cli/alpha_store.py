@@ -92,6 +92,7 @@ PRODUCTION_STATES = (
     "approved",
 )
 MAX_REFERENCE_BYTES = 50 * 1024 * 1024
+MAX_DISPLAY_NAME_LENGTH = 80
 BASELINE_CONTEXT_REVISION = 2
 
 
@@ -172,6 +173,13 @@ def _with_voice_lifecycle(voice: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_voice_actor_notes(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value).replace("[", "").replace("]", "")).strip()
+
+
+def _normalize_display_name(value: Any) -> str:
+    display_name = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(display_name) > MAX_DISPLAY_NAME_LENGTH:
+        raise AlphaError(f"Names cannot exceed {MAX_DISPLAY_NAME_LENGTH} characters.")
+    return display_name
 
 
 def _delivery_request_text(notes: Any, spoken_text: str) -> str:
@@ -497,6 +505,7 @@ class AlphaStore:
                     candidate_id TEXT PRIMARY KEY,
                     voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
                     provider_voice_id TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL DEFAULT '',
                     generation_number INTEGER NOT NULL,
                     creation_method TEXT NOT NULL,
                     creation_model_id TEXT NOT NULL,
@@ -514,6 +523,7 @@ class AlphaStore:
                     preview_id TEXT PRIMARY KEY,
                     voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
                     delivery TEXT NOT NULL,
+                    display_name TEXT NOT NULL DEFAULT '',
                     generation_number INTEGER NOT NULL DEFAULT 0,
                     storage_path TEXT NOT NULL,
                     sha256 TEXT NOT NULL,
@@ -637,6 +647,17 @@ class AlphaStore:
             row["name"]
             for row in connection.execute("PRAGMA table_info(voice_delivery_previews)")
         }
+        voice_id_candidate_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(voice_id_candidates)")
+        }
+        if "display_name" not in voice_id_candidate_columns:
+            connection.execute(
+                "ALTER TABLE voice_id_candidates ADD COLUMN display_name TEXT NOT NULL DEFAULT ''"
+            )
+        if "display_name" not in delivery_preview_columns:
+            connection.execute(
+                "ALTER TABLE voice_delivery_previews ADD COLUMN display_name TEXT NOT NULL DEFAULT ''"
+            )
         if "generation_number" not in delivery_preview_columns:
             connection.execute(
                 "ALTER TABLE voice_delivery_previews ADD COLUMN generation_number "
@@ -2003,6 +2024,23 @@ class AlphaStore:
             )
         return self.get_voice(preview["voice_id"])
 
+    def update_delivery_preview_name(
+        self, preview_id: str, display_name: Any
+    ) -> dict[str, Any]:
+        normalized = _normalize_display_name(display_name)
+        with self.connect() as connection:
+            preview = connection.execute(
+                "SELECT voice_id FROM voice_delivery_previews WHERE preview_id=?",
+                (preview_id,),
+            ).fetchone()
+            if not preview:
+                raise AlphaError("Delivery preview was not found.")
+            connection.execute(
+                "UPDATE voice_delivery_previews SET display_name=? WHERE preview_id=?",
+                (normalized, preview_id),
+            )
+        return self.get_voice(preview["voice_id"])
+
     def delivery_preview_path(self, preview_id: str) -> Path:
         with self.connect() as connection:
             row = connection.execute(
@@ -2183,6 +2221,11 @@ class AlphaStore:
             candidate["subscription"] = _loads(candidate.get("subscription_json"), {})
             candidate["credit_cost"] = candidate["subscription"].get("request_character_cost")
             payload["voice_id_candidates"].append(candidate)
+        voice_names = {
+            candidate["provider_voice_id"]: candidate["display_name"]
+            for candidate in payload["voice_id_candidates"]
+            if candidate.get("display_name")
+        }
         payload["voice_id_candidate_groups"] = _candidate_groups(payload["voice_id_candidates"])
         payload["speakers"] = [dict(row) for row in speakers]
         preview_payloads = [dict(row) for row in delivery_previews]
@@ -2191,6 +2234,7 @@ class AlphaStore:
             request = _loads(preview.get("request_json"), {})
             preview["request"] = request
             preview.update(_delivery_preview_metadata(request, preview["sample_text"]))
+            preview["baseline_voice_name"] = voice_names.get(preview["baseline_voice_id"], "")
         payload["delivery_presets"] = []
         for row in delivery_presets:
             preset = dict(row)
@@ -2404,6 +2448,18 @@ class AlphaStore:
         candidate = dict(row)
         candidate["subscription"] = _loads(candidate.get("subscription_json"), {})
         return candidate
+
+    def update_voice_id_candidate_name(
+        self, candidate_id: str, display_name: Any
+    ) -> dict[str, Any]:
+        candidate = self.get_voice_id_candidate(candidate_id)
+        normalized = _normalize_display_name(display_name)
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE voice_id_candidates SET display_name=? WHERE candidate_id=?",
+                (normalized, candidate_id),
+            )
+        return self.get_voice(candidate["voice_id"])
 
     def record_voice_id_candidate(
         self,

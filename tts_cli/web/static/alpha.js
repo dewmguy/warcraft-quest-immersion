@@ -289,6 +289,30 @@ function queueAutoSave(form, delay = 500) {
   state.timer = window.setTimeout(() => saveAutoForm(form), delay);
 }
 
+function syncOptionalName(input) {
+  const displayName = input.value.trim();
+  if (input.dataset.voiceNameInput !== undefined) {
+    const providerVoiceId = input.dataset.providerVoiceId;
+    for (const target of document.querySelectorAll("[data-voice-name-for]")) {
+      if (target.dataset.voiceNameFor === providerVoiceId) {
+        target.textContent = displayName ? ` · ${displayName}` : "";
+      }
+    }
+    for (const option of document.querySelectorAll("option[data-voice-option-base]")) {
+      if (option.dataset.providerVoiceId !== providerVoiceId) continue;
+      option.textContent = `${option.dataset.voiceOptionBase}${displayName ? ` · ${displayName}` : ""} · ${providerVoiceId}`;
+    }
+  }
+  if (input.dataset.sampleNameInput !== undefined) {
+    const previewId = input.dataset.previewId;
+    for (const target of document.querySelectorAll("[data-sample-name-for]")) {
+      if (target.dataset.sampleNameFor === previewId) {
+        target.textContent = displayName ? ` · ${displayName}` : "";
+      }
+    }
+  }
+}
+
 async function saveAutoForm(form) {
   const state = autoSaveStates.get(form);
   if (!state) return;
@@ -335,7 +359,10 @@ for (const form of document.querySelectorAll("[data-auto-save-form]")) {
   });
   form.addEventListener("submit", (event) => event.preventDefault());
   for (const field of form.querySelectorAll("input, select, textarea")) {
-    field.addEventListener("input", () => queueAutoSave(form));
+    field.addEventListener("input", () => {
+      syncOptionalName(field);
+      queueAutoSave(form);
+    });
     field.addEventListener("change", () => queueAutoSave(form, 0));
   }
 }

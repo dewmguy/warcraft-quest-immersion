@@ -395,7 +395,12 @@ dialog .actions { justify-content: flex-end; }
 .candidate-method-group h4 { margin: 0; color: #b5a77f; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .creation-candidates .candidate-list { gap: 7px; }
 .creation-candidates .candidate-list article { grid-template-columns: 1fr; gap: 8px; padding: 10px; background: #111014; }
+.voice-id-candidate > header { display: grid; gap: 6px; }
 .creation-candidates .candidate-list article > header strong { color: #eee4ca; font-size: .86rem; }
+.candidate-name-form, .delivery-preview-name-form { margin: 0; }
+.candidate-name-form label, .delivery-preview-name-form label { display: grid; min-width: 0; gap: 4px; margin: 0; }
+.candidate-name-form label > span, .delivery-preview-name-form label > span { color: #8f8793; font-size: .6rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.candidate-name-form input, .delivery-preview-name-form input { width: 100%; min-height: 30px; padding: 5px 8px; color: var(--success); font-size: .72rem; }
 .proposed-candidates { display: grid; gap: 10px; margin-top: 24px; border-top: 1px solid #4a4030; padding-top: 18px; }
 .proposed-candidates .candidate-heading { margin-bottom: 0; }
 .candidate-id-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; color: #aaa3ad; font-size: .7rem; }
@@ -441,10 +446,12 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preview-summary { display: grid; min-width: 0; gap: 1px; }
 .delivery-preview-summary strong { overflow: hidden; color: #eee4ca; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
 .delivery-preview-summary small { color: #8f8793; font-size: .66rem; white-space: normal; }
+.delivery-preview-voice-name { color: var(--success); }
 .delivery-preview-summary code { color: var(--success); font-size: .68rem; overflow-wrap: anywhere; }
 .delivery-preview-chevron { color: #8f8793; font-size: .68rem; text-align: center; transition: transform .16s ease; }
 .delivery-preview[open] .delivery-preview-chevron { transform: rotate(180deg); }
 .delivery-preview-body { display: grid; gap: 6px; border-top: 1px solid #302c33; padding: 7px 8px 8px; background: #111014; }
+.delivery-preview-name-form { margin-bottom: 2px; }
 .delivery-player { width: 100%; }
 .delivery-preview-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 2px 0; border-block: 1px solid #2c2830; padding: 7px 0; }
 .delivery-preview-metadata div { display: grid; min-width: 0; gap: 2px; }

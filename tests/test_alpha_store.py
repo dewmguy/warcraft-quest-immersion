@@ -59,12 +59,18 @@ def test_initialize_adds_new_columns_to_existing_alpha_database(tmp_path: Path):
             row["name"]
             for row in connection.execute("PRAGMA table_info(voice_delivery_previews)")
         }
+        voice_id_candidate_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(voice_id_candidates)")
+        }
 
     assert "creation_method" in columns
     assert "generation_number" in columns
     assert "candidate_sequence" in voice_columns
     assert "sample_sequence" in preset_columns
     assert "generation_number" in delivery_preview_columns
+    assert "display_name" in delivery_preview_columns
+    assert "display_name" in voice_id_candidate_columns
 
 
 def test_initialize_backfills_current_provider_voice_into_candidate_registry(store: AlphaStore):
@@ -540,6 +546,7 @@ def test_each_delivery_preset_can_target_a_different_voice_id_candidate(store: A
         creation_method="designed",
         creation_model_id="eleven_ttv_v3",
     )
+    store.update_voice_id_candidate_name(alternate["candidate_id"], "  Grieving   Noble  ")
     store.update_delivery_preset(
         voice_id,
         "sorrowful",
@@ -563,11 +570,18 @@ def test_each_delivery_preset_can_target_a_different_voice_id_candidate(store: A
     assert request["baseline_voice_id"] == "provider-sorrowful"
     assert preset["provider_voice_id"] == "provider-sorrowful"
     assert preset["effective_provider_voice_id"] == "provider-sorrowful"
+    assert next(
+        item
+        for item in revised["voice_id_candidates"]
+        if item["provider_voice_id"] == "provider-sorrowful"
+    )["display_name"] == "Grieving Noble"
     assert len(revised["voice_id_candidates"]) == 2
     assert {item["provider_voice_id"] for item in revised["voice_id_candidates"]} == {
         "provider-default",
         "provider-sorrowful",
     }
+    with pytest.raises(AlphaError, match="cannot exceed 80 characters"):
+        store.update_voice_id_candidate_name(alternate["candidate_id"], "x" * 81)
 
 
 def test_initialize_removes_legacy_brackets_from_saved_voice_actor_notes(store: AlphaStore):
@@ -650,6 +664,7 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
         subscription={"character_count": len(request["text"])},
     )
     assert preview["generation_number"] == 1
+    store.update_delivery_preview_name(preview["preview_id"], "  Controlled   Anger  ")
     assert store.delivery_preview_path(preview["preview_id"]).is_file()
     stored = store.get_voice(voice["voice_id"])["delivery_presets"][1]["previews"][0]
     assert stored["actor_notes"] == "angry"
@@ -657,6 +672,7 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
     assert stored["performance_method_label"] == "Creative"
     assert stored["baseline_voice_id"] == "provider-voice-test"
     assert stored["generation_number"] == 1
+    assert stored["display_name"] == "Controlled Anger"
     assert store.progress()["voices"]["complete"] == 0
 
     approved = store.approve_delivery_preview(preview["preview_id"])

@@ -799,6 +799,28 @@ def api_approve_delivery_preview(
         raise _alpha_error(error) from error
 
 
+@app.patch("/api/alpha/delivery-previews/{preview_id}")
+def api_update_delivery_preview_name(
+    preview_id: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        display_name = payload.get("display_name", "")
+        voice = alpha_store.update_delivery_preview_name(preview_id, display_name)
+        return {
+            "message": (
+                "Saved the sample name."
+                if str(display_name or "").strip()
+                else "Cleared the sample name."
+            ),
+            "voice": voice,
+        }
+    except AlphaError as error:
+        raise _alpha_error(error, 404 if "not found" in str(error).lower() else 422) from error
+
+
 @app.delete("/api/alpha/delivery-previews/{preview_id}")
 def api_delete_delivery_preview(
     preview_id: str,
@@ -955,6 +977,28 @@ def api_voice_id_candidate_audio(
         )
     except AlphaError as error:
         raise _alpha_error(error, 404) from error
+
+
+@app.patch("/api/alpha/voice-id-candidates/{candidate_id}")
+def api_update_voice_id_candidate_name(
+    candidate_id: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        display_name = payload.get("display_name", "")
+        voice = alpha_store.update_voice_id_candidate_name(candidate_id, display_name)
+        return {
+            "message": (
+                "Saved the Voice ID name."
+                if str(display_name or "").strip()
+                else "Cleared the Voice ID name."
+            ),
+            "voice": voice,
+        }
+    except AlphaError as error:
+        raise _alpha_error(error, 404 if "not found" in str(error).lower() else 422) from error
 
 
 @app.post("/api/alpha/voice-id-candidates/{candidate_id}/audition")

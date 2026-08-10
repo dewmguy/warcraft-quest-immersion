@@ -379,6 +379,21 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
             provider_request_id="delivery-request-test",
             subscription={"request_character_cost": 80},
         )
+        candidate = next(
+            item
+            for item in web.alpha_store.get_voice(voice_id)["voice_id_candidates"]
+            if item["provider_voice_id"] == "provider-voice-test"
+        )
+        named_voice = client.patch(
+            f"/api/alpha/voice-id-candidates/{candidate['candidate_id']}",
+            headers={"X-WQI-Action": "confirmed"},
+            json={"display_name": "Polished Noble"},
+        )
+        named_sample = client.patch(
+            f"/api/alpha/delivery-previews/{preview['preview_id']}",
+            headers={"X-WQI-Action": "confirmed"},
+            json={"display_name": "Restrained Warmth"},
+        )
         for index in range(2):
             web.alpha_store.record_delivery_preview(
                 voice_id,
@@ -401,6 +416,10 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
         )
 
     assert page.status_code == 200
+    assert named_voice.status_code == 200
+    assert named_voice.json()["message"] == "Saved the Voice ID name."
+    assert named_sample.status_code == 200
+    assert named_sample.json()["message"] == "Saved the sample name."
     assert 'class="reference-player delivery-player"' in page.text
     assert page.text.count('class="delivery-preview"') == 3
     assert page.text.count('data-audio-disclosure="delivery-samples"') == 3
@@ -408,6 +427,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert page.text.count('class="delivery-preview-chevron"') == 3
     assert 'data-audio-name="Neutral sample #3"' in page.text
     assert page.text.count("Neutral sample #1") >= 1
+    assert "Restrained Warmth</span>" in page.text
     assert page.text.count("Neutral sample #2") >= 1
     assert page.text.count("Neutral sample #3") >= 1
     assert (
@@ -429,7 +449,9 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert page.text.count(">Robust</dd>") == 3
     assert page.text.count("<dt>Sample details</dt>") == 3
     assert page.text.count("1.50 sec · Candidate · 80 credits</dd>") == 3
-    assert page.text.count("Voice ID · <code>provider-voice-test</code>") == 3
+    assert "Polished Noble</span> · <code>provider-voice-test</code>" in page.text
+    assert 'value="Restrained Warmth"' in page.text
+    assert 'value="Polished Noble"' in page.text
     assert "<dt>ElevenLabs voice ID</dt>" not in page.text
     assert page.text.count("provider-voice-test") >= 3
     assert "ElevenLabs usage cannot be refunded" in page.text
@@ -469,6 +491,11 @@ def test_delivery_presets_offer_every_retained_voice_id(monkeypatch):
             creation_method="designed",
             creation_model_id="eleven_ttv_v3",
         )
+        named = client.patch(
+            f"/api/alpha/voice-id-candidates/{alternate['candidate_id']}",
+            headers={"X-WQI-Action": "confirmed"},
+            json={"display_name": "Sorrowful Favorite"},
+        )
         web.alpha_store.update_delivery_preset(
             voice_id,
             "sorrowful",
@@ -481,13 +508,12 @@ def test_delivery_presets_offer_every_retained_voice_id(monkeypatch):
         page = client.get(f"/alpha/voices/{voice_id}")
 
     assert page.status_code == 200
+    assert named.status_code == 200
     assert page.text.count('<select name="provider_voice_id"') == 5
     assert page.text.count("provider-default") >= 5
     assert page.text.count("provider-sorrowful") >= 5
-    assert (
-        '<option value="provider-sorrowful" selected>#2 · Voice Design · '
-        "provider-sorrowful</option>" in page.text
-    )
+    assert "#2 · Voice Design · Sorrowful Favorite · provider-sorrowful</option>" in page.text
+    assert 'data-voice-name-input data-provider-voice-id="provider-sorrowful"' in page.text
     assert "Each emotional preset can use a different retained voice ID" in page.text
 
 
@@ -501,6 +527,9 @@ def test_delivery_preset_settings_auto_save_and_build_actions_skip_confirmations
     assert "const requestBody = jsonFromForm(form)" in script
     assert "state.saved = serialized" in script
     assert "updatePresetStatus(form, payload.voice)" in script
+    assert "function syncOptionalName(input)" in script
+    assert 'document.querySelectorAll("[data-voice-name-for]")' in script
+    assert 'document.querySelectorAll("[data-sample-name-for]")' in script
     assert "if (form.dataset.autoSaveForm !== undefined) continue" in script
     assert "data-dirty-form" not in script
     assert 'deliveryBatchButton.textContent = "Generate all samples"' in script
