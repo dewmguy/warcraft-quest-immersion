@@ -35,7 +35,7 @@
     </header>
     <main class="alpha-main">
       <section class="corpus-progress" aria-label="Production progress">
-        {% for item in [progress.voices, progress.quests, progress.gossip] %}
+        {% for item in [progress.voices, progress.unique_npcs, progress.quests, progress.gossip] %}
         <a class="progress-link" href="{{ item.href }}" aria-label="Open {{ item.label }} work queue">
           <article>
             <div><strong>{{ item.label }}</strong><span>{{ item.complete }} / {{ item.total }} · {{ item.percent }}%</span></div>

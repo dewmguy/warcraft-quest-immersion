@@ -381,7 +381,7 @@ dialog .actions { justify-content: flex-end; }
   .alpha-message[data-provider="true"][data-state="working"] .alpha-message-indicator,
   .alpha-message-progress span { animation-duration: 3s; }
 }
-.corpus-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 28px; }
+.corpus-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 28px; }
 .corpus-progress > .progress-link { min-width: 0; color: inherit; text-decoration: none; }
 .corpus-progress article { display: grid; gap: 9px; border: 1px solid #312d35; border-radius: 8px; padding: 12px 14px; background: #17151a; }
 .corpus-progress .progress-link:hover article, .corpus-progress .progress-link:focus-visible article { border-color: #c99d43; background: #1d1a1b; box-shadow: 0 0 0 2px rgb(201 157 67 / 14%); }
@@ -588,6 +588,7 @@ dialog .actions { justify-content: flex-end; }
 @media (max-width: 1050px) {
   .alpha-header { grid-template-columns: 1fr auto; }
   .provider-state-group { grid-column: 1 / -1; }
+  .corpus-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .search-field { grid-column: span 2; }
   .alpha-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }

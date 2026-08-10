@@ -119,6 +119,13 @@ def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore
             "percent": 0.0,
             "href": "/alpha/races?completion=incomplete",
         },
+        "unique_npcs": {
+            "label": "Unique NPCs",
+            "complete": 0,
+            "total": 0,
+            "percent": 0.0,
+            "href": "/alpha/npcs?voice_approach=unique",
+        },
         "quests": {
             "label": "Quest audio",
             "complete": 0,
@@ -134,6 +141,38 @@ def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore
             "href": "/alpha/gossip",
         },
     }
+
+
+def test_unique_npc_progress_tracks_ready_active_profiles(store: AlphaStore):
+    speaker = next(
+        row
+        for row in store.list_dialogue(page_size=10)["rows"]
+        if row["speaker_name"] == "Sentinel Amara"
+    )
+    voice = store.create_unique_voice(speaker["speaker_id"])
+
+    assert store.progress()["unique_npcs"] == {
+        "label": "Unique NPCs",
+        "complete": 0,
+        "total": 1,
+        "percent": 0.0,
+        "href": "/alpha/npcs?voice_approach=unique",
+    }
+
+    store.record_voice_id_candidate(
+        voice["voice_id"],
+        provider_voice_id="unique-progress-voice",
+        creation_method="external",
+        creation_model_id="external",
+    )
+    for delivery in alpha_module.DELIVERIES:
+        store.update_delivery_preset(voice["voice_id"], delivery, {"status": "approved"})
+
+    assert store.progress()["unique_npcs"]["complete"] == 1
+    assert store.progress()["unique_npcs"]["percent"] == 100.0
+
+    store.use_baseline_voice(speaker["speaker_id"])
+    assert store.progress()["unique_npcs"]["total"] == 0
 
 
 def test_spoken_text_is_created_only_by_explicit_action(store: AlphaStore):

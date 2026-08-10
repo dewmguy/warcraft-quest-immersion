@@ -1973,6 +1973,17 @@ class AlphaStore:
                 "AS complete FROM voice_delivery_presets vdp JOIN voices v ON v.voice_id=vdp.voice_id "
                 "WHERE v.scope='baseline'"
             ).fetchone()
+            unique_npcs = connection.execute(
+                "SELECT COUNT(*) AS total, SUM(CASE WHEN "
+                "EXISTS (SELECT 1 FROM voice_id_candidates vic WHERE vic.voice_id=v.voice_id) "
+                "AND (SELECT COUNT(*) FROM voice_delivery_presets vdp "
+                "WHERE vdp.voice_id=v.voice_id AND vdp.status='approved')=? "
+                "THEN 1 ELSE 0 END) AS complete FROM voices v "
+                "JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
+                "JOIN speakers s ON s.speaker_id=v.npc_speaker_id AND s.voice_id=v.voice_id "
+                "WHERE v.scope='unique' AND vv.status<>'retired'",
+                (len(DELIVERIES),),
+            ).fetchone()
             dialogue = {}
             for key, condition in (
                 ("quests", "d.source<>'gossip'"),
@@ -2000,6 +2011,11 @@ class AlphaStore:
                 "Baseline deliveries",
                 voice,
                 "/alpha/races?completion=incomplete",
+            ),
+            "unique_npcs": item(
+                "Unique NPCs",
+                unique_npcs,
+                "/alpha/npcs?voice_approach=unique",
             ),
             "quests": item("Quest audio", dialogue["quests"], "/alpha"),
             "gossip": item("Gossip audio", dialogue["gossip"], "/alpha/gossip"),

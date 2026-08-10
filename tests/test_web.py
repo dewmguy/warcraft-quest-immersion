@@ -1104,7 +1104,7 @@ def test_actionable_statuses_link_to_the_work_that_resolves_them(monkeypatch):
     assert f'href="{provider_target}"' in voices.text
 
 
-def test_progress_cards_open_prefiltered_quest_gossip_and_baseline_queues(monkeypatch):
+def test_progress_cards_open_prefiltered_content_and_voice_queues(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
         dashboard = client.get("/alpha")
@@ -1115,6 +1115,8 @@ def test_progress_cards_open_prefiltered_quest_gossip_and_baseline_queues(monkey
     assert 'href="/alpha"' in dashboard.text
     assert 'href="/alpha/gossip"' in dashboard.text
     assert 'href="/alpha/races?completion=incomplete"' in dashboard.text
+    assert 'href="/alpha/npcs?voice_approach=unique"' in dashboard.text
+    assert "Unique NPCs" in dashboard.text
     assert "3 matching records" in quests.text
     assert "Quest stage" in quests.text
     assert '<option value="gossip"' not in quests.text
