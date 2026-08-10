@@ -119,14 +119,17 @@ def _with_voice_lifecycle(voice: dict[str, Any]) -> dict[str, Any]:
     missing = int(voice.get("missing_dialogue_count") or 0)
     deployed = max(dialogue_count - missing, 0)
     stored_status = str(voice.get("stored_status") or "draft")
+    voice_id_candidate_count = int(voice.get("voice_id_candidate_count") or 0)
+    if not voice_id_candidate_count and voice.get("voice_id_candidates"):
+        voice_id_candidate_count = len(voice["voice_id_candidates"])
 
     if voice.get("scope") == "unique" and stored_status == "retired":
         status = "archived"
         reason = "Archived because no speaker currently uses this unique voice."
-    elif not voice.get("provider_voice_id") or approved < len(DELIVERIES):
+    elif not voice_id_candidate_count or approved < len(DELIVERIES):
         requirements = []
-        if not voice.get("provider_voice_id"):
-            requirements.append("connect a reusable ElevenLabs voice")
+        if not voice_id_candidate_count:
+            requirements.append("generate a reusable ElevenLabs voice ID")
         if approved < len(DELIVERIES):
             requirements.append(
                 f"approve {len(DELIVERIES) - approved} remaining emotional delivery "
@@ -558,6 +561,7 @@ class AlphaStore:
             self._normalize_instant_clone_previews(connection)
             self._sync_baseline_contexts(connection)
             self._backfill_voice_id_candidates(connection)
+            self._pin_delivery_presets_to_current_voice(connection)
 
     @staticmethod
     def _ensure_columns(connection: sqlite3.Connection) -> None:
@@ -663,6 +667,20 @@ class AlphaStore:
                     row["created_at"],
                 ),
             )
+
+    @staticmethod
+    def _pin_delivery_presets_to_current_voice(connection: sqlite3.Connection) -> None:
+        """Make each preset's reusable voice choice explicit before the pool grows."""
+        connection.execute(
+            "UPDATE voice_delivery_presets SET provider_voice_id=("
+            "SELECT vv.provider_voice_id FROM voice_versions vv "
+            "WHERE vv.voice_id=voice_delivery_presets.voice_id AND vv.is_current=1) "
+            "WHERE COALESCE(provider_voice_id, '')='' AND EXISTS ("
+            "SELECT 1 FROM voice_versions vv JOIN voice_id_candidates vic "
+            "ON vic.voice_id=vv.voice_id AND vic.provider_voice_id=vv.provider_voice_id "
+            "WHERE vv.voice_id=voice_delivery_presets.voice_id AND vv.is_current=1 "
+            "AND COALESCE(vv.provider_voice_id, '')<>'')"
+        )
 
     def _seed_baseline_voices(self, connection: sqlite3.Connection) -> None:
         review = load_phase2_review()
@@ -1868,25 +1886,6 @@ class AlphaStore:
         temporary_path.unlink(missing_ok=True)
         return self.get_voice(row["voice_id"])
 
-    def restore_voice_version(self, voice_id: str, version_id: int) -> dict[str, Any]:
-        with self.connect() as connection:
-            row = connection.execute(
-                "SELECT * FROM voice_versions WHERE voice_id=? AND version_id=?",
-                (voice_id, version_id),
-            ).fetchone()
-        if not row:
-            raise AlphaError("Voice version was not found.")
-        return self.update_voice(
-            voice_id,
-            {
-                "description": row["description"],
-                "creation_method": row["creation_method"],
-                "provider_voice_id": row["provider_voice_id"] or "",
-                "model_id": row["model_id"],
-                **_loads(row["settings_json"], {}),
-            },
-        )
-
     def list_voices(
         self,
         scope: str = "",
@@ -1931,6 +1930,8 @@ class AlphaStore:
                 "AS missing_dialogue_count, "
                 "(SELECT COUNT(*) FROM voice_delivery_presets vdp WHERE vdp.voice_id=v.voice_id "
                 "AND vdp.status='approved') AS approved_delivery_count "
+                ", (SELECT COUNT(*) FROM voice_id_candidates vic WHERE vic.voice_id=v.voice_id) "
+                "AS voice_id_candidate_count "
                 "FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
                 f"{where} ORDER BY v.scope, v.name",
                 parameters,
@@ -1991,15 +1992,19 @@ class AlphaStore:
                 self._voice_version_delta(ascending[index - 1], version) if index else []
             )
         payload["versions"] = list(reversed(ascending))
+        payload["prompt_versions"] = []
+        seen_prompts = {payload["description"]}
+        for version in payload["versions"]:
+            description = str(version.get("description") or "").strip()
+            if description and description not in seen_prompts:
+                payload["prompt_versions"].append(version)
+                seen_prompts.add(description)
         payload["clips"] = [dict(row) for row in clips]
         payload["previews"] = [dict(row) for row in previews]
         payload["voice_id_candidates"] = []
         for row in voice_id_candidates:
             candidate = dict(row)
             candidate["subscription"] = _loads(candidate.get("subscription_json"), {})
-            candidate["is_default"] = candidate["provider_voice_id"] == (
-                payload.get("provider_voice_id") or ""
-            )
             payload["voice_id_candidates"].append(candidate)
         payload["speakers"] = [dict(row) for row in speakers]
         preview_payloads = [dict(row) for row in delivery_previews]
@@ -2144,6 +2149,7 @@ class AlphaStore:
                         now,
                     ),
                 )
+            self._pin_delivery_presets_to_current_voice(connection)
         updated = self.get_voice(voice_id)
         updated["version_changed"] = True
         return updated
@@ -2345,7 +2351,8 @@ class AlphaStore:
             raise AlphaError("Voice ID candidate audition audio is unavailable.")
         return path
 
-    def set_default_voice_id_candidate(self, candidate_id: str) -> dict[str, Any]:
+    def connect_voice_id_candidate(self, candidate_id: str) -> dict[str, Any]:
+        """Keep legacy voice metadata current without making the candidate a UI default."""
         candidate = self.get_voice_id_candidate(candidate_id)
         voice = self.get_voice(candidate["voice_id"])
         return self.update_voice(
@@ -2358,16 +2365,35 @@ class AlphaStore:
             },
         )
 
+    def restore_voice_prompt(self, voice_id: str, version_id: int) -> dict[str, Any]:
+        with self.connect() as connection:
+            version = connection.execute(
+                "SELECT description FROM voice_versions WHERE voice_id=? AND version_id=?",
+                (voice_id, version_id),
+            ).fetchone()
+        if not version:
+            raise AlphaError("Voice prompt version was not found.")
+        current = self.get_voice(voice_id)
+        return self.update_voice(
+            voice_id,
+            {
+                "description": version["description"],
+                "creation_method": current["creation_method"],
+                "provider_voice_id": current["provider_voice_id"] or "",
+                "model_id": current["model_id"],
+            },
+        )
+
     def delete_voice_id_candidate(self, candidate_id: str) -> dict[str, Any]:
         candidate = self.get_voice_id_candidate(candidate_id)
         voice = self.get_voice(candidate["voice_id"])
         provider_voice_id = candidate["provider_voice_id"]
-        is_default = provider_voice_id == (voice.get("provider_voice_id") or "")
+        is_current_legacy_link = provider_voice_id == (voice.get("provider_voice_id") or "")
         affected_deliveries = [
             preset["delivery"]
             for preset in voice["delivery_presets"]
             if preset.get("provider_voice_id") == provider_voice_id
-            or (is_default and not preset.get("provider_voice_id"))
+            or (is_current_legacy_link and not preset.get("provider_voice_id"))
         ]
         path = (
             Path(candidate["sample_storage_path"]).resolve()
@@ -2380,7 +2406,7 @@ class AlphaStore:
         if path and path.is_file():
             path.replace(temporary_path)
         try:
-            if is_default:
+            if is_current_legacy_link:
                 self.update_voice(
                     candidate["voice_id"],
                     {
@@ -2413,7 +2439,7 @@ class AlphaStore:
             temporary_path.unlink(missing_ok=True)
         revised = self.get_voice(candidate["voice_id"])
         revised["affected_delivery_count"] = len(affected_deliveries)
-        revised["deleted_default_candidate"] = is_default
+        revised["cleared_legacy_voice_link"] = is_current_legacy_link
         return revised
 
     def delete_voice_preview(self, preview_id: str) -> dict[str, Any]:
@@ -2559,7 +2585,7 @@ class AlphaStore:
             sample_model_id=preview["model_id"],
             content=Path(preview["storage_path"]).read_bytes(),
         )
-        self.set_default_voice_id_candidate(candidate["candidate_id"])
+        self.connect_voice_id_candidate(candidate["candidate_id"])
         with self.connect() as connection:
             discarded_rows = connection.execute(
                 "SELECT storage_path FROM voice_previews WHERE voice_id=?", (preview["voice_id"],)

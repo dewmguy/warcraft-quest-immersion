@@ -208,10 +208,10 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert 'class="voice-settings"' not in page.text
     assert "Voice Design Prompt Context" in page.text
     assert "Context sent to Voice Design" not in page.text
-    assert "This exact prompt will be sent to Voice Design" in page.text
+    assert "This exact prompt will be sent to Voice Design" not in page.text
     assert "data-prompt-context" not in page.text
     assert "Save changed voice settings" not in page.text
-    assert "Fixed voice ID audition script" in page.text
+    assert "Audition Script" in page.text
     assert page.text.count(web.VOICE_ID_AUDITION_TEXT) == 3
     assert 'name="status"' not in page.text
     assert "Lifecycle status</span><select" not in page.text
@@ -219,8 +219,8 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Reusable ElevenLabs voice</span><strong>Connected" not in page.text
     assert "Reference-guided Voice Design" in page.text
     assert "Instant Voice Clone" in page.text
-    assert "Emotional delivery presets" in page.text
-    assert "Shape how this voice performs common emotions" in page.text
+    assert "Emotional Delivery Presets" in page.text
+    assert "Define and test emotional performances" in page.text
     assert "selected candidate defines who is speaking" not in page.text
     assert "One comparison per paid click" not in page.text
     assert "Review notes · local only" not in page.text
@@ -235,13 +235,14 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Natural · balanced and closest to the voice" in page.text
     assert "Robust · consistent, least responsive to direction" in page.text
     assert "Save preset settings" not in page.text
-    assert page.text.count("data-dirty-submit hidden") == 5
-    assert page.text.count('class="fa-solid fa-floppy-disk"') == 5
+    assert page.text.count("data-auto-save-form") == 5
+    assert "data-dirty-submit" not in page.text
+    assert 'class="fa-solid fa-floppy-disk"' not in page.text
     assert page.text.count("Generate sample") == 5
-    assert "Preset settings" in page.text
+    assert "Preset Settings" in page.text
     assert "Sample" in page.text
     assert "Generate all samples" in page.text
-    assert "Fixed sample script" in page.text
+    assert "Sample Script" in page.text
     assert "<blockquote>" in page.text
     assert "<details><summary>Fixed comparison script" not in page.text
     assert page.text.count("data-delivery-generation") == 5
@@ -251,9 +252,11 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert 'id="provider-creation"' in page.text
     assert "multiple" in page.text
     assert "MP3, WAV, M4A, OGG, or FLAC" in page.text
-    assert "Stored reference clips" in page.text
+    assert "Stored Reference Clips" in page.text
+    assert '<details class="reference-upload">' in page.text
+    assert "Add Reference Clips" in page.text
     assert "https://kit.fontawesome.com/666b0b7246.js" in page.text
-    assert "Files are preserved exactly as uploaded" in page.text
+    assert "MP3 should be 192 kbps or higher" in page.text
     assert "candidate-generation-note" not in page.text
 
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
@@ -267,7 +270,7 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     template = (web.WEB_DIR / "templates" / "alpha-voice.html").read_text(encoding="utf-8")
     assert (
         '<div class="creation-controls">\n'
-        '        <div class="panel-heading"><div><span class="panel-step">Provider creation</span>'
+        '        <div class="panel-heading"><div><span class="panel-step">Provider Creation</span>'
         in template
     )
 
@@ -291,13 +294,13 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
         )
 
     assert page.status_code == 200
-    assert "Voice Design previews" in page.text
-    assert "These are auditions only" in page.text
+    assert "Incoming Voice Candidates" in page.text
+    assert "Temporary output" not in page.text
     assert f'data-url="/api/alpha/voice-previews/{preview_id}"' in page.text
     assert 'data-method="DELETE"' in page.text
-    assert "Permanently delete this temporary Voice Design preview" in page.text
+    assert "Permanently delete this incoming Voice Design candidate" in page.text
     assert 'class="reference-player candidate-player"' in page.text
-    assert 'data-audio-name="Voice Design preview 1"' in page.text
+    assert 'data-audio-name="Incoming voice candidate 1"' in page.text
     assert (
         f'<audio hidden preload="metadata" src="/api/alpha/voice-previews/{preview_id}/audio">'
         in page.text
@@ -306,6 +309,37 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
     assert deleted.json()["message"] == "Voice Design preview was deleted from local storage."
     assert not preview_path.exists()
     assert web.alpha_store.get_voice(voice_id)["previews"] == []
+
+
+def test_prompt_history_restores_only_the_voice_design_prompt(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        original = web.alpha_store.get_voice(voice_id)
+        changed = web.alpha_store.update_voice(
+            voice_id,
+            {
+                "description": original["description"] + " Keep every consonant precise.",
+                "creation_method": "designed",
+            },
+        )
+        page = client.get(f"/alpha/voices/{voice_id}")
+        restored = client.post(
+            f"/api/alpha/voices/{voice_id}/prompts/{original['version_id']}/restore",
+            headers={"X-WQI-Action": "confirmed"},
+        )
+        revised = web.alpha_store.get_voice(voice_id)
+
+    assert page.status_code == 200
+    assert page.text.count("Prompt History") == 2
+    assert f"/prompts/{original['version_id']}/restore" in page.text
+    assert restored.status_code == 200
+    assert "Restored the prompt as version" in restored.json()["message"]
+    assert revised["description"] == original["description"]
+    assert revised["creation_method"] == "designed"
+    assert changed["description"] in {
+        version["description"] for version in revised["prompt_versions"]
+    }
 
 
 def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeypatch):
@@ -379,7 +413,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert page.text.count('class="fa-solid fa-check"') == 3
     assert page.text.count("Approve this neutral sample?") == 3
     assert page.text.count("Permanently delete this neutral sample") == 3
-    assert page.text.count("Stored samples") == 1
+    assert page.text.count("Stored Samples") == 1
     assert page.text.count('class="reference-player delivery-player"') == 3
     assert page.text.count('class="delivery-preview-metadata"') == 3
     assert page.text.count("Voice actor notes") == 3
@@ -447,19 +481,18 @@ def test_delivery_presets_offer_every_retained_voice_id(monkeypatch):
     assert "Each emotional preset can use a different retained voice ID" in page.text
 
 
-def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_all_confirmations():
+def test_delivery_preset_settings_auto_save_and_build_actions_skip_confirmations():
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
-    assert 'document.querySelectorAll("[data-dirty-form]")' in script
-    assert "const dirtyFormSnapshots = new WeakMap()" in script
-    assert "function syncDirtyForm(form)" in script
+    assert 'document.querySelectorAll("[data-auto-save-form]")' in script
+    assert "const autoSaveStates = new WeakMap()" in script
+    assert "function queueAutoSave(form, delay = 500)" in script
+    assert "async function saveAutoForm(form)" in script
     assert "const requestBody = jsonFromForm(form)" in script
-    assert "dirtyFormSnapshots.set(form, JSON.stringify(requestBody))" in script
-    assert "syncDirtyForm(form)" in script
-    assert "if (form.dataset.dirtyForm !== undefined)" in script
-    assert "if (conditionalSubmit) conditionalSubmit.disabled = true" in script
-    assert "if (conditionalSubmit) conditionalSubmit.disabled = false" in script
-    assert "if (conditionalSubmit?.hidden) return" in script
+    assert "state.saved = serialized" in script
+    assert "updatePresetStatus(form, payload.voice)" in script
+    assert "if (form.dataset.autoSaveForm !== undefined) continue" in script
+    assert "data-dirty-form" not in script
     assert 'deliveryBatchButton.textContent = "Generate all samples"' in script
     assert "deliveryBatchConfirmation" not in script
     assert "paidConfirmation" not in script
@@ -664,9 +697,11 @@ def test_reusable_voice_id_candidate_survives_new_design_previews(monkeypatch):
     assert "Generated voice ID candidate #1" in activated.json()["message"]
     assert "Deleted 3 temporary Voice Design previews" in activated.json()["message"]
     assert selected_page.status_code == 200
-    assert 'class="voice-id-candidate candidate-selected"' in selected_page.text
-    assert "Voice ID candidate #1" in selected_page.text
-    assert "Profile default" in selected_page.text
+    assert 'class="voice-id-candidate"' in selected_page.text
+    assert "candidate-selected" not in selected_page.text
+    assert "Voice ID Candidate #1" in selected_page.text
+    assert "Profile default" not in selected_page.text
+    assert "Use as default" not in selected_page.text
     assert "Voice Design · eleven_ttv_v3" in selected_page.text
     assert candidate["provider_voice_id"] in selected_page.text
     assert regenerated.status_code == 200
@@ -715,7 +750,8 @@ def test_voice_id_candidate_can_be_deleted_from_provider_and_local_registry(monk
         "Deleted voice ID candidate #1 from ElevenLabs and local storage"
         in (deleted.json()["message"])
     )
-    assert "disconnected it as the profile default" in deleted.json()["message"]
+    assert "profile default" not in deleted.json()["message"]
+    assert "cleared it from 5 delivery presets" in deleted.json()["message"]
     assert revised["provider_voice_id"] is None
     assert revised["voice_id_candidates"] == []
     assert revised["previews"] == []
@@ -827,11 +863,11 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
     assert len(provider.clone_kwargs["description"]) <= 500
     assert provider.clone_kwargs["description"].endswith("…")
 
-    assert "The selected audio determines the cloned voice" in page.text
-    assert "attached only as provider metadata" in page.text
+    assert "The selected clips define the clone" in page.text
+    assert "attached only as provider metadata" not in page.text
     assert 'data-method-panel="designed" hidden' in page.text
-    assert "Voice ID candidates" in page.text
-    assert "Voice ID candidate #2" in page.text
+    assert "Voice ID Candidates" in page.text
+    assert "Voice ID Candidate #2" in page.text
     assert "Instant Voice Clone · instant_voice_clone" in page.text
     assert "provider-instant-clone" in page.text
     assert "standardized audition sample is ready" in cloned.json()["message"]
@@ -903,6 +939,9 @@ def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
     assert {Path(clip["storage_path"]).suffix for clip in clips} == {".mp3", ".wav"}
     assert stored_content == {b"first-audio", b"second-audio"}
     assert page.text.count('class="reference-clip"') == 2
+    assert '<details class="reference-upload">' in page.text
+    assert "Description" in page.text
+    assert "Provenance" not in page.text
     assert 'class="fa-solid fa-trash-can"' in page.text
     assert page.text.count("data-compact-audio") == 2
     assert page.text.count("data-audio-name") == 2

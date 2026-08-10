@@ -61,7 +61,10 @@ def test_initialize_backfills_current_provider_voice_into_candidate_registry(sto
     assert candidate["provider_voice_id"] == "active-instant-clone"
     assert candidate["creation_method"] == "instant_clone"
     assert candidate["creation_model_id"] == "instant_voice_clone"
-    assert candidate["is_default"] is True
+    assert "is_default" not in candidate
+    assert {
+        preset["provider_voice_id"] for preset in store.get_voice(voice_id)["delivery_presets"]
+    } == {"active-instant-clone"}
 
 
 def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore):
@@ -222,7 +225,7 @@ def test_voice_lifecycle_is_derived_from_readiness_and_production(
 
     draft = store.get_voice(voice_id)
     assert draft["status"] == "draft"
-    assert "connect a reusable ElevenLabs voice" in draft["lifecycle_reason"]
+    assert "generate a reusable ElevenLabs voice ID" in draft["lifecycle_reason"]
 
     store.update_voice(
         voice_id,
@@ -302,7 +305,7 @@ def test_speaker_context_is_inferred_but_remains_editable(store: AlphaStore):
     assert updated["speaker"]["importance_score"] == 55
 
 
-def test_voice_versions_only_change_on_delta_and_can_be_restored(store: AlphaStore):
+def test_voice_versions_only_change_on_delta_and_prompt_can_be_restored(store: AlphaStore):
     voice = store.list_voices("baseline")[0]
     current = store.get_voice(voice["voice_id"])
 
@@ -321,13 +324,17 @@ def test_voice_versions_only_change_on_delta_and_can_be_restored(store: AlphaSto
             "creation_method": "designed",
         },
     )
-    restored = store.restore_voice_version(voice["voice_id"], current["version_id"])
+    restored = store.restore_voice_prompt(voice["voice_id"], current["version_id"])
 
     assert unchanged["version_changed"] is False
     assert changed["version_number"] == current["version_number"] + 1
     assert {"Voice description", "Creation method"}.issubset(set(changed["versions"][0]["delta"]))
     assert restored["version_number"] == changed["version_number"] + 1
     assert restored["description"] == current["description"]
+    assert restored["creation_method"] == "designed"
+    assert changed["description"] in {
+        version["description"] for version in restored["prompt_versions"]
+    }
 
 
 def test_baseline_context_revision_preserves_creation_work(store: AlphaStore, monkeypatch):

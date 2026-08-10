@@ -248,31 +248,80 @@ async function runAlphaAction({ url, method = "POST", body = null, paid = false,
   }
 }
 
-const dirtyFormSnapshots = new WeakMap();
+const autoSaveStates = new WeakMap();
 
-function syncDirtyForm(form) {
-  const submit = form.querySelector("[data-dirty-submit]");
-  if (!submit) return;
-  submit.hidden = JSON.stringify(jsonFromForm(form)) === dirtyFormSnapshots.get(form);
+function updatePresetStatus(form, voice) {
+  const preset = voice?.delivery_presets?.find((item) => item.delivery === form.dataset.delivery);
+  const status = form.closest("[data-delivery-preset]")?.querySelector("[data-preset-status]");
+  if (!preset || !status) return;
+  status.textContent = preset.status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  status.classList.toggle("status-approved", preset.status === "approved");
 }
 
-for (const form of document.querySelectorAll("[data-dirty-form]")) {
-  dirtyFormSnapshots.set(form, JSON.stringify(jsonFromForm(form)));
-  for (const field of form.querySelectorAll("input, select, textarea")) {
-    field.addEventListener("input", () => syncDirtyForm(form));
-    field.addEventListener("change", () => syncDirtyForm(form));
+function queueAutoSave(form, delay = 500) {
+  const state = autoSaveStates.get(form);
+  if (!state) return;
+  if (state.timer) window.clearTimeout(state.timer);
+  state.timer = window.setTimeout(() => saveAutoForm(form), delay);
+}
+
+async function saveAutoForm(form) {
+  const state = autoSaveStates.get(form);
+  if (!state) return;
+  state.timer = null;
+  const requestBody = jsonFromForm(form);
+  const serialized = JSON.stringify(requestBody);
+  if (serialized === state.saved) return;
+  if (state.saving) {
+    state.queued = true;
+    return;
   }
-  syncDirtyForm(form);
+  state.saving = true;
+  let succeeded = false;
+  try {
+    const payload = await runAlphaAction({
+      url: form.dataset.url,
+      method: form.dataset.method || "PATCH",
+      body: requestBody,
+    });
+    if (!payload) return;
+    state.saved = serialized;
+    succeeded = true;
+    updatePresetStatus(form, payload.voice);
+    showAlphaMessage(payload.message || "Preset saved.", "complete");
+  } catch (error) {
+    showAlphaMessage(error.message, "failed");
+  } finally {
+    state.saving = false;
+    if (succeeded && (state.queued || JSON.stringify(jsonFromForm(form)) !== state.saved)) {
+      state.queued = false;
+      queueAutoSave(form, 0);
+    } else if (!succeeded) {
+      state.queued = false;
+    }
+  }
+}
+
+for (const form of document.querySelectorAll("[data-auto-save-form]")) {
+  autoSaveStates.set(form, {
+    saved: JSON.stringify(jsonFromForm(form)),
+    saving: false,
+    queued: false,
+    timer: null,
+  });
+  form.addEventListener("submit", (event) => event.preventDefault());
+  for (const field of form.querySelectorAll("input, select, textarea")) {
+    field.addEventListener("input", () => queueAutoSave(form));
+    field.addEventListener("change", () => queueAutoSave(form, 0));
+  }
 }
 
 for (const form of document.querySelectorAll("[data-json-form]")) {
   if (form.dataset.deliveryGeneration !== undefined) continue;
+  if (form.dataset.autoSaveForm !== undefined) continue;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const conditionalSubmit = form.querySelector("[data-dirty-submit]");
-    if (conditionalSubmit?.hidden) return;
     const requestBody = jsonFromForm(form);
-    if (conditionalSubmit) conditionalSubmit.disabled = true;
     try {
       const payload = await runAlphaAction({
         url: form.dataset.url,
@@ -286,16 +335,9 @@ for (const form of document.querySelectorAll("[data-json-form]")) {
       });
       if (!payload) return;
       showAlphaMessage(payload.message || "Saved.", "complete");
-      if (form.dataset.dirtyForm !== undefined) {
-        dirtyFormSnapshots.set(form, JSON.stringify(requestBody));
-        syncDirtyForm(form);
-        return;
-      }
       window.setTimeout(() => window.location.reload(), 350);
     } catch (error) {
       showAlphaMessage(error.message, "failed");
-    } finally {
-      if (conditionalSubmit) conditionalSubmit.disabled = false;
     }
   });
 }

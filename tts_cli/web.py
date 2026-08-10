@@ -696,20 +696,20 @@ def api_update_voice(
         raise _alpha_error(error) from error
 
 
-@app.post("/api/alpha/voices/{voice_id}/versions/{version_id}/restore")
-def api_restore_voice_version(
+@app.post("/api/alpha/voices/{voice_id}/prompts/{version_id}/restore")
+def api_restore_voice_prompt(
     voice_id: str,
     version_id: int,
     _: Annotated[str, Depends(require_auth)],
     __: Annotated[None, Depends(require_action_header)],
 ) -> dict:
     try:
-        voice = alpha_store.restore_voice_version(voice_id, version_id)
+        voice = alpha_store.restore_voice_prompt(voice_id, version_id)
         return {
             "message": (
-                f"Restored the selected settings as version {voice['version_number']}."
+                f"Restored the prompt as version {voice['version_number']}."
                 if voice.get("version_changed")
-                else "That version already matches the current settings."
+                else "That prompt already matches the current prompt."
             ),
             "voice": voice,
         }
@@ -978,25 +978,6 @@ def api_generate_voice_id_candidate_audition(
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-@app.post("/api/alpha/voice-id-candidates/{candidate_id}/default")
-def api_set_default_voice_id_candidate(
-    candidate_id: str,
-    _: Annotated[str, Depends(require_auth)],
-    __: Annotated[None, Depends(require_action_header)],
-) -> dict:
-    try:
-        voice = alpha_store.set_default_voice_id_candidate(candidate_id)
-        candidate = alpha_store.get_voice_id_candidate(candidate_id)
-        return {
-            "message": (
-                f"Voice ID candidate #{candidate['generation_number']} is now the profile default."
-            ),
-            "voice": voice,
-        }
-    except AlphaError as error:
-        raise _alpha_error(error, 404) from error
-
-
 @app.delete("/api/alpha/voice-id-candidates/{candidate_id}")
 def api_delete_voice_id_candidate(
     candidate_id: str,
@@ -1009,10 +990,8 @@ def api_delete_voice_id_candidate(
         elevenlabs.delete_voice(candidate["provider_voice_id"])
         voice = alpha_store.delete_voice_id_candidate(candidate_id)
         affected = int(voice.pop("affected_delivery_count", 0))
-        default_deleted = bool(voice.pop("deleted_default_candidate", False))
+        voice.pop("cleared_legacy_voice_link", False)
         consequences = []
-        if default_deleted:
-            consequences.append("disconnected it as the profile default")
         if affected:
             consequences.append(
                 f"cleared it from {affected} delivery preset{'s' if affected != 1 else ''}"
@@ -1173,7 +1152,7 @@ def api_activate_voice_preview(
         return {
             "message": (
                 f"Generated voice ID candidate #{candidate['generation_number']} for "
-                f"{voice['name']} and made it the profile default.{cleanup_note}"
+                f"{voice['name']}.{cleanup_note}"
             ),
             "voice": voice,
         }
@@ -1222,7 +1201,7 @@ def api_clone_voice(
             creation_method="instant_clone",
             creation_model_id="instant_voice_clone",
         )
-        updated = alpha_store.set_default_voice_id_candidate(candidate["candidate_id"])
+        updated = alpha_store.connect_voice_id_candidate(candidate["candidate_id"])
         audition_error = None
         try:
             candidate = _generate_voice_id_audition(candidate, updated)
@@ -1239,7 +1218,7 @@ def api_clone_voice(
         return {
             "message": (
                 f"Generated voice ID candidate #{candidate['generation_number']} from the "
-                f"selected clips and made it the profile default.{sample_message}"
+                f"selected clips.{sample_message}"
             ),
             "voice": updated,
             "candidate": candidate,

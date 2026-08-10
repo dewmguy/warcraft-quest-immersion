@@ -12,23 +12,23 @@
   } %}
   {% set delivery_sample_text = "The road ahead is dangerous, but our purpose remains clear. Stay close, listen carefully, and remember why we began this journey. Whatever waits beyond the pass, we will face it together and return with the truth." %}
   {% set delivery_guidance = {
-    'neutral': 'No emotional direction. Confirms that the reusable voice still sounds right in the production speech model.',
-    'angry': 'Tests whether the same voice can express anger without losing its identity or becoming distorted.',
-    'sorrowful': 'Tests a restrained sad delivery suitable for loss, regret, and somber quest moments.',
-    'joyful': 'Tests warmth and positive energy without turning the character into a different persona.',
-    'proclaiming': 'Tests a projected public-address delivery for warnings, orders, ceremonies, and declarations.'
+    'neutral': 'Natural baseline.',
+    'angry': 'Controlled anger.',
+    'sorrowful': 'Restrained grief.',
+    'joyful': 'Warm, positive energy.',
+    'proclaiming': 'Projected authority.'
   } %}
   <nav class="breadcrumbs"><a href="/alpha/voices">Voices</a><span>›</span><span>{{ voice.name }}</span></nav>
   <section class="alpha-page-heading record-heading">
-    <div><span class="alpha-kicker">{{ voice.scope | title }} voice profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} dialogue records · {{ voice.missing_dialogue_count }} missing audio</p></div>
+    <div><span class="alpha-kicker">{{ voice.scope | title }} Voice Profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching speakers · {{ voice.dialogue_count }} dialogue records · {{ voice.missing_dialogue_count }} missing audio</p></div>
     <div class="record-statuses"><span class="work-status lifecycle-status lifecycle-{{ voice.status }}" title="{{ voice.lifecycle_reason }}">Lifecycle · {{ voice.status | title }}</span>{% if voice.voice_id_candidates %}<span class="work-status status-approved">{{ voice.voice_id_candidates|length }} reusable voice ID{{ 's' if voice.voice_id_candidates|length != 1 else '' }}</span>{% else %}<a class="work-status status-needs_voice status-action" href="#provider-creation">Voice ID needed &rarr;</a>{% endif %}</div>
   </section>
 
   <div class="record-grid voice-grid">
     <section class="alpha-panel">
-      <div class="panel-heading"><div><h2>Voice definition</h2><p>Choose a creation path to show its matching provider controls below.</p></div><span>Version {{ voice.version_number }}</span></div>
+      <div class="panel-heading"><div><h2>Voice Definition</h2><p>Select a creation path.</p></div></div>
       <form data-method-controller>
-        <label><span>Creation path</span><select name="creation_method" id="creation-method">
+        <label><span>Creation Path</span><select name="creation_method" id="creation-method">
           <option value="unselected" {% if voice.creation_method == 'unselected' %}selected{% endif %}>Choose a creation path</option>
           <option value="designed" {% if voice.creation_method == 'designed' %}selected{% endif %}>Voice Design · description creates three candidates</option>
           <option value="reference_design" {% if voice.creation_method == 'reference_design' %}selected{% endif %}>Reference-guided Voice Design · description plus one required clip</option>
@@ -36,23 +36,26 @@
           {% if voice.creation_method not in ['unselected','designed','reference_design','instant_clone'] %}<option value="{{ voice.creation_method }}" selected>Imported legacy method · {{ voice.creation_method | replace('_',' ') }}</option>{% endif %}
         </select></label>
         <div class="method-explanation" data-method-copy>
-          <p data-method="unselected">Choose how this reusable voice will be created. Reference clips remain available regardless of this choice.</p>
-          <p data-method="designed">ElevenLabs uses the reviewed description and sample script to create three previews. Selecting one creates the reusable provider voice.</p>
-          <p data-method="reference_design">The v3 design model balances the reviewed description against one required reference clip, then returns three previews.</p>
-          <p data-method="instant_clone">ElevenLabs creates the reusable voice from clean, single-speaker reference material. The audio determines how the clone sounds; a shortened copy of the stored context is attached only as provider metadata.</p>
+          <p data-method="unselected">Choose a creation path.</p>
+          <p data-method="designed">Generate three candidates from a written prompt.</p>
+          <p data-method="reference_design">Generate three candidates from a prompt and one reference clip.</p>
+          <p data-method="instant_clone">Create a reusable voice ID from selected clips.</p>
         </div>
-        <div class="delivery-sample-script voice-id-audition-script"><span>Fixed voice ID audition script</span><blockquote>{{ voice_id_audition_text }}</blockquote></div>
+        <div class="delivery-sample-script voice-id-audition-script"><span>Audition Script</span><blockquote>{{ voice_id_audition_text }}</blockquote></div>
       </form>
     </section>
 
     <section class="alpha-panel">
-      <div class="panel-heading"><div><h2>Reference library</h2><p>Always available for review, preview, reference-guided design, or cloning.</p></div><span>{{ voice.clips|length }} clips</span></div>
-      <form data-upload-form data-url="/api/alpha/voices/{{ voice.voice_id }}/reference-clips">
-        <label><span>Audio files</span><input type="file" name="file" accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac" multiple required><small>Select up to 20 MP3, WAV, M4A, OGG, or FLAC files. Files are preserved exactly as uploaded; ElevenLabs recommends clean single-speaker MP3 at 192 kbps or higher and accepts the other listed formats.</small></label>
-        <label><span>Shared provenance</span><textarea name="provenance" rows="3" placeholder="Source, speaker, scene, and why these clips are representative" required></textarea><small>This note is applied to every file in the selected batch.</small></label>
-        <button type="submit"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><span>Store selected clips</span></button>
-      </form>
-      <div class="reference-library-separator" role="separator"><span>Stored reference clips</span></div>
+      <div class="panel-heading"><div><h2>Reference Library</h2><p>Source clips for voice creation.</p></div><span>{{ voice.clips|length }} clips</span></div>
+      <details class="reference-upload">
+        <summary><span><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i> Add Reference Clips</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+        <form data-upload-form data-url="/api/alpha/voices/{{ voice.voice_id }}/reference-clips">
+          <label><span>Audio Files</span><input type="file" name="file" accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac" multiple required><small>Select up to 20 MP3, WAV, M4A, OGG, or FLAC files. Use clean, single-speaker recordings; MP3 should be 192 kbps or higher.</small></label>
+          <label><span>Description</span><textarea name="provenance" rows="3" placeholder="Source, speaker, scene, and why these clips are representative" required></textarea><small>Applied to every file in this batch.</small></label>
+          <button type="submit"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><span>Store Clips</span></button>
+        </form>
+      </details>
+      <div class="reference-library-separator" role="separator"><span>Stored Reference Clips</span></div>
       <div class="reference-list">{% for clip in voice.clips %}
         <details class="reference-clip" data-audio-disclosure="reference-library" data-clip-name="{{ clip.original_name }}" data-duration="{{ clip.duration_seconds or 0 }}">
           <summary>
@@ -68,7 +71,7 @@
               <audio hidden preload="metadata" src="/api/alpha/reference-clips/{{ clip.clip_id }}/audio"></audio>
             </div>
             <button type="button" class="secondary icon-button reference-delete" title="Delete {{ clip.original_name }}" aria-label="Delete {{ clip.original_name }}" data-action data-confirm-required data-confirm="Delete {{ clip.original_name }} from the local reference library? This does not affect an already-created ElevenLabs voice." data-url="/api/alpha/reference-clips/{{ clip.clip_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-            <div class="reference-clip-provenance"><span><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Provenance</span><p>{{ clip.provenance }}</p></div>
+            <div class="reference-clip-provenance"><span><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Description</span><p>{{ clip.provenance }}</p></div>
           </div>
         </details>
       {% else %}<p class="empty-copy">No reference clips stored.</p>{% endfor %}</div>
@@ -78,66 +81,67 @@
   <section class="alpha-panel creation-workspace" id="provider-creation">
     <div class="creation-workspace-grid">
       <div class="creation-controls">
-        <div class="panel-heading"><div><span class="panel-step">Provider creation</span><h2>Generate a reusable voice ID</h2><p>Use any creation path to add a durable ElevenLabs voice ID. Every saved ID receives the same audition script so you can compare methods fairly.</p></div></div>
-        <div data-method-panel="unselected" {% if voice.creation_method != 'unselected' %}hidden{% endif %}><p class="empty-copy">Choose a creation path above. Only the controls required by that method will appear here.</p></div>
+        <div class="panel-heading"><div><span class="panel-step">Provider Creation</span><h2>Generate a Reusable Voice ID</h2><p>Create and retain ElevenLabs voice IDs.</p></div></div>
+        <div data-method-panel="unselected" {% if voice.creation_method != 'unselected' %}hidden{% endif %}><p class="empty-copy">Choose a creation path above.</p></div>
         <form data-json-form data-paid data-provider-operation="Generating three Voice Design previews" data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="designed" {% if voice.creation_method != 'designed' %}hidden{% endif %}>
           <input type="hidden" name="creation_method" value="designed">
           <input type="hidden" name="preview_text" value="{{ voice_id_audition_text }}" data-metered-text>
-          <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="5000" required>{{ voice.description }}</textarea><small>This exact prompt will be sent to Voice Design and saved with the generated previews.</small></label>
+          <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="5000" required>{{ voice.description }}</textarea></label>
+          {% if voice.prompt_versions %}<details class="prompt-history"><summary><span>Prompt History</span><small>{{ voice.prompt_versions|length }} prior</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><ol>{% for version in voice.prompt_versions %}<li><p>{{ version.description }}</p><div><small>Version {{ version.version_number }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</small><button type="button" data-action data-url="/api/alpha/voices/{{ voice.voice_id }}/prompts/{{ version.version_id }}/restore" data-method="POST">Restore</button></div></li>{% endfor %}</ol></details>{% endif %}
           <div class="metering-preview"><span><strong data-estimate-characters>--</strong> input characters</span><span><strong data-estimate-credits>--</strong> estimated credits</span><span><strong data-estimate-duration>--</strong> per preview</span><small>Three previews are returned; audition text is charged once.</small></div>
           <button type="submit" {% if not provider_configured %}disabled{% endif %}>Generate three previews</button>
         </form>
         <form data-json-form data-paid data-provider-operation="Generating three reference-guided previews" data-metering="voice-design" data-url="/api/alpha/voices/{{ voice.voice_id }}/design" data-method="POST" data-method-panel="reference_design" {% if voice.creation_method != 'reference_design' %}hidden{% endif %}>
           <input type="hidden" name="creation_method" value="reference_design">
           <input type="hidden" name="preview_text" value="{{ voice_id_audition_text }}" data-metered-text>
-          <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="5000" required>{{ voice.description }}</textarea><small>This exact prompt will be sent to Voice Design and saved with the generated previews.</small></label>
-          <label><span>Required reference clip</span><select name="reference_clip_id" required><option value="">Select one clip</option>{% for clip in voice.clips %}<option value="{{ clip.clip_id }}">{{ clip.original_name }}</option>{% endfor %}</select></label>
-          <label><span>Prompt influence <output data-range-output>0.5</output></span><input name="prompt_strength" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+          <label><span>Voice Design Prompt Context</span><textarea name="description" rows="9" minlength="20" maxlength="5000" required>{{ voice.description }}</textarea></label>
+          {% if voice.prompt_versions %}<details class="prompt-history"><summary><span>Prompt History</span><small>{{ voice.prompt_versions|length }} prior</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><ol>{% for version in voice.prompt_versions %}<li><p>{{ version.description }}</p><div><small>Version {{ version.version_number }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</small><button type="button" data-action data-url="/api/alpha/voices/{{ voice.voice_id }}/prompts/{{ version.version_id }}/restore" data-method="POST">Restore</button></div></li>{% endfor %}</ol></details>{% endif %}
+          <label><span>Required Reference Clip</span><select name="reference_clip_id" required><option value="">Select one clip</option>{% for clip in voice.clips %}<option value="{{ clip.clip_id }}">{{ clip.original_name }}</option>{% endfor %}</select></label>
+          <label><span>Prompt Influence <output data-range-output>0.5</output></span><input name="prompt_strength" type="range" min="0" max="1" step="0.05" value="0.5"></label>
           <div class="metering-preview"><span><strong data-estimate-characters>--</strong> input characters</span><span><strong data-estimate-credits>--</strong> estimated credits</span><span><strong data-estimate-duration>--</strong> per preview</span><small>Three previews are returned; audition text is charged once.</small></div>
           <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Generate three previews</button>
         </form>
         <form data-json-form data-paid data-provider-operation="Generating an instant-clone voice ID and audition" data-url="/api/alpha/voices/{{ voice.voice_id }}/clone" data-method="POST" data-method-panel="instant_clone" {% if voice.creation_method != 'instant_clone' %}hidden{% endif %}>
           <input type="hidden" name="creation_method" value="instant_clone">
-          <fieldset><legend>Reference clips to clone</legend>{% for clip in voice.clips %}<label class="check-row"><input type="checkbox" name="clip_ids" value="{{ clip.clip_id }}" data-array><span>{{ clip.original_name }} · {{ "%.2f"|format(clip.duration_seconds or 0) }} sec</span></label>{% else %}<p class="empty-copy">Upload approximately 1–2 minutes of clean, consistent, single-speaker audio first.</p>{% endfor %}</fieldset>
-          <p class="form-help">The selected audio determines the cloned voice. A shortened copy of the stored context is attached only as provider metadata. After ElevenLabs creates the ID, the fixed audition is generated automatically.</p>
-          <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Generate voice ID from clips</button>
+          <fieldset><legend>Reference Clips to Clone</legend>{% for clip in voice.clips %}<label class="check-row"><input type="checkbox" name="clip_ids" value="{{ clip.clip_id }}" data-array><span>{{ clip.original_name }} · {{ "%.2f"|format(clip.duration_seconds or 0) }} sec</span></label>{% else %}<p class="empty-copy">Upload 1–2 minutes of clean, consistent, single-speaker audio first.</p>{% endfor %}</fieldset>
+          <p class="form-help">The selected clips define the clone. An audition is generated automatically.</p>
+          <button type="submit" {% if not provider_configured or not voice.clips %}disabled{% endif %}>Generate Voice ID</button>
         </form>
-        {% if voice.previews %}<div class="design-preview-stage">
-          <div class="candidate-heading"><div><span class="panel-step">Temporary output</span><h3>Voice Design previews</h3></div><span>{{ voice.previews|length }}</span></div>
-          <p class="form-help">These are auditions only. Generate a reusable voice ID from the preview you want to retain.</p>
-          <div class="candidate-list design-preview-list">{% for preview in voice.previews %}<article>
-            <div class="reference-player candidate-player" data-compact-audio data-audio-name="Voice Design preview {{ loop.index }}" data-duration="{{ preview.duration_seconds or 0 }}"><button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play Voice Design preview {{ loop.index }}" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button><input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ preview.duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for Voice Design preview {{ loop.index }}"><span class="reference-player-time" data-audio-time>0:00 / 0:00</span><audio hidden preload="metadata" src="/api/alpha/voice-previews/{{ preview.preview_id }}/audio"></audio></div>
-            <div class="candidate-meta"><strong>Preview {{ loop.index }}</strong><span>{{ "%.2f"|format(preview.duration_seconds or 0) }} sec</span><small>{{ candidate_method_labels.get(preview.creation_method, preview.creation_method | replace('_', ' ') | title) }} · {{ preview.model_id }}</small></div>
-            <div class="candidate-actions"><button type="button" data-action data-paid data-provider-operation="Generating a reusable voice ID" data-url="/api/alpha/voice-previews/{{ preview.preview_id }}/activate" data-method="POST" {% if not provider_configured %}disabled{% endif %}>Generate voice ID</button><button type="button" class="secondary icon-button candidate-delete" title="Delete Voice Design preview {{ loop.index }}" aria-label="Delete Voice Design preview {{ loop.index }}" data-action data-confirm-required data-confirm="Permanently delete this temporary Voice Design preview from local storage?" data-url="/api/alpha/voice-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div>
-          </article>{% endfor %}</div>
-        </div>{% endif %}
         {% if not provider_configured %}<aside class="inline-warning">ElevenLabs is not configured. Provider creation remains disabled and no request can be sent.</aside>{% endif %}
       </div>
       <aside class="creation-candidates" aria-labelledby="voice-candidates-heading">
-        <div class="candidate-heading"><div><span class="panel-step">Reusable outputs</span><h3 id="voice-candidates-heading">Voice ID candidates</h3></div><span>{{ voice.voice_id_candidates|length }}</span></div>
+        <div class="candidate-heading"><div><span class="panel-step">Reusable Outputs</span><h3 id="voice-candidates-heading">Voice ID Candidates</h3></div><span>{{ voice.voice_id_candidates|length }}</span></div>
         <div class="candidate-list">
-          {% for candidate in voice.voice_id_candidates %}<article class="voice-id-candidate{% if candidate.is_default %} candidate-selected{% endif %}">
+          {% for candidate in voice.voice_id_candidates %}<article class="voice-id-candidate">
             {% if candidate.sample_storage_path %}<div class="reference-player candidate-player" data-compact-audio data-audio-name="Voice ID candidate {{ candidate.generation_number }} audition" data-duration="{{ candidate.sample_duration_seconds or 0 }}"><button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play voice ID candidate {{ candidate.generation_number }} audition" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button><input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ candidate.sample_duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for voice ID candidate {{ candidate.generation_number }} audition"><span class="reference-player-time" data-audio-time>0:00 / 0:00</span><audio hidden preload="metadata" src="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}/audio"></audio></div>{% else %}<div class="candidate-sample-missing"><i class="fa-solid fa-waveform-lines" aria-hidden="true"></i><span>Audition sample missing</span><button type="button" data-action data-paid data-provider-operation="Generating voice ID audition" data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}/audition" data-method="POST" {% if not provider_configured %}disabled{% endif %}>Generate audition</button></div>{% endif %}
-            <div class="candidate-meta"><strong>{% if candidate.is_default %}<i class="fa-solid fa-circle-check" aria-hidden="true"></i> {% endif %}Voice ID candidate #{{ candidate.generation_number }}</strong><span>{{ 'Profile default' if candidate.is_default else 'Available' }}</span><small>{{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | title) }} · {{ candidate.creation_model_id }}</small><code>{{ candidate.provider_voice_id }}</code>{% if candidate.sample_model_id %}<small>Audition · {{ candidate.sample_model_id }}{% if candidate.subscription.get('request_character_cost') is not none %} · {{ candidate.subscription.request_character_cost }} credits{% endif %}</small>{% endif %}</div>
-            <div class="candidate-actions">{% if not candidate.is_default %}<button type="button" data-action data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}/default" data-method="POST">Use as default</button>{% endif %}<button type="button" class="secondary icon-button candidate-delete" title="Delete voice ID candidate {{ candidate.generation_number }}" aria-label="Delete voice ID candidate {{ candidate.generation_number }}" data-action data-confirm-required data-confirm="Delete voice ID candidate #{{ candidate.generation_number }} from ElevenLabs and local storage? Any delivery preset using it will be disconnected and returned to review. Existing API usage cannot be refunded." data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div>
-          </article>{% else %}<p class="empty-copy">Generated reusable voice IDs will be tracked here, regardless of creation path.</p>{% endfor %}</div>
+            <div class="candidate-meta"><strong>Voice ID Candidate #{{ candidate.generation_number }}</strong><span>Reusable</span><small>{{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | title) }} · {{ candidate.creation_model_id }}</small><code>{{ candidate.provider_voice_id }}</code>{% if candidate.sample_model_id %}<small>Audition · {{ candidate.sample_model_id }}{% if candidate.subscription.get('request_character_cost') is not none %} · {{ candidate.subscription.request_character_cost }} credits{% endif %}</small>{% endif %}</div>
+            <div class="candidate-actions"><button type="button" class="secondary icon-button candidate-delete" title="Delete voice ID candidate {{ candidate.generation_number }}" aria-label="Delete voice ID candidate {{ candidate.generation_number }}" data-action data-confirm-required data-confirm="Delete voice ID candidate #{{ candidate.generation_number }} from ElevenLabs and local storage? Any delivery preset using it will be disconnected and returned to review. Existing API usage cannot be refunded." data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div>
+          </article>{% else %}<p class="empty-copy">No reusable voice IDs yet.</p>{% endfor %}</div>
+        {% if voice.previews %}<div class="incoming-candidates">
+          <div class="candidate-heading"><div><span class="panel-step">Incoming</span><h3>Incoming Voice Candidates</h3></div><span>{{ voice.previews|length }}</span></div>
+          <div class="candidate-list design-preview-list">{% for preview in voice.previews %}<article>
+            <div class="reference-player candidate-player" data-compact-audio data-audio-name="Incoming voice candidate {{ loop.index }}" data-duration="{{ preview.duration_seconds or 0 }}"><button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play incoming voice candidate {{ loop.index }}" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button><input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ preview.duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for incoming voice candidate {{ loop.index }}"><span class="reference-player-time" data-audio-time>0:00 / 0:00</span><audio hidden preload="metadata" src="/api/alpha/voice-previews/{{ preview.preview_id }}/audio"></audio></div>
+            <div class="candidate-meta"><strong>Incoming Candidate {{ loop.index }}</strong><span>{{ "%.2f"|format(preview.duration_seconds or 0) }} sec</span><small>{{ candidate_method_labels.get(preview.creation_method, preview.creation_method | replace('_', ' ') | title) }} · {{ preview.model_id }}</small></div>
+            <div class="candidate-actions"><button type="button" data-action data-paid data-provider-operation="Generating a reusable voice ID" data-url="/api/alpha/voice-previews/{{ preview.preview_id }}/activate" data-method="POST" {% if not provider_configured %}disabled{% endif %}>Generate Voice ID</button><button type="button" class="secondary icon-button candidate-delete" title="Delete incoming voice candidate {{ loop.index }}" aria-label="Delete incoming voice candidate {{ loop.index }}" data-action data-confirm-required data-confirm="Permanently delete this incoming Voice Design candidate from local storage?" data-url="/api/alpha/voice-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div>
+          </article>{% endfor %}</div>
+        </div>{% endif %}
       </aside>
     </div>
   </section>
 
   <section class="alpha-panel">
-    <div class="panel-heading"><div><span class="panel-step">Race / gender delivery</span><h2>Emotional delivery presets</h2><p>Shape how this voice performs common emotions. Adjust the acting direction, generate comparable takes from the same script, and approve the result that sounds right.</p></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div>
+    <div class="panel-heading"><div><span class="panel-step">Race / Gender Delivery</span><h2>Emotional Delivery Presets</h2><p>Define and test emotional performances.</p></div><span>{{ voice.approved_delivery_count }} / 5 approved</span></div>
     <div class="delivery-preset-explainer">
-      <div class="delivery-sample-script"><span>Fixed sample script</span><blockquote>{{ delivery_sample_text }}</blockquote></div>
+      <div class="delivery-sample-script"><span>Sample Script</span><blockquote>{{ delivery_sample_text }}</blockquote></div>
       <div class="delivery-preset-batch-actions">
         <button type="button" data-delivery-batch data-paid data-provider-operation="Generating all delivery samples" {% if not provider_configured or not voice.voice_id_candidates %}disabled{% endif %}>Generate all samples</button>
       </div>
     </div>
-    <div class="delivery-preset-grid">{% for preset in voice.delivery_presets %}<article class="delivery-preset-card" id="delivery-{{ preset.delivery }}">
-      <header class="delivery-preset-heading"><div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}">{{ preset.status | replace('_',' ') | title }}</span></div><p>{{ delivery_guidance[preset.delivery] }}</p></header>
-      <form class="delivery-preset-settings" data-json-form data-dirty-form data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}" data-method="PATCH">
-        <span class="delivery-preset-section-label">Preset settings</span>
-        <label><span>Reusable voice ID</span><select name="provider_voice_id" {% if not voice.voice_id_candidates %}disabled{% endif %}>
+    <div class="delivery-preset-grid">{% for preset in voice.delivery_presets %}<article class="delivery-preset-card" id="delivery-{{ preset.delivery }}" data-delivery-preset="{{ preset.delivery }}">
+      <header class="delivery-preset-heading"><div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}" data-preset-status>{{ preset.status | replace('_',' ') | title }}</span></div><p>{{ delivery_guidance[preset.delivery] }}</p></header>
+      <form class="delivery-preset-settings" data-json-form data-auto-save-form data-delivery="{{ preset.delivery }}" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}" data-method="PATCH">
+        <span class="delivery-preset-section-label">Preset Settings</span>
+        <label><span>Reusable Voice ID</span><select name="provider_voice_id" {% if not voice.voice_id_candidates %}disabled{% endif %}>
           {% for candidate in voice.voice_id_candidates %}<option value="{{ candidate.provider_voice_id }}" {% if candidate.provider_voice_id == preset.effective_provider_voice_id %}selected{% endif %}>#{{ candidate.generation_number }} · {{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | title) }} · {{ candidate.provider_voice_id }}</option>{% else %}<option value="">Generate a voice ID first</option>{% endfor %}
         </select><small>Each emotional preset can use a different retained voice ID.</small></label>
         <label><span>Voice Actor Notes (Optional)</span><input name="prompt_tag" value="{{ preset.prompt_tag }}" maxlength="80" placeholder="{{ 'Baseline delivery needs no additional direction' if preset.delivery == 'neutral' else 'Describe the intended delivery' }}"></label>
@@ -146,7 +150,6 @@
           <option value="0.5" {% if preset.stability == 0.5 %}selected{% endif %}>Natural · balanced and closest to the voice</option>
           <option value="1" {% if preset.stability == 1 %}selected{% endif %}>Robust · consistent, least responsive to direction</option>
         </select></label>
-        <button type="submit" data-dirty-submit hidden><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>Save</span></button>
       </form>
       <div class="delivery-preset-review">
       <span class="delivery-preset-section-label">Sample</span>
@@ -155,7 +158,7 @@
         <div class="metering-preview compact"><span><strong data-estimate-characters>--</strong> chars</span><span><strong data-estimate-credits>--</strong> credits</span><span><strong data-estimate-duration>--</strong></span></div>
         <button type="submit" {% if not provider_configured or not preset.effective_provider_voice_id %}disabled{% endif %}>Generate sample</button>
       </form>
-      {% if preset.previews %}<div class="reference-library-separator delivery-sample-separator" role="separator"><span>Stored samples</span></div>{% endif %}
+      {% if preset.previews %}<div class="reference-library-separator delivery-sample-separator" role="separator"><span>Stored Samples</span></div>{% endif %}
       <div class="delivery-preview-list">{% for preview in preset.previews %}<details class="delivery-preview" data-audio-disclosure="delivery-samples">
         <summary>
           <span class="delivery-preview-icon" aria-hidden="true"><i class="fa-solid {{ 'fa-circle-check' if preview.status == 'approved' else 'fa-waveform-lines' }}"></i></span>
@@ -179,11 +182,7 @@
       </details>{% endfor %}</div>
       </div>
     </article>{% endfor %}</div>
-    <p class="form-help">Approving a sample approves these delivery settings for future dialogue. It does not create another reusable voice.</p>
   </section>
 
-  <div class="record-grid">
-    <section class="alpha-panel"><div class="panel-heading"><div><h2>Assigned speakers</h2></div><span>{{ voice.speakers|length }}</span></div><ul class="link-list">{% for speaker in voice.speakers %}<li><a href="/alpha/speakers/{{ speaker.entity_type }}/{{ speaker.entity_id }}">{{ speaker.name }}</a></li>{% else %}<li>No speakers directly assigned.</li>{% endfor %}</ul></section>
-    <section class="alpha-panel"><div class="panel-heading"><div><h2>Version history</h2><p>Each version lists its settings delta and can be restored without changing the automatic lifecycle.</p></div><span>{{ voice.versions|length }}</span></div><ol class="version-list detailed-versions">{% for version in voice.versions %}<li><div><strong>Version {{ version.version_number }}{% if version.is_current %} · current{% endif %}</strong><span>{{ version.creation_method | replace('_',' ') }} · {{ version.created_at[:19] | replace('T',' ') }} UTC</span>{% if version.delta %}<small>Changed: {{ version.delta | join(', ') }}</small>{% else %}<small>Initial definition</small>{% endif %}</div>{% if not version.is_current %}<button type="button" data-action data-url="/api/alpha/voices/{{ voice.voice_id }}/versions/{{ version.version_id }}/restore" data-method="POST">Restore</button>{% endif %}</li>{% endfor %}</ol></section>
-  </div>
+  <section class="alpha-panel"><div class="panel-heading"><div><h2>Assigned Speakers</h2></div><span>{{ voice.speakers|length }}</span></div><ul class="link-list">{% for speaker in voice.speakers %}<li><a href="/alpha/speakers/{{ speaker.entity_type }}/{{ speaker.entity_id }}">{{ speaker.name }}</a></li>{% else %}<li>No speakers directly assigned.</li>{% endfor %}</ul></section>
 {% endblock %}
