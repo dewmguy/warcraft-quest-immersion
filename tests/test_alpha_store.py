@@ -20,7 +20,7 @@ def _first_dialogue(store: AlphaStore) -> dict:
     return store.list_dialogue(page_size=10)["rows"][0]
 
 
-def test_initialize_adds_candidate_method_to_existing_alpha_database(tmp_path: Path):
+def test_initialize_adds_new_columns_to_existing_alpha_database(tmp_path: Path):
     database = tmp_path / "legacy.sqlite3"
     with sqlite3.connect(database) as connection:
         connection.execute(
@@ -30,16 +30,41 @@ def test_initialize_adds_candidate_method_to_existing_alpha_database(tmp_path: P
             "model_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'candidate', "
             "created_at TEXT NOT NULL)"
         )
+        connection.execute(
+            "CREATE TABLE voice_delivery_presets (voice_id TEXT NOT NULL, delivery TEXT NOT NULL, "
+            "provider_voice_id TEXT NOT NULL DEFAULT '', prompt_tag TEXT NOT NULL DEFAULT '', "
+            "stability REAL NOT NULL DEFAULT 0.5, status TEXT NOT NULL DEFAULT 'not_tested', "
+            "notes TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL, "
+            "PRIMARY KEY(voice_id, delivery))"
+        )
+        connection.execute(
+            "CREATE TABLE voice_delivery_previews (preview_id TEXT PRIMARY KEY, "
+            "voice_id TEXT NOT NULL, delivery TEXT NOT NULL, storage_path TEXT NOT NULL, "
+            "sha256 TEXT NOT NULL, duration_seconds REAL NOT NULL, sample_text TEXT NOT NULL, "
+            "request_json TEXT NOT NULL, provider_request_id TEXT, "
+            "subscription_json TEXT NOT NULL DEFAULT '{}', "
+            "status TEXT NOT NULL DEFAULT 'candidate', created_at TEXT NOT NULL, reviewed_at TEXT)"
+        )
 
     legacy_store = AlphaStore(database, tmp_path / "storage")
     legacy_store.initialize()
     with legacy_store.connect() as connection:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(voice_previews)")}
         voice_columns = {row["name"] for row in connection.execute("PRAGMA table_info(voices)")}
+        preset_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(voice_delivery_presets)")
+        }
+        delivery_preview_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(voice_delivery_previews)")
+        }
 
     assert "creation_method" in columns
     assert "generation_number" in columns
     assert "candidate_sequence" in voice_columns
+    assert "sample_sequence" in preset_columns
+    assert "generation_number" in delivery_preview_columns
 
 
 def test_initialize_backfills_current_provider_voice_into_candidate_registry(store: AlphaStore):
@@ -624,12 +649,14 @@ def test_delivery_progress_requires_an_approved_generated_comparison(
         provider_request_id="request-test",
         subscription={"character_count": len(request["text"])},
     )
+    assert preview["generation_number"] == 1
     assert store.delivery_preview_path(preview["preview_id"]).is_file()
     stored = store.get_voice(voice["voice_id"])["delivery_presets"][1]["previews"][0]
     assert stored["actor_notes"] == "angry"
     assert stored["performance_method"] == "creative"
     assert stored["performance_method_label"] == "Creative"
     assert stored["baseline_voice_id"] == "provider-voice-test"
+    assert stored["generation_number"] == 1
     assert store.progress()["voices"]["complete"] == 0
 
     approved = store.approve_delivery_preview(preview["preview_id"])
@@ -686,6 +713,80 @@ def test_existing_delivery_samples_recover_metadata_from_their_saved_request(
     assert stored["baseline_voice_id"] == "legacy-provider-voice"
 
 
+def test_existing_delivery_samples_receive_stable_numbers_during_migration(
+    store: AlphaStore, monkeypatch: pytest.MonkeyPatch
+):
+    voice_id = "baseline--bloodelf-female"
+    voice = store.get_voice(voice_id)
+    store.update_voice(
+        voice_id,
+        {
+            "description": voice["description"],
+            "creation_method": "external",
+            "provider_voice_id": "provider-voice-test",
+        },
+    )
+    request = store.delivery_preview_request(
+        voice_id,
+        "angry",
+        "The road ahead is dangerous, but our purpose remains clear. Stay close, listen "
+        "carefully, and remember why we began this journey.",
+    )
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.25)
+    first = store.record_delivery_preview(
+        voice_id,
+        "angry",
+        request,
+        content=b"legacy-first",
+        provider_request_id="legacy-first",
+        subscription={},
+    )
+    second = store.record_delivery_preview(
+        voice_id,
+        "angry",
+        request,
+        content=b"legacy-second",
+        provider_request_id="legacy-second",
+        subscription={},
+    )
+    with store.connect() as connection:
+        connection.execute("DROP INDEX delivery_sample_generation_number")
+        connection.execute(
+            "UPDATE voice_delivery_previews SET created_at='2026-01-01T00:00:01+00:00', "
+            "generation_number=0 WHERE preview_id=?",
+            (first["preview_id"],),
+        )
+        connection.execute(
+            "UPDATE voice_delivery_previews SET created_at='2026-01-01T00:00:02+00:00', "
+            "generation_number=0 WHERE preview_id=?",
+            (second["preview_id"],),
+        )
+        connection.execute(
+            "UPDATE voice_delivery_presets SET sample_sequence=0 "
+            "WHERE voice_id=? AND delivery='angry'",
+            (voice_id,),
+        )
+
+    store.initialize()
+
+    angry = next(
+        item for item in store.get_voice(voice_id)["delivery_presets"] if item["delivery"] == "angry"
+    )
+    assert [
+        (preview["preview_id"], preview["generation_number"]) for preview in angry["previews"]
+    ] == [(second["preview_id"], 2), (first["preview_id"], 1)]
+    store.delete_delivery_preview(second["preview_id"])
+    third = store.record_delivery_preview(
+        voice_id,
+        "angry",
+        request,
+        content=b"post-migration-third",
+        provider_request_id="post-migration-third",
+        subscription={},
+    )
+    assert third["generation_number"] == 3
+
+
 def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
     store: AlphaStore, monkeypatch: pytest.MonkeyPatch
 ):
@@ -722,6 +823,8 @@ def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
         provider_request_id="request-second",
         subscription={},
     )
+    assert first["generation_number"] == 1
+    assert second["generation_number"] == 2
     first_path = store.delivery_preview_path(first["preview_id"])
     second_path = store.delivery_preview_path(second["preview_id"])
 
@@ -729,6 +832,7 @@ def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
     angry = next(item for item in with_candidate["delivery_presets"] if item["delivery"] == "angry")
     assert angry["status"] == "previewed"
     assert [item["preview_id"] for item in angry["previews"]] == [second["preview_id"]]
+    assert angry["previews"][0]["generation_number"] == 2
     assert not first_path.exists()
 
     without_previews = store.delete_delivery_preview(second["preview_id"])
@@ -738,6 +842,22 @@ def test_delivery_comparisons_can_be_deleted_and_recalculate_preset_status(
     assert angry["status"] == "not_tested"
     assert angry["previews"] == []
     assert not second_path.exists()
+
+    third = store.record_delivery_preview(
+        voice_id,
+        "angry",
+        request,
+        content=b"third-delivery-audio",
+        provider_request_id="request-third",
+        subscription={},
+    )
+    assert third["generation_number"] == 3
+    after_third_delete = store.delete_delivery_preview(third["preview_id"])
+    angry = next(
+        item for item in after_third_delete["delivery_presets"] if item["delivery"] == "angry"
+    )
+    assert angry["status"] == "not_tested"
+    assert angry["previews"] == []
     with pytest.raises(AlphaError, match="Delivery preview was not found"):
         store.delete_delivery_preview(second["preview_id"])
 

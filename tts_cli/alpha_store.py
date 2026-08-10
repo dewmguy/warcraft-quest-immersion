@@ -397,6 +397,7 @@ class AlphaStore:
                     voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
                     delivery TEXT NOT NULL,
                     provider_voice_id TEXT NOT NULL DEFAULT '',
+                    sample_sequence INTEGER NOT NULL DEFAULT 0,
                     prompt_tag TEXT NOT NULL DEFAULT '',
                     stability REAL NOT NULL DEFAULT 0.5,
                     status TEXT NOT NULL DEFAULT 'not_tested',
@@ -513,6 +514,7 @@ class AlphaStore:
                     preview_id TEXT PRIMARY KEY,
                     voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
                     delivery TEXT NOT NULL,
+                    generation_number INTEGER NOT NULL DEFAULT 0,
                     storage_path TEXT NOT NULL,
                     sha256 TEXT NOT NULL,
                     duration_seconds REAL NOT NULL,
@@ -586,6 +588,7 @@ class AlphaStore:
             self._synchronize_candidate_sequences(connection)
             self._backfill_voice_id_candidates(connection)
             self._synchronize_candidate_sequences(connection)
+            self._synchronize_delivery_sample_sequences(connection)
             self._pin_delivery_presets_to_current_voice(connection)
 
     @staticmethod
@@ -624,6 +627,20 @@ class AlphaStore:
             connection.execute(
                 "ALTER TABLE voice_delivery_presets ADD COLUMN provider_voice_id "
                 "TEXT NOT NULL DEFAULT ''"
+            )
+        if "sample_sequence" not in preset_columns:
+            connection.execute(
+                "ALTER TABLE voice_delivery_presets ADD COLUMN sample_sequence "
+                "INTEGER NOT NULL DEFAULT 0"
+            )
+        delivery_preview_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(voice_delivery_previews)")
+        }
+        if "generation_number" not in delivery_preview_columns:
+            connection.execute(
+                "ALTER TABLE voice_delivery_previews ADD COLUMN generation_number "
+                "INTEGER NOT NULL DEFAULT 0"
             )
 
     @staticmethod
@@ -693,6 +710,64 @@ class AlphaStore:
                 "UPDATE voices SET candidate_sequence=? WHERE voice_id=?",
                 (current, voice["voice_id"]),
             )
+
+    @staticmethod
+    def _reserve_delivery_sample_number(
+        connection: sqlite3.Connection, voice_id: str, delivery: str
+    ) -> int:
+        row = connection.execute(
+            "SELECT sample_sequence FROM voice_delivery_presets "
+            "WHERE voice_id=? AND delivery=?",
+            (voice_id, delivery),
+        ).fetchone()
+        if not row:
+            raise AlphaError("Delivery preset was not found.")
+        generation_number = int(row["sample_sequence"] or 0) + 1
+        connection.execute(
+            "UPDATE voice_delivery_presets SET sample_sequence=? "
+            "WHERE voice_id=? AND delivery=?",
+            (generation_number, voice_id, delivery),
+        )
+        return generation_number
+
+    @classmethod
+    def _synchronize_delivery_sample_sequences(cls, connection: sqlite3.Connection) -> None:
+        """Backfill stable per-preset sample numbers without reusing deleted numbers."""
+        presets = connection.execute(
+            "SELECT voice_id, delivery, sample_sequence FROM voice_delivery_presets"
+        ).fetchall()
+        for preset in presets:
+            current = max(
+                int(preset["sample_sequence"] or 0),
+                int(
+                    connection.execute(
+                        "SELECT COALESCE(MAX(generation_number), 0) "
+                        "FROM voice_delivery_previews WHERE voice_id=? AND delivery=?",
+                        (preset["voice_id"], preset["delivery"]),
+                    ).fetchone()[0]
+                ),
+            )
+            unnumbered = connection.execute(
+                "SELECT preview_id FROM voice_delivery_previews "
+                "WHERE voice_id=? AND delivery=? AND generation_number=0 "
+                "ORDER BY created_at, preview_id",
+                (preset["voice_id"], preset["delivery"]),
+            ).fetchall()
+            for preview in unnumbered:
+                current += 1
+                connection.execute(
+                    "UPDATE voice_delivery_previews SET generation_number=? WHERE preview_id=?",
+                    (current, preview["preview_id"]),
+                )
+            connection.execute(
+                "UPDATE voice_delivery_presets SET sample_sequence=? "
+                "WHERE voice_id=? AND delivery=?",
+                (current, preset["voice_id"], preset["delivery"]),
+            )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS delivery_sample_generation_number "
+            "ON voice_delivery_previews(voice_id, delivery, generation_number)"
+        )
 
     def _backfill_voice_id_candidates(self, connection: sqlite3.Connection) -> None:
         """Register current provider IDs created before the candidate registry existed."""
@@ -1869,15 +1944,19 @@ class AlphaStore:
             raise AlphaError("ElevenLabs returned audio whose duration could not be validated.")
         now = utc_now()
         with self.connect() as connection:
+            generation_number = self._reserve_delivery_sample_number(
+                connection, voice_id, delivery
+            )
             connection.execute(
-                "INSERT INTO voice_delivery_previews(preview_id, voice_id, delivery, storage_path, "
-                "sha256, duration_seconds, sample_text, request_json, provider_request_id, "
-                "subscription_json, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "'candidate', ?)",
+                "INSERT INTO voice_delivery_previews(preview_id, voice_id, delivery, "
+                "generation_number, storage_path, sha256, duration_seconds, sample_text, "
+                "request_json, provider_request_id, subscription_json, status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?)",
                 (
                     preview_id,
                     voice_id,
                     delivery,
+                    generation_number,
                     str(path),
                     sha256_bytes(content),
                     duration,
@@ -1893,7 +1972,11 @@ class AlphaStore:
                 "WHERE voice_id=? AND delivery=? AND status<>'approved'",
                 (now, voice_id, delivery),
             )
-        return {"preview_id": preview_id, "duration_seconds": duration}
+        return {
+            "preview_id": preview_id,
+            "duration_seconds": duration,
+            "generation_number": generation_number,
+        }
 
     def approve_delivery_preview(self, preview_id: str) -> dict[str, Any]:
         now = utc_now()
@@ -2070,7 +2153,8 @@ class AlphaStore:
                 (voice_id,),
             ).fetchall()
             delivery_previews = connection.execute(
-                "SELECT * FROM voice_delivery_previews WHERE voice_id=? ORDER BY created_at DESC",
+                "SELECT * FROM voice_delivery_previews WHERE voice_id=? "
+                "ORDER BY delivery, generation_number DESC",
                 (voice_id,),
             ).fetchall()
         payload = dict(voice)

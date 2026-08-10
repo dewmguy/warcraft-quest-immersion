@@ -406,7 +406,10 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert page.text.count('data-audio-disclosure="delivery-samples"') == 3
     assert page.text.count("<summary>") >= 3
     assert page.text.count('class="delivery-preview-chevron"') == 3
-    assert 'data-audio-name="Neutral sample 1"' in page.text
+    assert 'data-audio-name="Neutral sample #3"' in page.text
+    assert page.text.count("Neutral sample #1") >= 1
+    assert page.text.count("Neutral sample #2") >= 1
+    assert page.text.count("Neutral sample #3") >= 1
     assert (
         f'<audio hidden preload="metadata" src="/api/alpha/delivery-previews/{preview["preview_id"]}/audio">'
         in page.text
@@ -414,8 +417,8 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert f'data-url="/api/alpha/delivery-previews/{preview["preview_id"]}"' in page.text
     assert page.text.count('class="secondary icon-button delivery-preview-delete"') == 3
     assert page.text.count('class="icon-button delivery-sample-approve"') == 3
-    assert page.text.count("Approve this neutral sample?") == 3
-    assert page.text.count("Permanently delete this neutral sample") == 3
+    assert page.text.count('data-confirm="Approve neutral sample #') == 3
+    assert page.text.count('data-confirm="Permanently delete neutral sample #') == 3
     assert page.text.count("Stored Samples") == 1
     assert page.text.count('class="reference-player delivery-player"') == 3
     assert page.text.count('class="delivery-preview-metadata"') == 3

@@ -776,7 +776,12 @@ def api_generate_delivery_preview(
             provider_request_id=result.request_id,
             subscription=usage,
         )
-        return {"message": f"Generated one {delivery} sample for review.", **preview}
+        return {
+            "message": (
+                f"Generated {delivery} sample #{preview['generation_number']} for review."
+            ),
+            **preview,
+        }
     except (AlphaError, ElevenLabsError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
