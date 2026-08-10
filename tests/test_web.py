@@ -17,6 +17,16 @@ class UnconfiguredElevenLabs:
 class ConfiguredElevenLabs:
     configured = True
 
+    def text_to_speech(self, **_kwargs):
+        return SimpleNamespace(
+            content=b"voice-id-audition",
+            request_id="audition-request-test",
+            character_cost=240,
+        )
+
+    def delete_voice(self, _voice_id):
+        return {"status": "ok"}
+
     def subscription(self):
         return {
             "tier": "creator",
@@ -53,10 +63,21 @@ class DesigningElevenLabs(ConfiguredElevenLabs):
 class CloningElevenLabs(ConfiguredElevenLabs):
     def __init__(self):
         self.clone_kwargs = None
+        self.tts_kwargs = None
 
     def clone_voice(self, **kwargs):
         self.clone_kwargs = kwargs
         return {"voice_id": "provider-instant-clone"}
+
+    def text_to_speech(self, **kwargs):
+        self.tts_kwargs = kwargs
+        return super().text_to_speech(**kwargs)
+
+
+class CloningWithFailedAuditionElevenLabs(CloningElevenLabs):
+    def text_to_speech(self, **kwargs):
+        self.tts_kwargs = kwargs
+        raise web.ElevenLabsError("Audition synthesis failed after clone creation.")
 
 
 @pytest.fixture(autouse=True)
@@ -181,16 +202,21 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
 
     assert page.status_code == 200
     assert "Lifecycle · Draft" in page.text
-    assert "Automatic lifecycle" in page.text
-    assert "Draft until you" in page.text
+    assert "Automatic lifecycle" not in page.text
+    assert 'class="lifecycle-explanation"' not in page.text
+    assert 'class="provider-id-card"' not in page.text
+    assert 'class="voice-settings"' not in page.text
     assert "Voice Design Prompt Context" in page.text
     assert "Context sent to Voice Design" not in page.text
-    assert "This prompt is sent only by Voice Design" in page.text
-    assert "data-prompt-context hidden" in page.text
+    assert "This exact prompt will be sent to Voice Design" in page.text
+    assert "data-prompt-context" not in page.text
+    assert "Save changed voice settings" not in page.text
+    assert "Fixed voice ID audition script" in page.text
+    assert page.text.count(web.VOICE_ID_AUDITION_TEXT) == 3
     assert 'name="status"' not in page.text
     assert "Lifecycle status</span><select" not in page.text
     assert "Provider voice missing" in page.text
-    assert "ElevenLabs voice ID" not in page.text
+    assert "Reusable ElevenLabs voice</span><strong>Connected" not in page.text
     assert "Reference-guided Voice Design" in page.text
     assert "Instant Voice Clone" in page.text
     assert "Emotional delivery presets" in page.text
@@ -228,7 +254,7 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Stored reference clips" in page.text
     assert "https://kit.fontawesome.com/666b0b7246.js" in page.text
     assert "Files are preserved exactly as uploaded" in page.text
-    assert "No stored candidates will be removed" in page.text
+    assert "candidate-generation-note" not in page.text
 
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
     assert 'grid-template-areas: "heading review" "settings review"' in stylesheet
@@ -265,18 +291,19 @@ def test_voice_candidates_have_confirmed_manual_deletion(monkeypatch):
         )
 
     assert page.status_code == 200
-    assert "permanently replace and delete all 1 stored candidate" in page.text
+    assert "Voice Design previews" in page.text
+    assert "These are auditions only" in page.text
     assert f'data-url="/api/alpha/voice-previews/{preview_id}"' in page.text
     assert 'data-method="DELETE"' in page.text
-    assert "This does not affect reference clips" in page.text
+    assert "Permanently delete this temporary Voice Design preview" in page.text
     assert 'class="reference-player candidate-player"' in page.text
-    assert 'data-audio-name="Candidate 1"' in page.text
+    assert 'data-audio-name="Voice Design preview 1"' in page.text
     assert (
         f'<audio hidden preload="metadata" src="/api/alpha/voice-previews/{preview_id}/audio">'
         in page.text
     )
     assert deleted.status_code == 200
-    assert deleted.json()["message"] == "Voice candidate was deleted from local storage."
+    assert deleted.json()["message"] == "Voice Design preview was deleted from local storage."
     assert not preview_path.exists()
     assert web.alpha_store.get_voice(voice_id)["previews"] == []
 
@@ -360,7 +387,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert 'value="more brightly"' in page.text
     assert page.text.count("Performance method") == 3
     assert page.text.count(">Robust</dd>") == 3
-    assert page.text.count("ElevenLabs voice ID") == 3
+    assert page.text.count("<dt>ElevenLabs voice ID</dt>") == 3
     assert page.text.count("provider-voice-test") >= 3
     assert "ElevenLabs usage cannot be refunded" in page.text
     assert "<audio controls" not in page.text
@@ -377,6 +404,47 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert deleted.status_code == 200
     assert deleted.json()["message"] == "Delivery sample was deleted from local storage."
     assert not preview_path.exists()
+
+
+def test_delivery_presets_offer_every_retained_voice_id(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        voice = web.alpha_store.get_voice(voice_id)
+        web.alpha_store.update_voice(
+            voice_id,
+            {
+                "description": voice["description"],
+                "creation_method": "external",
+                "provider_voice_id": "provider-default",
+            },
+        )
+        alternate = web.alpha_store.record_voice_id_candidate(
+            voice_id,
+            provider_voice_id="provider-sorrowful",
+            creation_method="designed",
+            creation_model_id="eleven_ttv_v3",
+        )
+        web.alpha_store.update_delivery_preset(
+            voice_id,
+            "sorrowful",
+            {
+                "provider_voice_id": alternate["provider_voice_id"],
+                "prompt_tag": "quietly grieving",
+                "stability": 0.5,
+            },
+        )
+        page = client.get(f"/alpha/voices/{voice_id}")
+
+    assert page.status_code == 200
+    assert page.text.count('<select name="provider_voice_id"') == 5
+    assert page.text.count("provider-default") >= 5
+    assert page.text.count("provider-sorrowful") >= 5
+    assert (
+        '<option value="provider-sorrowful" selected>#2 · Voice Design · '
+        "provider-sorrowful</option>" in page.text
+    )
+    assert "Each emotional preset can use a different retained voice ID" in page.text
 
 
 def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_all_confirmations():
@@ -402,14 +470,12 @@ def test_delivery_sample_forms_show_save_only_when_dirty_and_skip_all_confirmati
     assert "for (const form of forms) launchDeliveryGeneration(form);" in script
 
 
-def test_voice_design_prompt_visibility_follows_creation_method():
+def test_provider_creation_forms_follow_the_unsaved_creation_path():
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
-    assert 'selected === "designed" || selected === "reference_design"' in script
-    assert "promptContext.hidden = !usesVoiceDesign" in script
-    assert "promptField.disabled = !usesVoiceDesign" in script
-    assert "showsDisabledPrompt" not in script
-    assert 'classList.toggle("is-disabled"' not in script
+    assert 'const panels = [...document.querySelectorAll("[data-method-panel]")]' in script
+    assert "panel.hidden = !active" in script
+    assert "promptContext" not in script
     assert "selected !== savedMethod" not in script
     assert 'field.disabled = field.dataset.serverDisabled === "true" || !active' in script
 
@@ -419,7 +485,7 @@ def test_every_voice_page_delete_control_requires_confirmation():
     opening_tags = [chunk.split(">", 1)[0] for chunk in template.split("<button")[1:]]
     delete_controls = [tag for tag in opening_tags if 'data-method="DELETE"' in tag]
 
-    assert len(delete_controls) == 3
+    assert len(delete_controls) == 4
     assert all("data-confirm-required" in tag for tag in delete_controls)
     assert all("data-confirm=" in tag for tag in delete_controls)
 
@@ -438,13 +504,13 @@ def test_build_actions_skip_confirmation_while_teardown_keeps_it():
     instant_clone_form = next(
         chunk.split(">", 1)[0]
         for chunk in voice_template.split("<form")[1:]
-        if 'data-provider-operation="Creating an instant voice clone"' in chunk.split(">", 1)[0]
+        if 'data-provider-operation="Generating an instant-clone voice ID and audition"'
+        in chunk.split(">", 1)[0]
     )
     reusable_voice_button = next(
         chunk.split(">", 1)[0]
         for chunk in voice_template.split("<button")[1:]
-        if 'data-provider-operation="Creating a reusable ElevenLabs voice"'
-        in chunk.split(">", 1)[0]
+        if 'data-provider-operation="Generating a reusable voice ID"' in chunk.split(">", 1)[0]
     )
 
     assert len(voice_design_forms) == 2
@@ -529,15 +595,16 @@ def test_successful_voice_regeneration_replaces_former_candidates(monkeypatch):
         revised = web.alpha_store.get_voice(voice_id)
 
     assert response.status_code == 200
-    assert "Replaced 1 former unselected candidate" in response.json()["message"]
+    assert "Replaced 1 former temporary Voice Design preview" in response.json()["message"]
     assert len(revised["previews"]) == 3
     assert former_id not in {item["preview_id"] for item in revised["previews"]}
     assert not former_path.exists()
 
 
-def test_selected_voice_candidate_survives_regeneration(monkeypatch):
+def test_reusable_voice_id_candidate_survives_new_design_previews(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.5)
     with TestClient(web.app) as client:
         voice_id = "baseline--bloodelf-female"
         current = web.alpha_store.get_voice(voice_id)
@@ -573,6 +640,9 @@ def test_selected_voice_candidate_survives_regeneration(monkeypatch):
                 "X-WQI-Paid-Action": "confirmed",
             },
         )
+        activated_voice = web.alpha_store.get_voice(voice_id)
+        candidate = activated_voice["voice_id_candidates"][0]
+        candidate_path = web.alpha_store.voice_id_candidate_path(candidate["candidate_id"])
         selected_page = client.get(f"/alpha/voices/{voice_id}")
         regenerated = client.post(
             f"/api/alpha/voices/{voice_id}/design",
@@ -591,38 +661,29 @@ def test_selected_voice_candidate_survives_regeneration(monkeypatch):
         revised = web.alpha_store.get_voice(voice_id)
 
     assert activated.status_code == 200
-    assert "Deleted 2 other local candidates" in activated.json()["message"]
+    assert "Generated voice ID candidate #1" in activated.json()["message"]
+    assert "Deleted 3 temporary Voice Design previews" in activated.json()["message"]
     assert selected_page.status_code == 200
-    assert 'class="candidate-selected"' in selected_page.text
-    assert "Selected candidate" in selected_page.text
-    assert "disconnect its reusable voice ID from this profile" in selected_page.text
-    assert "The selected candidate and reusable ElevenLabs voice will be preserved" in (
-        selected_page.text
-    )
-    assert f'data-url="/api/alpha/voice-previews/{selected_id}"' in selected_page.text
+    assert 'class="voice-id-candidate candidate-selected"' in selected_page.text
+    assert "Voice ID candidate #1" in selected_page.text
+    assert "Profile default" in selected_page.text
+    assert "Voice Design · eleven_ttv_v3" in selected_page.text
+    assert candidate["provider_voice_id"] in selected_page.text
     assert regenerated.status_code == 200
-    assert (
-        "Preserved the selected candidate and reusable ElevenLabs voice"
-        in (regenerated.json()["message"])
-    )
     assert revised["provider_voice_id"] == "provider-voice-selected"
-    assert len(revised["previews"]) == 4
-    assert sum(preview["status"] == "selected" for preview in revised["previews"]) == 1
-    assert {preview["preview_id"] for preview in revised["previews"]} == {
-        selected_id,
-        *regenerated.json()["preview_ids"],
-    }
-    assert original_paths[selected_id].is_file()
-    assert all(
-        not path.exists()
-        for preview_id, path in original_paths.items()
-        if preview_id != selected_id
+    assert len(revised["voice_id_candidates"]) == 1
+    assert len(revised["previews"]) == 3
+    assert {preview["preview_id"] for preview in revised["previews"]} == set(
+        regenerated.json()["preview_ids"]
     )
+    assert candidate_path.is_file()
+    assert all(not path.exists() for path in original_paths.values())
 
 
-def test_selected_voice_candidate_can_be_deleted_and_disconnects_reusable_id(monkeypatch):
+def test_voice_id_candidate_can_be_deleted_from_provider_and_local_registry(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr(web, "elevenlabs", DesigningElevenLabs())
+    monkeypatch.setattr(alpha_module, "_audio_duration", lambda _path: 1.5)
     with TestClient(web.app) as client:
         voice_id = "baseline--bloodelf-female"
         preview_id = web.alpha_store.record_voice_previews(
@@ -640,20 +701,25 @@ def test_selected_voice_candidate_can_be_deleted_and_disconnects_reusable_id(mon
                 "X-WQI-Paid-Action": "confirmed",
             },
         )
-        selected_path = Path(web.alpha_store.get_voice_preview(preview_id)["storage_path"])
+        candidate = web.alpha_store.get_voice(voice_id)["voice_id_candidates"][0]
+        candidate_path = web.alpha_store.voice_id_candidate_path(candidate["candidate_id"])
         deleted = client.delete(
-            f"/api/alpha/voice-previews/{preview_id}",
+            f"/api/alpha/voice-id-candidates/{candidate['candidate_id']}",
             headers={"X-WQI-Action": "confirmed"},
         )
         revised = web.alpha_store.get_voice(voice_id)
 
     assert activated.status_code == 200
     assert deleted.status_code == 200
-    assert "reusable voice ID was disconnected" in deleted.json()["message"]
-    assert "remains in your provider account" in deleted.json()["message"]
+    assert (
+        "Deleted voice ID candidate #1 from ElevenLabs and local storage"
+        in (deleted.json()["message"])
+    )
+    assert "disconnected it as the profile default" in deleted.json()["message"]
     assert revised["provider_voice_id"] is None
+    assert revised["voice_id_candidates"] == []
     assert revised["previews"] == []
-    assert not selected_path.exists()
+    assert not candidate_path.exists()
 
 
 def test_provider_creation_accepts_new_unsaved_path_and_records_candidate_method(monkeypatch):
@@ -677,6 +743,7 @@ def test_provider_creation_accepts_new_unsaved_path_and_records_candidate_method
             },
             json={
                 "creation_method": "designed",
+                "description": "A newly edited provider-creation prompt for this voice.",
                 "preview_text": (
                     "The road ahead is dangerous, but our purpose remains clear. Stay close, "
                     "listen carefully, and remember why we began this journey together."
@@ -688,8 +755,10 @@ def test_provider_creation_accepts_new_unsaved_path_and_records_candidate_method
 
     assert generated.status_code == 200
     assert revised["creation_method"] == "designed"
+    assert revised["description"] == "A newly edited provider-creation prompt for this voice."
     assert {preview["creation_method"] for preview in revised["previews"]} == {"designed"}
-    assert page.text.count("Created with Voice Design") == 3
+    assert page.text.count("Voice Design · eleven_ttv_v3") == 3
+    assert "Save changed voice settings" not in page.text
 
 
 def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
@@ -742,19 +811,67 @@ def test_instant_clone_accepts_new_unsaved_path(monkeypatch):
     assert revised["creation_method"] == "instant_clone"
     assert revised["provider_voice_id"] == "provider-instant-clone"
     assert revised["description"] == full_description
-    assert revised["previews"][0]["status"] == "superseded"
+    assert revised["previews"] == []
+    assert len(revised["voice_id_candidates"]) == 2
+    instant_candidate = revised["voice_id_candidates"][0]
+    assert instant_candidate["provider_voice_id"] == "provider-instant-clone"
+    assert instant_candidate["generation_number"] == 2
+    assert instant_candidate["creation_method"] == "instant_clone"
+    assert instant_candidate["creation_model_id"] == "instant_voice_clone"
+    assert instant_candidate["sample_text"] == web.VOICE_ID_AUDITION_TEXT
+    assert instant_candidate["sample_model_id"] == "eleven_v3"
     assert provider.clone_kwargs is not None
+    assert provider.tts_kwargs is not None
+    assert provider.tts_kwargs["voice_id"] == "provider-instant-clone"
+    assert provider.tts_kwargs["text"] == web.VOICE_ID_AUDITION_TEXT
     assert len(provider.clone_kwargs["description"]) <= 500
     assert provider.clone_kwargs["description"].endswith("…")
 
     assert "The selected audio determines the cloned voice" in page.text
-    assert "automatically shortened to ElevenLabs' 500-character limit" in page.text
-    assert "Instant clone active" in page.text
-    assert "data-prompt-context hidden" in page.text
-    assert "Instant Voice Clone does not return Voice Design candidates" in page.text
-    assert "Previous design candidate" in page.text
-    assert 'href="#delivery-neutral"' in page.text
-    assert "does not return Voice Design candidates" in cloned.json()["message"]
+    assert "attached only as provider metadata" in page.text
+    assert 'data-method-panel="designed" hidden' in page.text
+    assert "Voice ID candidates" in page.text
+    assert "Voice ID candidate #2" in page.text
+    assert "Instant Voice Clone · instant_voice_clone" in page.text
+    assert "provider-instant-clone" in page.text
+    assert "standardized audition sample is ready" in cloned.json()["message"]
+
+
+def test_instant_clone_keeps_voice_id_when_automatic_audition_fails(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    provider = CloningWithFailedAuditionElevenLabs()
+    monkeypatch.setattr(web, "elevenlabs", provider)
+    with TestClient(web.app) as client:
+        voice_id = "baseline--bloodelf-female"
+        clip = web.alpha_store.save_reference_clip(
+            voice_id,
+            original_name="clone-source.wav",
+            content=b"reference-audio",
+            provenance="Test fixture",
+            provider_eligible=True,
+        )["clips"][0]
+        cloned = client.post(
+            f"/api/alpha/voices/{voice_id}/clone",
+            headers={
+                "X-WQI-Action": "confirmed",
+                "X-WQI-Paid-Action": "confirmed",
+            },
+            json={
+                "creation_method": "instant_clone",
+                "clip_ids": [clip["clip_id"]],
+            },
+        )
+        revised = web.alpha_store.get_voice(voice_id)
+        page = client.get(f"/alpha/voices/{voice_id}")
+
+    assert cloned.status_code == 200
+    assert cloned.json()["audition_error"] == "Audition synthesis failed after clone creation."
+    assert "voice ID is safely tracked" in cloned.json()["message"]
+    assert revised["provider_voice_id"] == "provider-instant-clone"
+    assert len(revised["voice_id_candidates"]) == 1
+    assert revised["voice_id_candidates"][0]["sample_storage_path"] is None
+    assert "Audition sample missing" in page.text
+    assert "Generate audition" in page.text
 
 
 def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):

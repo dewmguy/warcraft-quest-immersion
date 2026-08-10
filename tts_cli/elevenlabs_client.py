@@ -192,6 +192,22 @@ class ElevenLabsClient:
             raise ElevenLabsError(self._error_message(response))
         return response.json()
 
+    def delete_voice(self, voice_id: str) -> dict[str, Any]:
+        try:
+            response = self.session.delete(
+                f"{self.base_url}/v1/voices/{voice_id}",
+                headers=self._headers(),
+                timeout=60,
+            )
+        except requests.RequestException as error:
+            raise ElevenLabsError(f"Could not delete the reusable voice: {error}") from error
+        if not response.ok:
+            raise ElevenLabsError(self._error_message(response))
+        try:
+            return response.json()
+        except ValueError:
+            return {"status": "ok"}
+
     def text_to_speech(
         self,
         *,

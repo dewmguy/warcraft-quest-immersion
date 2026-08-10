@@ -568,8 +568,6 @@ for (const input of document.querySelectorAll('input[type="range"]')) {
 const methodController = document.querySelector("[data-method-controller]");
 if (methodController) {
   const selector = methodController.querySelector('[name="creation_method"]');
-  const promptContext = methodController.querySelector("[data-prompt-context]");
-  const promptField = promptContext?.querySelector("textarea");
   const panels = [...document.querySelectorAll("[data-method-panel]")];
   for (const panel of panels) {
     for (const button of panel.querySelectorAll("button")) {
@@ -578,11 +576,6 @@ if (methodController) {
   }
   const syncMethod = () => {
     const selected = selector.value;
-    const usesVoiceDesign = selected === "designed" || selected === "reference_design";
-    if (promptContext && promptField) {
-      promptContext.hidden = !usesVoiceDesign;
-      promptField.disabled = !usesVoiceDesign;
-    }
     for (const copy of document.querySelectorAll("[data-method-copy] [data-method]")) {
       copy.hidden = copy.dataset.method !== selected;
     }

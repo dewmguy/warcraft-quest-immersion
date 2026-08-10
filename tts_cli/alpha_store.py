@@ -371,6 +371,7 @@ class AlphaStore:
                 CREATE TABLE IF NOT EXISTS voice_delivery_presets (
                     voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
                     delivery TEXT NOT NULL,
+                    provider_voice_id TEXT NOT NULL DEFAULT '',
                     prompt_tag TEXT NOT NULL DEFAULT '',
                     stability REAL NOT NULL DEFAULT 0.5,
                     status TEXT NOT NULL DEFAULT 'not_tested',
@@ -465,6 +466,23 @@ class AlphaStore:
                     status TEXT NOT NULL DEFAULT 'candidate',
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS voice_id_candidates (
+                    candidate_id TEXT PRIMARY KEY,
+                    voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
+                    provider_voice_id TEXT NOT NULL UNIQUE,
+                    generation_number INTEGER NOT NULL,
+                    creation_method TEXT NOT NULL,
+                    creation_model_id TEXT NOT NULL,
+                    sample_storage_path TEXT,
+                    sample_sha256 TEXT NOT NULL DEFAULT '',
+                    sample_duration_seconds REAL,
+                    sample_text TEXT NOT NULL DEFAULT '',
+                    sample_model_id TEXT NOT NULL DEFAULT '',
+                    provider_request_id TEXT,
+                    subscription_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    UNIQUE(voice_id, generation_number)
+                );
                 CREATE TABLE IF NOT EXISTS voice_delivery_previews (
                     preview_id TEXT PRIMARY KEY,
                     voice_id TEXT NOT NULL REFERENCES voices(voice_id) ON DELETE CASCADE,
@@ -539,6 +557,7 @@ class AlphaStore:
             self._normalize_delivery_prompt_tags(connection)
             self._normalize_instant_clone_previews(connection)
             self._sync_baseline_contexts(connection)
+            self._backfill_voice_id_candidates(connection)
 
     @staticmethod
     def _ensure_columns(connection: sqlite3.Connection) -> None:
@@ -560,6 +579,14 @@ class AlphaStore:
                 "ALTER TABLE voice_previews ADD COLUMN creation_method TEXT NOT NULL "
                 "DEFAULT 'legacy_unknown'"
             )
+        preset_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(voice_delivery_presets)")
+        }
+        if "provider_voice_id" not in preset_columns:
+            connection.execute(
+                "ALTER TABLE voice_delivery_presets ADD COLUMN provider_voice_id "
+                "TEXT NOT NULL DEFAULT ''"
+            )
 
     @staticmethod
     def _normalize_instant_clone_previews(connection: sqlite3.Connection) -> None:
@@ -571,6 +598,71 @@ class AlphaStore:
             "AND vv.creation_method='instant_clone' "
             "AND COALESCE(vv.provider_voice_id, '')<>'')"
         )
+
+    def _backfill_voice_id_candidates(self, connection: sqlite3.Connection) -> None:
+        """Register current provider IDs created before the candidate registry existed."""
+        rows = connection.execute(
+            "SELECT vv.voice_id, vv.provider_voice_id, vv.creation_method, vv.model_id, "
+            "vv.created_at FROM voice_versions vv WHERE vv.is_current=1 "
+            "AND COALESCE(vv.provider_voice_id, '')<>'' "
+            "AND NOT EXISTS (SELECT 1 FROM voice_id_candidates vic "
+            "WHERE vic.provider_voice_id=vv.provider_voice_id) ORDER BY vv.created_at"
+        ).fetchall()
+        for row in rows:
+            candidate_id = uuid.uuid4().hex
+            generation_number = connection.execute(
+                "SELECT COALESCE(MAX(generation_number), 0)+1 FROM voice_id_candidates "
+                "WHERE voice_id=?",
+                (row["voice_id"],),
+            ).fetchone()[0]
+            creation_model_id = (
+                "instant_voice_clone"
+                if row["creation_method"] == "instant_clone"
+                else row["model_id"]
+            )
+            sample_path = None
+            sample_sha256 = ""
+            sample_duration = None
+            sample_text = ""
+            sample_model_id = ""
+            preview = connection.execute(
+                "SELECT * FROM voice_previews WHERE voice_id=? AND status='selected' "
+                "ORDER BY created_at DESC LIMIT 1",
+                (row["voice_id"],),
+            ).fetchone()
+            if preview:
+                source_path = Path(preview["storage_path"]).resolve()
+                if self.storage_root in source_path.parents and source_path.is_file():
+                    content = source_path.read_bytes()
+                    folder = self.storage_root / "voice-id-candidates" / row["voice_id"]
+                    folder.mkdir(parents=True, exist_ok=True)
+                    destination = folder / f"{candidate_id}.mp3"
+                    destination.write_bytes(content)
+                    sample_path = str(destination)
+                    sample_sha256 = sha256_bytes(content)
+                    sample_duration = preview["duration_seconds"]
+                    sample_text = preview["preview_text"]
+                    sample_model_id = preview["model_id"]
+            connection.execute(
+                "INSERT INTO voice_id_candidates(candidate_id, voice_id, provider_voice_id, "
+                "generation_number, creation_method, creation_model_id, sample_storage_path, "
+                "sample_sha256, sample_duration_seconds, sample_text, sample_model_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    candidate_id,
+                    row["voice_id"],
+                    row["provider_voice_id"],
+                    generation_number,
+                    row["creation_method"],
+                    creation_model_id,
+                    sample_path,
+                    sample_sha256,
+                    sample_duration,
+                    sample_text,
+                    sample_model_id,
+                    row["created_at"],
+                ),
+            )
 
     def _seed_baseline_voices(self, connection: sqlite3.Connection) -> None:
         review = load_phase2_review()
@@ -942,7 +1034,8 @@ class AlphaStore:
                     AND gx.created_at = (SELECT MAX(created_at) FROM generations WHERE dialogue_id=d.dialogue_id)
                 ) THEN 'generation_failed'
                 WHEN tr.revision_id IS NULL THEN 'needs_text'
-                WHEN s.voice_id IS NULL OR vv.provider_voice_id IS NULL OR vv.provider_voice_id = ''
+                WHEN s.voice_id IS NULL OR COALESCE(NULLIF(vdp.provider_voice_id, ''),
+                    vv.provider_voice_id, '') = ''
                     THEN 'needs_voice'
                 ELSE 'ready_to_generate'
             END
@@ -954,7 +1047,9 @@ class AlphaStore:
                 s.gender_id, s.race_name, s.gender_name, s.voice_id,
                 v.name AS voice_name, v.scope AS voice_scope,
                 vv.version_id AS voice_version_id, vv.version_number AS voice_version_number,
-                vv.provider_voice_id, vv.model_id, vv.description AS voice_description,
+                COALESCE(NULLIF(vdp.provider_voice_id, ''), vv.provider_voice_id) AS provider_voice_id,
+                vv.provider_voice_id AS default_provider_voice_id,
+                vv.model_id, vv.description AS voice_description,
                 vv.creation_method, vv.settings_json,
                 tr.revision_id, tr.revision_number, tr.spoken_text, tr.changes_json,
                 tr.warnings_json, pa.candidate_id AS production_candidate_id,
@@ -965,6 +1060,8 @@ class AlphaStore:
             JOIN speakers s ON s.speaker_id = d.speaker_id
             LEFT JOIN voices v ON v.voice_id = s.voice_id
             LEFT JOIN voice_versions vv ON vv.voice_id = v.voice_id AND vv.is_current = 1
+            LEFT JOIN voice_delivery_presets vdp ON vdp.voice_id=v.voice_id
+                AND vdp.delivery=d.delivery
             LEFT JOIN spoken_text_revisions tr ON tr.dialogue_id = d.dialogue_id AND tr.is_current = 1
             LEFT JOIN production_assets pa ON pa.dialogue_id = d.dialogue_id
         """
@@ -1568,11 +1665,35 @@ class AlphaStore:
         stability = float(payload.get("stability", 0.5))
         if not 0 <= stability <= 1:
             raise AlphaError("Delivery stability must be between 0 and 1.")
+        provider_voice_id = str(
+            payload.get("provider_voice_id", existing["provider_voice_id"] or "")
+        ).strip()
+        if provider_voice_id:
+            with self.connect() as connection:
+                candidate = connection.execute(
+                    "SELECT 1 FROM voice_id_candidates WHERE voice_id=? AND provider_voice_id=?",
+                    (voice_id, provider_voice_id),
+                ).fetchone()
+            if not candidate:
+                raise AlphaError("Select a reusable voice ID candidate from this voice profile.")
+        settings_changed = (
+            provider_voice_id != (existing["provider_voice_id"] or "")
+            or prompt_tag != existing["prompt_tag"]
+            or stability != float(existing["stability"])
+        )
+        if settings_changed and "status" not in payload:
+            with self.connect() as connection:
+                has_previews = connection.execute(
+                    "SELECT 1 FROM voice_delivery_previews WHERE voice_id=? AND delivery=? LIMIT 1",
+                    (voice_id, delivery),
+                ).fetchone()
+            status = "previewed" if has_previews else "not_tested"
         with self.connect() as connection:
             cursor = connection.execute(
-                "UPDATE voice_delivery_presets SET prompt_tag=?, stability=?, status=?, notes=?, "
-                "updated_at=? WHERE voice_id=? AND delivery=?",
+                "UPDATE voice_delivery_presets SET provider_voice_id=?, prompt_tag=?, stability=?, "
+                "status=?, notes=?, updated_at=? WHERE voice_id=? AND delivery=?",
                 (
+                    provider_voice_id,
                     prompt_tag,
                     stability,
                     status,
@@ -1595,9 +1716,10 @@ class AlphaStore:
         if not 100 <= len(text) <= 1000:
             raise AlphaError("Delivery sample text must contain 100–1,000 characters.")
         voice = self.get_voice(voice_id)
-        if not voice.get("provider_voice_id"):
-            raise AlphaError("Create the reusable provider voice before testing delivery presets.")
         preset = next(item for item in voice["delivery_presets"] if item["delivery"] == delivery)
+        provider_voice_id = preset.get("provider_voice_id") or voice.get("provider_voice_id")
+        if not provider_voice_id:
+            raise AlphaError("Generate a reusable voice ID before testing delivery presets.")
         actor_notes = _normalize_voice_actor_notes(preset["prompt_tag"])
         request_text = _delivery_request_text(actor_notes, text)
         model_id = self.get_app_settings()["tts_model_id"]
@@ -1606,8 +1728,8 @@ class AlphaStore:
         if model_id == "eleven_v3":
             settings = {"stability": stability}
         return {
-            "voice_id": voice["provider_voice_id"],
-            "baseline_voice_id": voice["provider_voice_id"],
+            "voice_id": provider_voice_id,
+            "baseline_voice_id": provider_voice_id,
             "actor_notes": actor_notes,
             "performance_method": method,
             "performance_method_label": method_label,
@@ -1839,6 +1961,11 @@ class AlphaStore:
                 "SELECT * FROM voice_previews WHERE voice_id=? ORDER BY created_at DESC",
                 (voice_id,),
             ).fetchall()
+            voice_id_candidates = connection.execute(
+                "SELECT * FROM voice_id_candidates WHERE voice_id=? "
+                "ORDER BY generation_number DESC",
+                (voice_id,),
+            ).fetchall()
             speakers = connection.execute(
                 "SELECT speaker_id, entity_type, entity_id, name FROM speakers WHERE voice_id=? "
                 "ORDER BY name",
@@ -1866,6 +1993,14 @@ class AlphaStore:
         payload["versions"] = list(reversed(ascending))
         payload["clips"] = [dict(row) for row in clips]
         payload["previews"] = [dict(row) for row in previews]
+        payload["voice_id_candidates"] = []
+        for row in voice_id_candidates:
+            candidate = dict(row)
+            candidate["subscription"] = _loads(candidate.get("subscription_json"), {})
+            candidate["is_default"] = candidate["provider_voice_id"] == (
+                payload.get("provider_voice_id") or ""
+            )
+            payload["voice_id_candidates"].append(candidate)
         payload["speakers"] = [dict(row) for row in speakers]
         preview_payloads = [dict(row) for row in delivery_previews]
         for preview in preview_payloads:
@@ -1876,6 +2011,9 @@ class AlphaStore:
         payload["delivery_presets"] = []
         for row in delivery_presets:
             preset = dict(row)
+            preset["effective_provider_voice_id"] = (
+                preset.get("provider_voice_id") or payload.get("provider_voice_id") or ""
+            )
             preset["previews"] = [
                 preview for preview in preview_payloads if preview["delivery"] == preset["delivery"]
             ]
@@ -1985,6 +2123,27 @@ class AlphaStore:
                 ),
             )
             connection.execute("UPDATE voices SET updated_at=? WHERE voice_id=?", (now, voice_id))
+            if provider_voice_id:
+                generation_number = connection.execute(
+                    "SELECT COALESCE(MAX(generation_number), 0)+1 FROM voice_id_candidates "
+                    "WHERE voice_id=?",
+                    (voice_id,),
+                ).fetchone()[0]
+                creation_model_id = "instant_voice_clone" if method == "instant_clone" else model_id
+                connection.execute(
+                    "INSERT OR IGNORE INTO voice_id_candidates(candidate_id, voice_id, "
+                    "provider_voice_id, generation_number, creation_method, creation_model_id, "
+                    "created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        uuid.uuid4().hex,
+                        voice_id,
+                        provider_voice_id,
+                        generation_number,
+                        method,
+                        creation_model_id,
+                        now,
+                    ),
+                )
         updated = self.get_voice(voice_id)
         updated["version_changed"] = True
         return updated
@@ -2047,6 +2206,216 @@ class AlphaStore:
         temporary_path.unlink(missing_ok=True)
         return self.get_voice(row["voice_id"])
 
+    def get_voice_id_candidate(self, candidate_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM voice_id_candidates WHERE candidate_id=?", (candidate_id,)
+            ).fetchone()
+        if not row:
+            raise AlphaError("Voice ID candidate was not found.")
+        candidate = dict(row)
+        candidate["subscription"] = _loads(candidate.get("subscription_json"), {})
+        return candidate
+
+    def record_voice_id_candidate(
+        self,
+        voice_id: str,
+        *,
+        provider_voice_id: str,
+        creation_method: str,
+        creation_model_id: str,
+        sample_text: str = "",
+        sample_model_id: str = "",
+        content: bytes | None = None,
+        provider_request_id: str | None = None,
+        subscription: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self.get_voice(voice_id)
+        provider_voice_id = provider_voice_id.strip()
+        if not provider_voice_id:
+            raise AlphaError("A reusable provider voice ID is required.")
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT candidate_id FROM voice_id_candidates WHERE provider_voice_id=?",
+                (provider_voice_id,),
+            ).fetchone()
+        if existing:
+            return self.get_voice_id_candidate(existing["candidate_id"])
+
+        candidate_id = uuid.uuid4().hex
+        path: Path | None = None
+        duration: float | None = None
+        if content is not None:
+            folder = self.storage_root / "voice-id-candidates" / voice_id
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / f"{candidate_id}.mp3"
+            path.write_bytes(content)
+            duration = _audio_duration(path)
+            if duration is not None and duration <= 0:
+                path.unlink(missing_ok=True)
+                raise AlphaError("The reusable voice audition audio could not be validated.")
+        try:
+            with self.connect() as connection:
+                generation_number = connection.execute(
+                    "SELECT COALESCE(MAX(generation_number), 0)+1 FROM voice_id_candidates "
+                    "WHERE voice_id=?",
+                    (voice_id,),
+                ).fetchone()[0]
+                connection.execute(
+                    "INSERT INTO voice_id_candidates(candidate_id, voice_id, provider_voice_id, "
+                    "generation_number, creation_method, creation_model_id, sample_storage_path, "
+                    "sample_sha256, sample_duration_seconds, sample_text, sample_model_id, "
+                    "provider_request_id, subscription_json, created_at) VALUES (?, ?, ?, ?, ?, "
+                    "?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        candidate_id,
+                        voice_id,
+                        provider_voice_id,
+                        generation_number,
+                        creation_method,
+                        creation_model_id,
+                        str(path) if path else None,
+                        sha256_bytes(content) if content is not None else "",
+                        duration,
+                        sample_text.strip() if content is not None else "",
+                        sample_model_id.strip() if content is not None else "",
+                        provider_request_id,
+                        _json(subscription or {}),
+                        utc_now(),
+                    ),
+                )
+        except Exception:
+            if path:
+                path.unlink(missing_ok=True)
+            raise
+        return self.get_voice_id_candidate(candidate_id)
+
+    def attach_voice_id_candidate_sample(
+        self,
+        candidate_id: str,
+        *,
+        sample_text: str,
+        sample_model_id: str,
+        content: bytes,
+        provider_request_id: str | None,
+        subscription: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        candidate = self.get_voice_id_candidate(candidate_id)
+        folder = self.storage_root / "voice-id-candidates" / candidate["voice_id"]
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{candidate_id}.mp3"
+        temporary_path = folder / f".{candidate_id}.{uuid.uuid4().hex}.mp3"
+        temporary_path.write_bytes(content)
+        duration = _audio_duration(temporary_path)
+        if duration is not None and duration <= 0:
+            temporary_path.unlink(missing_ok=True)
+            raise AlphaError("The reusable voice audition audio could not be validated.")
+        old_path = (
+            Path(candidate["sample_storage_path"]).resolve()
+            if candidate.get("sample_storage_path")
+            else None
+        )
+        temporary_path.replace(path)
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE voice_id_candidates SET sample_storage_path=?, sample_sha256=?, "
+                "sample_duration_seconds=?, sample_text=?, sample_model_id=?, "
+                "provider_request_id=?, subscription_json=? WHERE candidate_id=?",
+                (
+                    str(path),
+                    sha256_bytes(content),
+                    duration,
+                    sample_text.strip(),
+                    sample_model_id.strip(),
+                    provider_request_id,
+                    _json(subscription or {}),
+                    candidate_id,
+                ),
+            )
+        if old_path and old_path != path and self.storage_root in old_path.parents:
+            old_path.unlink(missing_ok=True)
+        return self.get_voice_id_candidate(candidate_id)
+
+    def voice_id_candidate_path(self, candidate_id: str) -> Path:
+        candidate = self.get_voice_id_candidate(candidate_id)
+        if not candidate.get("sample_storage_path"):
+            raise AlphaError("This voice ID candidate does not have an audition sample yet.")
+        path = Path(candidate["sample_storage_path"]).resolve()
+        if self.storage_root not in path.parents or not path.is_file():
+            raise AlphaError("Voice ID candidate audition audio is unavailable.")
+        return path
+
+    def set_default_voice_id_candidate(self, candidate_id: str) -> dict[str, Any]:
+        candidate = self.get_voice_id_candidate(candidate_id)
+        voice = self.get_voice(candidate["voice_id"])
+        return self.update_voice(
+            candidate["voice_id"],
+            {
+                "description": voice["description"],
+                "creation_method": candidate["creation_method"],
+                "provider_voice_id": candidate["provider_voice_id"],
+                "model_id": voice["model_id"],
+            },
+        )
+
+    def delete_voice_id_candidate(self, candidate_id: str) -> dict[str, Any]:
+        candidate = self.get_voice_id_candidate(candidate_id)
+        voice = self.get_voice(candidate["voice_id"])
+        provider_voice_id = candidate["provider_voice_id"]
+        is_default = provider_voice_id == (voice.get("provider_voice_id") or "")
+        affected_deliveries = [
+            preset["delivery"]
+            for preset in voice["delivery_presets"]
+            if preset.get("provider_voice_id") == provider_voice_id
+            or (is_default and not preset.get("provider_voice_id"))
+        ]
+        path = (
+            Path(candidate["sample_storage_path"]).resolve()
+            if candidate.get("sample_storage_path")
+            else None
+        )
+        if path and self.storage_root not in path.parents:
+            raise AlphaError("Voice ID candidate storage path is invalid.")
+        temporary_path = path.with_name(f".{path.name}.deleting") if path else None
+        if path and path.is_file():
+            path.replace(temporary_path)
+        try:
+            if is_default:
+                self.update_voice(
+                    candidate["voice_id"],
+                    {
+                        "description": voice["description"],
+                        "creation_method": voice["creation_method"],
+                        "provider_voice_id": "",
+                        "model_id": voice["model_id"],
+                    },
+                )
+            with self.connect() as connection:
+                if affected_deliveries:
+                    placeholders = ",".join("?" for _ in affected_deliveries)
+                    connection.execute(
+                        "UPDATE voice_delivery_presets SET provider_voice_id='', "
+                        "status=CASE WHEN EXISTS (SELECT 1 FROM voice_delivery_previews vdpv "
+                        "WHERE vdpv.voice_id=voice_delivery_presets.voice_id "
+                        "AND vdpv.delivery=voice_delivery_presets.delivery) "
+                        "THEN 'previewed' ELSE 'not_tested' END, updated_at=? "
+                        f"WHERE voice_id=? AND delivery IN ({placeholders})",
+                        (utc_now(), candidate["voice_id"], *affected_deliveries),
+                    )
+                connection.execute(
+                    "DELETE FROM voice_id_candidates WHERE candidate_id=?", (candidate_id,)
+                )
+        except Exception:
+            if temporary_path and temporary_path.is_file():
+                temporary_path.replace(path)
+            raise
+        if temporary_path:
+            temporary_path.unlink(missing_ok=True)
+        revised = self.get_voice(candidate["voice_id"])
+        revised["affected_delivery_count"] = len(affected_deliveries)
+        revised["deleted_default_candidate"] = is_default
+        return revised
+
     def delete_voice_preview(self, preview_id: str) -> dict[str, Any]:
         with self.connect() as connection:
             row = connection.execute(
@@ -2055,8 +2424,6 @@ class AlphaStore:
             ).fetchone()
         if not row:
             raise AlphaError("Voice candidate was not found.")
-        selected = row["status"] == "selected"
-        current = self.get_voice(row["voice_id"]) if selected else None
         path = Path(row["storage_path"]).resolve()
         if self.storage_root not in path.parents:
             raise AlphaError("Voice candidate storage path is invalid.")
@@ -2064,36 +2431,14 @@ class AlphaStore:
         if path.is_file():
             path.replace(temporary_path)
         try:
-            if current:
-                self.update_voice(
-                    row["voice_id"],
-                    {
-                        "description": current["description"],
-                        "creation_method": current["creation_method"],
-                        "provider_voice_id": "",
-                        "model_id": current["model_id"],
-                    },
-                )
             with self.connect() as connection:
                 connection.execute("DELETE FROM voice_previews WHERE preview_id=?", (preview_id,))
         except Exception:
-            if current:
-                self.update_voice(
-                    row["voice_id"],
-                    {
-                        "description": current["description"],
-                        "creation_method": current["creation_method"],
-                        "provider_voice_id": current["provider_voice_id"] or "",
-                        "model_id": current["model_id"],
-                    },
-                )
             if temporary_path.is_file():
                 temporary_path.replace(path)
             raise
         temporary_path.unlink(missing_ok=True)
-        revised = self.get_voice(row["voice_id"])
-        revised["deleted_selected_preview"] = selected
-        return revised
+        return self.get_voice(row["voice_id"])
 
     def record_voice_previews(
         self,
@@ -2122,8 +2467,7 @@ class AlphaStore:
                 if replace_existing:
                     replaced_rows = list(
                         connection.execute(
-                            "SELECT preview_id, storage_path FROM voice_previews "
-                            "WHERE voice_id=? AND status<>'selected'",
+                            "SELECT preview_id, storage_path FROM voice_previews WHERE voice_id=?",
                             (voice_id,),
                         )
                     )
@@ -2201,25 +2545,36 @@ class AlphaStore:
 
     def activate_voice_preview(self, preview_id: str, provider_voice_id: str) -> dict[str, Any]:
         preview = self.get_voice_preview(preview_id)
-        current = self.get_voice(preview["voice_id"])
-        self.update_voice(
-            preview["voice_id"],
-            {
-                "description": preview["description"],
-                "creation_method": (
-                    preview["creation_method"]
-                    if preview["creation_method"] in {"designed", "reference_design"}
-                    else current["creation_method"]
-                ),
-                "provider_voice_id": provider_voice_id,
-                "model_id": "eleven_v3",
-            },
+        creation_method = (
+            preview["creation_method"]
+            if preview["creation_method"] in {"designed", "reference_design"}
+            else "designed"
         )
+        candidate = self.record_voice_id_candidate(
+            preview["voice_id"],
+            provider_voice_id=provider_voice_id,
+            creation_method=creation_method,
+            creation_model_id=preview["model_id"],
+            sample_text=preview["preview_text"],
+            sample_model_id=preview["model_id"],
+            content=Path(preview["storage_path"]).read_bytes(),
+        )
+        self.set_default_voice_id_candidate(candidate["candidate_id"])
         with self.connect() as connection:
+            discarded_rows = connection.execute(
+                "SELECT storage_path FROM voice_previews WHERE voice_id=?", (preview["voice_id"],)
+            ).fetchall()
             connection.execute(
-                "UPDATE voice_previews SET status='selected' WHERE preview_id=?", (preview_id,)
+                "DELETE FROM voice_previews WHERE voice_id=?", (preview["voice_id"],)
             )
-        return self.retain_voice_preview(preview_id)
+        for row in discarded_rows:
+            path = Path(row["storage_path"]).resolve()
+            if self.storage_root in path.parents:
+                path.unlink(missing_ok=True)
+        voice = self.get_voice(preview["voice_id"])
+        voice["discarded_preview_count"] = len(discarded_rows)
+        voice["created_voice_id_candidate"] = candidate["candidate_id"]
+        return voice
 
     def supersede_selected_voice_previews(self, voice_id: str) -> dict[str, Any]:
         """Keep prior design audio for comparison without presenting it as the active voice."""
@@ -2296,16 +2651,20 @@ class AlphaStore:
         app_settings = self.get_app_settings()
         model_id = app_settings["tts_model_id"]
         voice_settings = dialogue["voice_settings"].copy()
+        provider_voice_id = dialogue["provider_voice_id"]
+        with self.connect() as connection:
+            preset = connection.execute(
+                "SELECT stability, provider_voice_id FROM voice_delivery_presets "
+                "WHERE voice_id=? AND delivery=?",
+                (dialogue["voice_id"], dialogue["delivery"]),
+            ).fetchone()
+        if preset and preset["provider_voice_id"]:
+            provider_voice_id = preset["provider_voice_id"]
         if model_id == "eleven_v3":
-            with self.connect() as connection:
-                preset = connection.execute(
-                    "SELECT stability FROM voice_delivery_presets WHERE voice_id=? AND delivery=?",
-                    (dialogue["voice_id"], dialogue["delivery"]),
-                ).fetchone()
             voice_settings = {"stability": float(preset["stability"] if preset else 0.5)}
         request_payload = {
             "text": request_text,
-            "voice_id": dialogue["provider_voice_id"],
+            "voice_id": provider_voice_id,
             "model_id": model_id,
             "voice_settings": voice_settings,
         }

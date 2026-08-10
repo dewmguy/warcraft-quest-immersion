@@ -62,6 +62,11 @@ MAX_UPLOAD_BYTES = int(os.getenv("WQI_MAX_UPLOAD_BYTES", str(1024 * 1024 * 1024)
 MAX_REFERENCE_FILES = 20
 MAX_REFERENCE_BATCH_BYTES = 100 * 1024 * 1024
 REFERENCE_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac"}
+VOICE_ID_AUDITION_TEXT = (
+    "The road through the mountains is dangerous after nightfall. Stay near the lanterns, "
+    "keep your companions close, and listen carefully for movement beyond the pass. We have "
+    "endured harder winters than this, and we will endure this one as well."
+)
 
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wqi-generator")
 job_lock = Lock()
@@ -255,6 +260,7 @@ def _alpha_context(**values) -> dict:
         "provider_configured": elevenlabs.configured,
         "progress": alpha_store.progress(),
         "app_settings": alpha_store.get_app_settings(),
+        "voice_id_audition_text": VOICE_ID_AUDITION_TEXT,
         **values,
     }
 
@@ -301,6 +307,38 @@ def _usage_snapshot(subscription: dict, character_cost: int | None) -> dict:
     if character_cost is not None:
         usage["request_character_cost"] = character_cost
     return usage
+
+
+def _generate_voice_id_audition(candidate: dict, voice: dict) -> dict:
+    model_id = alpha_store.get_app_settings()["tts_model_id"]
+    settings = {"stability": 0.5} if model_id == "eleven_v3" else voice["settings"]
+    result = elevenlabs.text_to_speech(
+        voice_id=candidate["provider_voice_id"],
+        text=VOICE_ID_AUDITION_TEXT,
+        model_id=model_id,
+        settings=settings,
+    )
+    try:
+        subscription = elevenlabs.subscription()
+    except ElevenLabsError:
+        subscription = {}
+    usage = _usage_snapshot(subscription, result.character_cost)
+    alpha_store.record_provider_usage(
+        action="voice_id_audition",
+        subject_id=candidate["candidate_id"],
+        input_character_count=len(VOICE_ID_AUDITION_TEXT),
+        character_cost=result.character_cost,
+        provider_request_id=result.request_id,
+        subscription=subscription,
+    )
+    return alpha_store.attach_voice_id_candidate_sample(
+        candidate["candidate_id"],
+        sample_text=VOICE_ID_AUDITION_TEXT,
+        sample_model_id=model_id,
+        content=result.content,
+        provider_request_id=result.request_id,
+        subscription=usage,
+    )
 
 
 @app.get("/alpha", response_class=HTMLResponse)
@@ -898,19 +936,98 @@ def api_delete_voice_preview(
 ) -> dict:
     try:
         voice = alpha_store.delete_voice_preview(preview_id)
-        selected = bool(voice.pop("deleted_selected_preview", False))
+        return {"message": "Voice Design preview was deleted from local storage.", "voice": voice}
+    except AlphaError as error:
+        status_code = 404 if "not found" in str(error).lower() else 422
+        raise _alpha_error(error, status_code) from error
+
+
+@app.get("/api/alpha/voice-id-candidates/{candidate_id}/audio")
+def api_voice_id_candidate_audio(
+    candidate_id: str,
+    _: Annotated[str, Depends(require_auth)],
+) -> FileResponse:
+    try:
+        return FileResponse(
+            alpha_store.voice_id_candidate_path(candidate_id), media_type="audio/mpeg"
+        )
+    except AlphaError as error:
+        raise _alpha_error(error, 404) from error
+
+
+@app.post("/api/alpha/voice-id-candidates/{candidate_id}/audition")
+def api_generate_voice_id_candidate_audition(
+    candidate_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+    ___: Annotated[None, Depends(require_paid_action_header)],
+) -> dict:
+    _require_elevenlabs()
+    try:
+        candidate = alpha_store.get_voice_id_candidate(candidate_id)
+        voice = alpha_store.get_voice(candidate["voice_id"])
+        audition = _generate_voice_id_audition(candidate, voice)
         return {
             "message": (
-                "Selected candidate was deleted locally and its reusable voice ID was "
-                "disconnected. The ElevenLabs voice remains in your provider account."
-                if selected
-                else "Voice candidate was deleted from local storage."
+                f"Generated the audition sample for voice ID candidate "
+                f"#{audition['generation_number']}."
+            ),
+            "candidate": audition,
+        }
+    except (AlphaError, ElevenLabsError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/alpha/voice-id-candidates/{candidate_id}/default")
+def api_set_default_voice_id_candidate(
+    candidate_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        voice = alpha_store.set_default_voice_id_candidate(candidate_id)
+        candidate = alpha_store.get_voice_id_candidate(candidate_id)
+        return {
+            "message": (
+                f"Voice ID candidate #{candidate['generation_number']} is now the profile default."
             ),
             "voice": voice,
         }
     except AlphaError as error:
+        raise _alpha_error(error, 404) from error
+
+
+@app.delete("/api/alpha/voice-id-candidates/{candidate_id}")
+def api_delete_voice_id_candidate(
+    candidate_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    _require_elevenlabs()
+    try:
+        candidate = alpha_store.get_voice_id_candidate(candidate_id)
+        elevenlabs.delete_voice(candidate["provider_voice_id"])
+        voice = alpha_store.delete_voice_id_candidate(candidate_id)
+        affected = int(voice.pop("affected_delivery_count", 0))
+        default_deleted = bool(voice.pop("deleted_default_candidate", False))
+        consequences = []
+        if default_deleted:
+            consequences.append("disconnected it as the profile default")
+        if affected:
+            consequences.append(
+                f"cleared it from {affected} delivery preset{'s' if affected != 1 else ''}"
+            )
+        suffix = f" This also {' and '.join(consequences)}." if consequences else ""
+        return {
+            "message": (
+                f"Deleted voice ID candidate #{candidate['generation_number']} from ElevenLabs "
+                f"and local storage.{suffix}"
+            ),
+            "voice": voice,
+        }
+    except (AlphaError, ElevenLabsError) as error:
         status_code = 404 if "not found" in str(error).lower() else 422
-        raise _alpha_error(error, status_code) from error
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
 def _require_elevenlabs() -> None:
@@ -935,6 +1052,9 @@ def api_design_voice(
         creation_method = str(payload.get("creation_method", voice["creation_method"])).strip()
         if creation_method not in {"designed", "reference_design"}:
             raise AlphaError("Select a Voice Design method before generating design candidates.")
+        description = str(payload.get("description", voice["description"])).strip()
+        if not 20 <= len(description) <= 5000:
+            raise AlphaError("Voice Design prompt context must contain 20–5,000 characters.")
         preview_text = str(payload.get("preview_text", "")).strip()
         if not 100 <= len(preview_text) <= 1000:
             raise AlphaError("Voice preview text must contain 100–1,000 characters.")
@@ -953,7 +1073,7 @@ def api_design_voice(
         if reference_audio is not None and design_model != "eleven_ttv_v3":
             raise AlphaError("Reference-guided Voice Design requires the v3 design model.")
         result = elevenlabs.design_voice(
-            description=voice["description"],
+            description=description,
             preview_text=preview_text,
             model_id=design_model,
             reference_audio=reference_audio,
@@ -983,7 +1103,7 @@ def api_design_voice(
             raise ElevenLabsError("ElevenLabs returned no voice previews.")
         preview_ids = alpha_store.record_voice_previews(
             voice_id,
-            prompt=voice["description"],
+            prompt=description,
             preview_text=preview_text,
             model_id=design_model,
             previews=previews,
@@ -993,32 +1113,26 @@ def api_design_voice(
         alpha_store.update_voice(
             voice_id,
             {
-                "description": voice["description"],
+                "description": description,
                 "creation_method": creation_method,
             },
         )
-        replaced_count = sum(preview["status"] != "selected" for preview in voice["previews"])
-        selected_preserved = any(preview["status"] == "selected" for preview in voice["previews"])
+        replaced_count = len(voice["previews"])
         cost_note = (
             f" ElevenLabs reported {result.character_cost:,} credits for the request."
             if result.character_cost is not None
             else ""
         )
         replacement_note = (
-            f" Replaced {replaced_count} former unselected candidate"
+            f" Replaced {replaced_count} former temporary Voice Design preview"
             f"{'s' if replaced_count != 1 else ''}."
             if replaced_count
             else ""
         )
-        preservation_note = (
-            " Preserved the selected candidate and reusable ElevenLabs voice."
-            if selected_preserved
-            else ""
-        )
         return {
             "message": (
-                f"Stored {len(preview_ids)} new voice candidates."
-                f"{replacement_note}{preservation_note}{cost_note}"
+                f"Stored {len(preview_ids)} new temporary Voice Design previews."
+                f"{replacement_note}{cost_note}"
             ),
             "preview_ids": preview_ids,
             "provider_request_id": result.request_id,
@@ -1047,15 +1161,20 @@ def api_activate_voice_preview(
         if not provider_voice_id:
             raise ElevenLabsError("ElevenLabs did not return a voice ID.")
         voice = alpha_store.activate_voice_preview(preview_id, provider_voice_id)
+        candidate_id = str(voice.pop("created_voice_id_candidate", ""))
+        candidate = alpha_store.get_voice_id_candidate(candidate_id)
         discarded_count = int(voice.pop("discarded_preview_count", 0))
         cleanup_note = (
-            f" Deleted {discarded_count} other local candidate"
+            f" Deleted {discarded_count} temporary Voice Design preview"
             f"{'s' if discarded_count != 1 else ''}."
             if discarded_count
             else ""
         )
         return {
-            "message": f"Activated {voice['name']} in ElevenLabs.{cleanup_note}",
+            "message": (
+                f"Generated voice ID candidate #{candidate['generation_number']} for "
+                f"{voice['name']} and made it the profile default.{cleanup_note}"
+            ),
             "voice": voice,
         }
     except (AlphaError, ElevenLabsError) as error:
@@ -1097,22 +1216,34 @@ def api_clone_voice(
         provider_voice_id = str(result.get("voice_id", "")).strip()
         if not provider_voice_id:
             raise ElevenLabsError("ElevenLabs did not return a voice ID.")
-        updated = alpha_store.update_voice(
+        candidate = alpha_store.record_voice_id_candidate(
             voice_id,
-            {
-                "description": voice["description"],
-                "creation_method": "instant_clone",
-                "provider_voice_id": provider_voice_id,
-            },
+            provider_voice_id=provider_voice_id,
+            creation_method="instant_clone",
+            creation_model_id="instant_voice_clone",
         )
-        updated = alpha_store.supersede_selected_voice_previews(voice_id)
+        updated = alpha_store.set_default_voice_id_candidate(candidate["candidate_id"])
+        audition_error = None
+        try:
+            candidate = _generate_voice_id_audition(candidate, updated)
+        except (AlphaError, ElevenLabsError) as error:
+            audition_error = str(error)
+        sample_message = (
+            " Its standardized audition sample is ready."
+            if not audition_error
+            else (
+                " The voice ID is safely tracked, but its audition sample could not be "
+                f"generated: {audition_error} Use Generate audition on its candidate card to retry."
+            )
+        )
         return {
             "message": (
-                f"Instant clone is active for {voice['name']}. "
-                "ElevenLabs creates this reusable voice directly, so it does not return "
-                "Voice Design candidates. Generate a new neutral sample to review the clone."
+                f"Generated voice ID candidate #{candidate['generation_number']} from the "
+                f"selected clips and made it the profile default.{sample_message}"
             ),
             "voice": updated,
+            "candidate": candidate,
+            "audition_error": audition_error,
         }
     except (AlphaError, ElevenLabsError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

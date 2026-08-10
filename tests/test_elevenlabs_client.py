@@ -40,6 +40,10 @@ class FakeSession:
         self.calls.append(("GET", url, kwargs))
         return FakeResponse(payload={"character_count": 50, "character_limit": 1000})
 
+    def delete(self, url, **kwargs):
+        self.calls.append(("DELETE", url, kwargs))
+        return FakeResponse(payload={"status": "ok"})
+
 
 def test_default_http_sessions_are_isolated_per_worker_thread(monkeypatch):
     created_sessions = []
@@ -132,3 +136,22 @@ def test_voice_clone_preserves_each_reference_files_mime_type(tmp_path):
     multipart = session.calls[0][2]["files"]
     assert multipart[0][1][2] == "audio/mpeg"
     assert multipart[1][1][2] in {"audio/wav", "audio/x-wav"}
+
+
+def test_voice_delete_uses_the_provider_voice_endpoint():
+    session = FakeSession()
+    client = ElevenLabsClient(
+        settings=Settings(elevenlabs_api_key="test-key"),
+        session=session,
+    )
+
+    result = client.delete_voice("voice-to-delete")
+
+    assert result == {"status": "ok"}
+    assert session.calls == [
+        (
+            "DELETE",
+            "https://api.elevenlabs.io/v1/voices/voice-to-delete",
+            {"headers": {"xi-api-key": "test-key"}, "timeout": 60},
+        )
+    ]

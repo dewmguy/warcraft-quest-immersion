@@ -39,19 +39,8 @@ def test_initialize_adds_candidate_method_to_existing_alpha_database(tmp_path: P
     assert "creation_method" in columns
 
 
-def test_initialize_supersedes_stale_selected_preview_for_active_instant_clone(
-    store: AlphaStore,
-):
+def test_initialize_backfills_current_provider_voice_into_candidate_registry(store: AlphaStore):
     voice_id = "baseline--bloodelf-female"
-    preview_id = store.record_voice_previews(
-        voice_id,
-        prompt="Prior design prompt",
-        preview_text="Prior design sample",
-        model_id="eleven_ttv_v3",
-        creation_method="designed",
-        previews=[{"content": b"prior-audio", "generated_voice_id": "prior-generated"}],
-    )[0]
-    store.activate_voice_preview(preview_id, "prior-provider-voice")
     current = store.get_voice(voice_id)
     store.update_voice(
         voice_id,
@@ -61,11 +50,18 @@ def test_initialize_supersedes_stale_selected_preview_for_active_instant_clone(
             "provider_voice_id": "active-instant-clone",
         },
     )
-    assert store.get_voice_preview(preview_id)["status"] == "selected"
+    with store.connect() as connection:
+        connection.execute(
+            "DELETE FROM voice_id_candidates WHERE provider_voice_id='active-instant-clone'"
+        )
 
     store.initialize()
 
-    assert store.get_voice_preview(preview_id)["status"] == "superseded"
+    candidate = store.get_voice(voice_id)["voice_id_candidates"][0]
+    assert candidate["provider_voice_id"] == "active-instant-clone"
+    assert candidate["creation_method"] == "instant_clone"
+    assert candidate["creation_model_id"] == "instant_voice_clone"
+    assert candidate["is_default"] is True
 
 
 def test_import_creates_full_scope_records_without_spoken_text(store: AlphaStore):
@@ -471,6 +467,53 @@ def test_delivery_presets_are_voice_metadata_used_for_dialogue(store: AlphaStore
     assert angry["prompt_tag"] == "furious"
     assert dialogue["generation_text"].startswith("[furious]")
     assert store.progress()["voices"]["complete"] == 1
+
+
+def test_each_delivery_preset_can_target_a_different_voice_id_candidate(store: AlphaStore):
+    voice_id = "baseline--bloodelf-female"
+    voice = store.get_voice(voice_id)
+    store.update_voice(
+        voice_id,
+        {
+            "description": voice["description"],
+            "creation_method": "external",
+            "provider_voice_id": "provider-default",
+        },
+    )
+    alternate = store.record_voice_id_candidate(
+        voice_id,
+        provider_voice_id="provider-sorrowful",
+        creation_method="designed",
+        creation_model_id="eleven_ttv_v3",
+    )
+    store.update_delivery_preset(
+        voice_id,
+        "sorrowful",
+        {
+            "provider_voice_id": alternate["provider_voice_id"],
+            "prompt_tag": "quietly grieving",
+            "stability": 0.5,
+        },
+    )
+
+    request = store.delivery_preview_request(
+        voice_id,
+        "sorrowful",
+        "This fixed passage is deliberately long enough to test the selected reusable voice "
+        "candidate for a restrained and sorrowful emotional delivery.",
+    )
+    revised = store.get_voice(voice_id)
+    preset = next(item for item in revised["delivery_presets"] if item["delivery"] == "sorrowful")
+
+    assert request["voice_id"] == "provider-sorrowful"
+    assert request["baseline_voice_id"] == "provider-sorrowful"
+    assert preset["provider_voice_id"] == "provider-sorrowful"
+    assert preset["effective_provider_voice_id"] == "provider-sorrowful"
+    assert len(revised["voice_id_candidates"]) == 2
+    assert {item["provider_voice_id"] for item in revised["voice_id_candidates"]} == {
+        "provider-default",
+        "provider-sorrowful",
+    }
 
 
 def test_initialize_removes_legacy_brackets_from_saved_voice_actor_notes(store: AlphaStore):
