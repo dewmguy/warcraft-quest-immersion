@@ -169,7 +169,7 @@
               <span class="delivery-preview-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
             </summary>
             <div class="delivery-preview-body voice-id-candidate-body">
-              <div class="asset-standard-title"><span>Standard Title</span><strong>{{ candidate_title }}</strong></div>
+              <div class="asset-standard-title" data-standard-title-for="{{ candidate.provider_voice_id }}"{% if not candidate.display_name %} hidden{% endif %}><span>Standard Title</span><strong>{{ candidate_title }}</strong></div>
               <form id="candidate-name-{{ candidate.candidate_id }}" class="candidate-name-form asset-name-form" data-auto-save-form data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}" data-method="PATCH" hidden>
                 <input name="display_name" value="{{ candidate.display_name }}" maxlength="80" placeholder="Add a memorable name" aria-label="Name for {{ candidate_title }}" data-voice-name-input data-provider-voice-id="{{ candidate.provider_voice_id }}">
               </form>

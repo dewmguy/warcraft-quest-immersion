@@ -368,6 +368,11 @@ function syncOptionalName(input) {
         target.textContent = displayName || target.dataset.defaultTitle;
       }
     }
+    for (const target of document.querySelectorAll("[data-standard-title-for]")) {
+      if (target.dataset.standardTitleFor === providerVoiceId) {
+        target.hidden = !displayName;
+      }
+    }
     for (const target of document.querySelectorAll("[data-voice-name-for]")) {
       if (target.dataset.voiceNameFor === providerVoiceId) {
         target.textContent = displayName ? ` · ${displayName}` : "";

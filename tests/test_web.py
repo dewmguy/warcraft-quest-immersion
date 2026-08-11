@@ -577,6 +577,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
             for item in web.alpha_store.get_voice(voice_id)["voice_id_candidates"]
             if item["provider_voice_id"] == "provider-voice-test"
         )
+        unnamed_page = client.get(f"/alpha/voices/{voice_id}")
         named_voice = client.patch(
             f"/api/alpha/voice-id-candidates/{candidate['candidate_id']}",
             headers={"X-WQI-Action": "confirmed"},
@@ -609,6 +610,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
         )
 
     assert page.status_code == 200
+    assert unnamed_page.status_code == 200
     assert named_voice.status_code == 200
     assert named_voice.json()["message"] == "Saved the Voice ID name."
     assert named_sample.status_code == 200
@@ -645,7 +647,11 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert "Sample Name (Optional)" not in page.text
     assert "Name (Optional)" not in page.text
     assert "Generated Sample</span><strong>Neutral Sample #1</strong>" in page.text
-    assert "Standard Title</span><strong>External / Imported #1</strong>" in page.text
+    assert (
+        'data-standard-title-for="provider-voice-test"><span>Standard Title</span>'
+        "<strong>External / Imported #1</strong>" in page.text
+    )
+    assert 'data-standard-title-for="provider-voice-test" hidden>' in unnamed_page.text
     assert "Creation Method: <strong>External / Imported</strong>" in page.text
     assert page.text.count("Voice ID: <code>provider-voice-test</code>") == 0
     assert page.text.count("Voice actor notes") == 3
@@ -759,6 +765,8 @@ def test_delivery_preset_settings_auto_save_and_build_actions_skip_confirmations
     assert "updatePresetStatus(form, payload.voice)" in script
     assert "function syncOptionalName(input)" in script
     assert 'document.querySelectorAll("[data-voice-title-for]")' in script
+    assert 'document.querySelectorAll("[data-standard-title-for]")' in script
+    assert "target.hidden = !displayName" in script
     assert 'document.querySelectorAll("[data-voice-name-for]")' in script
     assert 'document.querySelectorAll("[data-sample-title-for]")' in script
     assert 'document.querySelectorAll("[data-name-editor-target]")' in script
