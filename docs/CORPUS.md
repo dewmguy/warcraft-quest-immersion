@@ -132,3 +132,18 @@ The quest-progress event path is enabled for all supported legacy clients.
 Phase 2 stops after the complete corpus is visible and reconciled and one
 per-NPC binding passes in-game playback. Corpus extraction and import never call
 ElevenLabs.
+
+## 3.3.5a playback acceptance package
+
+Build the disposable manual-test package after importing a certified snapshot:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_335a_acceptance_fixture.py
+```
+
+The ignored `data/acceptance/wqi-3.3.5-phase2-acceptance.zip` artifact contains
+the current addon, a high-priority test data module, five distinct 44.1 kHz / 128
+kbps tone files, and one inherited legacy voice file. Its included instructions
+exercise two NPCs delivering the same quest accept text, quest completion,
+quest progress, a nested gossip path, and the legacy filename fallback. The
+tones are test fixtures only and must not be copied into production exports.
