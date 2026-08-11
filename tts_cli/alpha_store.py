@@ -773,6 +773,10 @@ class AlphaStore:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS dialogue_binding_idx ON dialogue_entries(binding_id)"
         )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS dialogue_projection_idx ON dialogue_entries("
+            "expansion, locale, source, speaker_id, quest_id, source_record_id)"
+        )
         snapshot_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(source_snapshots)")
         }
