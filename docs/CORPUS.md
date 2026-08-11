@@ -142,8 +142,9 @@ Build the disposable manual-test package after importing a certified snapshot:
 ```
 
 The ignored `data/acceptance/wqi-3.3.5-phase2-acceptance.zip` artifact contains
-the current addon, a high-priority test data module, five distinct 44.1 kHz / 128
-kbps tone files, and one inherited legacy voice file. Its included instructions
-exercise two NPCs delivering the same quest accept text, quest completion,
-quest progress, a nested gossip path, and the legacy filename fallback. The
-tones are test fixtures only and must not be copied into production exports.
+the current addon, a 3.3.5-specific high-priority test data module, and six
+recognizable Gnome female error-message clips copied byte-for-byte from the
+owner-supplied sound library. Its included instructions use Human starter quests
+in Northshire to exercise distinct accept/complete NPC delivery, quest progress,
+and the legacy filename fallback. The clips are test fixtures only and must not
+be copied into production exports.

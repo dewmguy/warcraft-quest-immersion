@@ -15,47 +15,23 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_MODULE = "AI_VoiceOverData_WQI_Acceptance"
 CORPUS_SNAPSHOT_ID = "04fc042b76e8d195012fac39"
-LEGACY_AUDIO_MEMBER = "AI_VoiceOverData_Vanilla/generated/sounds/quests/10-accept.mp3"
+DEFAULT_SOUND_DIRECTORY = Path(
+    "S:/Personal/Audio/Sound Rips/Wow Sounds/Character/Gnome/GnomeFemaleErrorMessages"
+)
 
 TEST_SOUNDS = {
-    "quests/6075-accept-c895.mp3": (440, 1.2),
-    "quests/6075-accept-c11807.mp3": (880, 1.2),
-    "quests/6075-complete-c1231.mp3": (660, 1.2),
-    "quests/362-progress-c1500.mp3": (550, 1.2),
-    "gossip/a7ff88fc7f275c6071153623e049fbf1.mp3": (990, 1.2),
+    "quests/783-accept-c823.mp3": "GnomeFemale_err_genericnotarget01.mp3",
+    "quests/783-complete-c197.mp3": "GnomeFemale_err_notenoughmoney01.mp3",
+    "quests/7-accept-c197.mp3": "GnomeFemale_err_inventoryfull01.mp3",
+    "quests/7-progress-c197.mp3": "GnomeFemale_err_outofrange02.mp3",
+    "quests/7-complete-c197.mp3": "GnomeFemale_err_abilitycooldown01.mp3",
+    "quests/33-accept.mp3": "GnomeFemale_err_cantloot01.mp3",
 }
 
 
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8", newline="\n")
-
-
-def _tone(ffmpeg: str, path: Path, frequency: int, duration: float) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-f",
-            "lavfi",
-            "-i",
-            f"sine=frequency={frequency}:duration={duration}",
-            "-af",
-            "volume=0.18,afade=t=in:st=0:d=0.04,afade=t=out:st=1.1:d=0.1",
-            "-ar",
-            "44100",
-            "-ac",
-            "1",
-            "-b:a",
-            "128k",
-            str(path),
-        ],
-        check=True,
-    )
 
 
 def _duration(ffprobe: str, path: Path) -> float:
@@ -86,9 +62,9 @@ def _write_data_module(destination: Path, lengths: dict[str, float]) -> None:
     generated = module / "generated"
     _write(
         module / f"{DATA_MODULE}.toc",
-        f"""## Interface: 100000
+        f"""## Interface: 30300
 ## Title: VoiceOver Data - WQI Phase 2 Acceptance
-## Notes: Disposable tone fixture for the certified 3.3.5 per-deliverer playback gate.
+## Notes: Disposable Northshire fixture for the certified 3.3.5 per-deliverer playback gate.
 ## Version: {CORPUS_SNAPSHOT_ID}
 ## LoadOnDemand: 1
 ## RequiredDeps: AI_VoiceOver
@@ -101,7 +77,6 @@ def _write_data_module(destination: Path, lengths: dict[str, float]) -> None:
 Module.lua
 generated\\quest_id_lookups.lua
 generated\\questlog_npc_lookups.lua
-generated\\npc_gossip_file_lookups.lua
 generated\\sound_length_table.lua
 """,
     )
@@ -128,14 +103,16 @@ VoiceOver.DataModules:Register("{DATA_MODULE}", {DATA_MODULE})
         f"""if not VoiceOver or not VoiceOver.DataModules then return end
 {DATA_MODULE}.QuestIDLookup = {{
     ["accept"] = {{
-        ["The Hunter's Path"] = 6075,
-        ["The Scrimshank Redemption"] = 10
+        ["A Threat Within"] = 783,
+        ["Kobold Camp Cleanup"] = 7,
+        ["Wolves Across the Border"] = 33
     }},
     ["progress"] = {{
-        ["The Haunted Mills"] = 362
+        ["Kobold Camp Cleanup"] = 7
     }},
     ["complete"] = {{
-        ["The Hunter's Path"] = 6075
+        ["A Threat Within"] = 783,
+        ["Kobold Camp Cleanup"] = 7
     }}
 }}
 """,
@@ -144,28 +121,18 @@ VoiceOver.DataModules:Register("{DATA_MODULE}", {DATA_MODULE})
         generated / "questlog_npc_lookups.lua",
         f"""if not VoiceOver or not VoiceOver.DataModules then return end
 {DATA_MODULE}.NPCIDLookupByQuestID = {{
-    [362] = 1500
+    [7] = 197,
+    [33] = 196
 }}
 {DATA_MODULE}.QuestAudioLookupByNPCID = {{
-    [362] = {{
-        ["progress"] = {{ [1500] = "362-progress-c1500" }}
+    [7] = {{
+        ["accept"] = {{ [197] = "7-accept-c197" }},
+        ["progress"] = {{ [197] = "7-progress-c197" }},
+        ["complete"] = {{ [197] = "7-complete-c197" }}
     }},
-    [6075] = {{
-        ["accept"] = {{
-            [895] = "6075-accept-c895",
-            [11807] = "6075-accept-c11807"
-        }},
-        ["complete"] = {{ [1231] = "6075-complete-c1231" }}
-    }}
-}}
-""",
-    )
-    _write(
-        generated / "npc_gossip_file_lookups.lua",
-        f"""if not VoiceOver or not VoiceOver.DataModules then return end
-{DATA_MODULE}.GossipLookupByNPCID = {{
-    [16131] = {{
-        ["Members only, scrub!"] = "a7ff88fc7f275c6071153623e049fbf1"
+    [783] = {{
+        ["accept"] = {{ [823] = "783-accept-c823" }},
+        ["complete"] = {{ [197] = "783-complete-c197" }}
     }}
 }}
 """,
@@ -189,60 +156,66 @@ def _write_readme(destination: Path) -> None:
         destination / "WQI-PHASE-2-ACCEPTANCE.txt",
         """WQI Phase 2 3.3.5a playback acceptance
 
-This package contains disposable tones, not production voice audio. Copy both addon
-folders into the 3.3.5a client's Interface/AddOns directory and enable out-of-date
-addons. Back up any existing AI_VoiceOver folder first.
+This package contains recognizable Gnome female error-message clips as disposable
+test audio, not production quest voices. Back up any existing AI_VoiceOver folder,
+then copy both addon folders into the 3.3.5a client's Interface/AddOns directory.
+The included data module targets client build 3.3.5a (12340) and should not require
+"Load out of date AddOns."
 
 Checks
 
-1. Shared quest 6075, The Hunter's Path, Dun Morogh:
-   - Thorgas Grimson (creature 895) must play the low 440 Hz tone on accept.
-   - Tristane Shadowstone (creature 11807) must play the high 880 Hz tone on accept.
-   Abandon/reset the quest between NPCs. The two distinct tones prove that the same
-   quest text resolves through the interacting creature GUID.
+Use a new or low-level Human character in Northshire.
 
-2. Completion for quest 6075:
-   - Grif Wildheart (creature 1231) must play the 660 Hz tone.
+1. A Threat Within (quest 783, level 1):
+   - Accept from Deputy Willem (creature 823): generic-no-target Gnome clip.
+     Source: GnomeFemale_err_genericnotarget01.mp3
+   - Complete at Marshal McBride (creature 197): not-enough-money Gnome clip.
+     Source: GnomeFemale_err_notenoughmoney01.mp3
+   These different sounds prove that accept and complete resolve through their actual
+   delivery NPCs rather than one quest-wide speaker.
 
-3. Progress event:
-   - Add but do not complete quest 362, The Haunted Mills, then open it at Coleman
-     Farthing (creature 1500). The incomplete/progress pane must play the 550 Hz tone.
+2. Kobold Camp Cleanup (quest 7, level 2), from Marshal McBride:
+   - Open the offer: inventory-full Gnome clip.
+     Source: GnomeFemale_err_inventoryfull01.mp3
+   - Accept it, leave it incomplete, then reopen Marshal McBride's quest pane:
+     out-of-range Gnome clip.
+     Source: GnomeFemale_err_outofrange02.mp3
+   - Finish and reopen the quest: ability-cooldown Gnome clip.
+     Source: GnomeFemale_err_abilitycooldown01.mp3
+   The middle check proves the 3.3.5 QUEST_PROGRESS path.
 
-4. Nested gossip:
-   - Rohan the Assassin (creature 16131), Eastern Plaguelands.
-   - Follow: What is it that you do exactly? > So what brings you to Light's Hope? >
-     What? Bonescythe? > Wow, you're insane, aren't you? > Hey wait, Gadgetzan has a
-     disco? The final Members only, scrub! pane must play the 990 Hz tone.
-
-5. Legacy fallback:
-   - Quest 10, The Scrimshank Redemption, at Senior Surveyor Fizzledowser
-     (creature 7724) must play the inherited spoken 10-accept.mp3. There is no
-     per-NPC lookup for quest 10 in this fixture, so playback proves legacy fallback.
+3. Legacy filename fallback, Wolves Across the Border (quest 33, level 2):
+   - Accept from Eagan Peltskinner (creature 196): cannot-loot Gnome clip.
+     Source: GnomeFemale_err_cantloot01.mp3
+   This fixture deliberately supplies only quests/33-accept.mp3, with no per-NPC
+   audio lookup, so successful playback proves compatibility with legacy data packs.
 
 Record the client build, addon load status, NPC/quest tested, heard result, and any
-Lua error. Remove AI_VoiceOverData_WQI_Acceptance after the gate; its tones are not
-production assets.
+Lua error. Remove AI_VoiceOverData_WQI_Acceptance after the gate; these clips are not
+production quest assets.
 """,
     )
 
 
-def build(output: Path, ffmpeg: str, ffprobe: str, legacy_pack: Path) -> Path:
+def build(output: Path, ffprobe: str, sound_directory: Path) -> Path:
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    missing = [name for name in TEST_SOUNDS.values() if not (sound_directory / name).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            f"Missing {len(missing)} source clip(s) beneath {sound_directory}: "
+            + ", ".join(missing)
+        )
     with tempfile.TemporaryDirectory(prefix="wqi-acceptance-") as temporary:
         root = Path(temporary)
         _copy_addon(root)
         module = root / DATA_MODULE
         lengths: dict[str, float] = {}
-        for relative, (frequency, duration) in TEST_SOUNDS.items():
+        for relative, source_name in TEST_SOUNDS.items():
             target = module / "generated" / "sounds" / relative
-            _tone(ffmpeg, target, frequency, duration)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(sound_directory / source_name, target)
             lengths[relative] = _duration(ffprobe, target)
-        legacy_target = module / "generated" / "sounds" / "quests" / "10-accept.mp3"
-        legacy_target.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(legacy_pack) as source:
-            legacy_target.write_bytes(source.read(LEGACY_AUDIO_MEMBER))
-        lengths["quests/10-accept.mp3"] = _duration(ffprobe, legacy_target)
         _write_data_module(root, lengths)
         _write_readme(root)
 
@@ -251,7 +224,9 @@ def build(output: Path, ffmpeg: str, ffprobe: str, legacy_pack: Path) -> Path:
             relative = path.relative_to(module).as_posix()
             audio_manifest[relative] = {
                 "bytes": path.stat().st_size,
+                "duration_seconds": lengths[relative.removeprefix("generated/sounds/")],
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "source_clip": TEST_SOUNDS[relative.removeprefix("generated/sounds/")],
             }
         _write(
             root / "WQI-PHASE-2-ACCEPTANCE.json",
@@ -281,18 +256,14 @@ def main() -> int:
         type=Path,
         default=PROJECT_ROOT / "data" / "acceptance" / "wqi-3.3.5-phase2-acceptance.zip",
     )
-    parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--ffprobe", default="ffprobe")
     parser.add_argument(
-        "--legacy-pack",
+        "--sound-directory",
         type=Path,
-        default=PROJECT_ROOT
-        / "imports"
-        / "source-archives"
-        / "AI-VoiceOver-1.4.1-plus-VanillaData-0.1-WoW-3.3.5a-Load-Outdated.zip",
+        default=DEFAULT_SOUND_DIRECTORY,
     )
     args = parser.parse_args()
-    package = build(args.output, args.ffmpeg, args.ffprobe, args.legacy_pack.resolve())
+    package = build(args.output, args.ffprobe, args.sound_directory.resolve())
     print(
         json.dumps(
             {
