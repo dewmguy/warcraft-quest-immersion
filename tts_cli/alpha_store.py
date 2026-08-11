@@ -770,6 +770,9 @@ class AlphaStore:
             connection.execute(
                 "ALTER TABLE dialogue_entries ADD COLUMN source_changed INTEGER NOT NULL DEFAULT 0"
             )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS dialogue_binding_idx ON dialogue_entries(binding_id)"
+        )
         snapshot_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(source_snapshots)")
         }

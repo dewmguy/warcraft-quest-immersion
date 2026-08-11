@@ -194,6 +194,11 @@ def test_atomic_import_preserves_overrides_and_shares_spoken_text(
 ):
     store = AlphaStore(tmp_path / "production.sqlite3", tmp_path / "storage")
     store.initialize()
+    with store.connect() as connection:
+        dialogue_indexes = {
+            row[1] for row in connection.execute("PRAGMA index_list(dialogue_entries)")
+        }
+    assert "dialogue_binding_idx" in dialogue_indexes
 
     dry_run = store.import_corpus_bundle(corpus_bundle_path, dry_run=True)
     assert dry_run["counts"]["added"] == dry_run["counts"]["active_bindings"]
