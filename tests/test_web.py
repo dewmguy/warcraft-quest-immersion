@@ -672,6 +672,17 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert "background: var(--danger); color: #100f12; filter: none;" in stylesheet
     assert ".delivery-preview-summary code { color: var(--success);" in stylesheet
     assert (
+        ".alpha-body .asset-name-edit { display: inline-flex; width: auto; min-height: 0; "
+        "flex: none; align-items: center; border: 0; border-radius: 0; padding: 0; "
+        "color: var(--gold-bright); background: transparent; box-shadow: none; "
+        "font-size: .78rem; line-height: 1; }" in stylesheet
+    )
+    assert (
+        ".alpha-body .asset-name-edit:hover, .alpha-body .asset-name-edit:focus-visible { "
+        "border: 0; color: var(--gold-bright); background: transparent; box-shadow: none; "
+        "filter: none; }" in stylesheet
+    )
+    assert (
         ".creation-workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) "
         "minmax(360px, 400px);" in stylesheet
     )

@@ -503,8 +503,8 @@ dialog .actions { justify-content: flex-end; }
 .delivery-preview-summary small { color: #8f8793; font-size: .66rem; white-space: normal; }
 .asset-preview-title { display: flex; min-width: 0; align-items: center; gap: 5px; }
 .asset-preview-title > strong { min-width: 0; }
-.alpha-body .asset-name-edit { display: inline-grid; width: 20px; min-height: 20px; flex: none; place-items: center; border: 0; padding: 0; color: #bca76f; background: transparent; font-size: .65rem; }
-.alpha-body .asset-name-edit:hover, .alpha-body .asset-name-edit:focus-visible { color: #100f12; background: var(--gold-bright); }
+.alpha-body .asset-name-edit { display: inline-flex; width: auto; min-height: 0; flex: none; align-items: center; border: 0; border-radius: 0; padding: 0; color: var(--gold-bright); background: transparent; box-shadow: none; font-size: .78rem; line-height: 1; }
+.alpha-body .asset-name-edit:hover, .alpha-body .asset-name-edit:focus-visible { border: 0; color: var(--gold-bright); background: transparent; box-shadow: none; filter: none; }
 .asset-standard-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #aaa3ad; }
 .asset-standard-title span { color: #8f8793; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .asset-standard-title strong { color: #d9d0db; font-size: .74rem; text-align: right; }
