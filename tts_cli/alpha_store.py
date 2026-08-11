@@ -5,6 +5,7 @@ import json
 import re
 import sqlite3
 import uuid
+from collections import defaultdict, deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -1642,6 +1643,80 @@ class AlphaStore:
             snapshot_id = str(plan["snapshot_id"])
             source_name = str(source.get("name") or "azerothcore-world")
 
+            # Freeze projection candidates before inserting this snapshot. Legacy matching must
+            # never see rows created earlier in the same import, otherwise distinct bindings
+            # with identical NPC text collapse onto one dialogue row.
+            prior_binding_rows = connection.execute(
+                "SELECT db.binding_id, db.dialogue_id, de.binding_id AS projected_binding_id "
+                "FROM dialogue_bindings db LEFT JOIN dialogue_entries de "
+                "ON de.dialogue_id=db.dialogue_id WHERE db.expansion=? AND db.locale=?",
+                (expansion, locale),
+            ).fetchall()
+            bindings_by_dialogue: dict[str, list[str]] = defaultdict(list)
+            projected_binding_by_dialogue: dict[str, str] = {}
+            for row in prior_binding_rows:
+                dialogue_id = str(row["dialogue_id"] or "")
+                if not dialogue_id:
+                    continue
+                bindings_by_dialogue[dialogue_id].append(str(row["binding_id"]))
+                projected_binding_by_dialogue[dialogue_id] = str(row["projected_binding_id"] or "")
+            projection_by_binding: dict[str, str] = {}
+            for dialogue_id, binding_ids in bindings_by_dialogue.items():
+                preferred = (
+                    dialogue_id
+                    if dialogue_id in binding_ids
+                    else projected_binding_by_dialogue[dialogue_id]
+                )
+                if preferred not in binding_ids:
+                    preferred = sorted(binding_ids)[0]
+                projection_by_binding[preferred] = dialogue_id
+
+            alias_by_binding = {
+                str(row["binding_id"]): str(row["alias_id"])
+                for row in connection.execute(
+                    "SELECT binding_id, alias_id FROM legacy_dialogue_aliases"
+                )
+            }
+            linked_dialogue_ids = set(bindings_by_dialogue) | set(alias_by_binding.values())
+            legacy_by_record: dict[tuple[Any, ...], deque[str]] = defaultdict(deque)
+            legacy_by_quest: dict[tuple[Any, ...], deque[str]] = defaultdict(deque)
+            legacy_by_gossip: dict[tuple[Any, ...], deque[str]] = defaultdict(deque)
+            for row in connection.execute(
+                "SELECT dialogue_id, expansion, locale, source, speaker_id, quest_id, "
+                "source_record_id, original_text, binding_id FROM dialogue_entries "
+                "WHERE expansion=? AND locale=? ORDER BY created_at, dialogue_id",
+                (expansion, locale),
+            ):
+                dialogue_id = str(row["dialogue_id"])
+                if dialogue_id in linked_dialogue_ids or str(row["binding_id"] or ""):
+                    continue
+                quest_key = int(row["quest_id"] or 0)
+                base = (
+                    str(row["expansion"]),
+                    str(row["locale"]),
+                    str(row["source"]),
+                    str(row["speaker_id"]),
+                )
+                legacy_by_record[(*base, quest_key, str(row["source_record_id"]))].append(
+                    dialogue_id
+                )
+                if quest_key:
+                    legacy_by_quest[(*base, quest_key)].append(dialogue_id)
+                elif row["source"] == "gossip":
+                    legacy_by_gossip[(*base, str(row["original_text"]))].append(dialogue_id)
+
+            claimed_dialogue_ids: set[str] = set()
+
+            def take_legacy(
+                candidates: dict[tuple[Any, ...], deque[str]], key: tuple[Any, ...]
+            ) -> str:
+                queue = candidates.get(key)
+                while queue:
+                    dialogue_id = queue.popleft()
+                    if dialogue_id not in claimed_dialogue_ids:
+                        return dialogue_id
+                return ""
+
             connection.execute(
                 "UPDATE source_snapshots SET is_active=0 WHERE expansion=? AND locale=?",
                 (expansion, locale),
@@ -1844,53 +1919,29 @@ class AlphaStore:
                 speaker_id = speaker_by_entity[entity_key]
                 quest_id = int(binding["quest_id"]) if str(binding["quest_id"]) else None
                 source_type = str(binding["stage"] or "gossip")
-                existing_projection = connection.execute(
-                    "SELECT dialogue_id FROM dialogue_entries WHERE binding_id=?",
-                    (binding_id,),
-                ).fetchone()
-                if not existing_projection:
-                    alias = connection.execute(
-                        "SELECT alias_id AS dialogue_id FROM legacy_dialogue_aliases "
-                        "WHERE binding_id=? LIMIT 1",
-                        (binding_id,),
-                    ).fetchone()
-                    existing_projection = alias
-                if not existing_projection:
-                    existing_projection = connection.execute(
-                        "SELECT dialogue_id FROM dialogue_entries WHERE expansion=? AND locale=? "
-                        "AND source=? AND speaker_id=? AND COALESCE(quest_id, 0)=COALESCE(?, 0) "
-                        "AND source_record_id=? ORDER BY active DESC, created_at LIMIT 1",
-                        (
-                            expansion,
-                            locale,
-                            source_type,
-                            speaker_id,
-                            quest_id,
-                            str(text_row["source_record_id"]),
-                        ),
-                    ).fetchone()
-                if not existing_projection and quest_id is not None:
-                    existing_projection = connection.execute(
-                        "SELECT dialogue_id FROM dialogue_entries WHERE expansion=? AND locale=? "
-                        "AND source=? AND speaker_id=? AND quest_id=? "
-                        "ORDER BY active DESC, created_at LIMIT 1",
-                        (expansion, locale, source_type, speaker_id, quest_id),
-                    ).fetchone()
-                if not existing_projection and quest_id is None:
-                    existing_projection = connection.execute(
-                        "SELECT dialogue_id FROM dialogue_entries WHERE expansion=? AND locale=? "
-                        "AND source='gossip' AND speaker_id=? AND original_text=? "
-                        "ORDER BY active DESC, created_at LIMIT 1",
-                        (
-                            expansion,
-                            locale,
-                            speaker_id,
-                            str(text_row["original_text"]),
-                        ),
-                    ).fetchone()
-                dialogue_id = (
-                    str(existing_projection["dialogue_id"]) if existing_projection else binding_id
+                dialogue_id = projection_by_binding.get(binding_id) or alias_by_binding.get(
+                    binding_id, ""
                 )
+                if dialogue_id in claimed_dialogue_ids:
+                    dialogue_id = ""
+                base = (expansion, locale, source_type, speaker_id)
+                if not dialogue_id:
+                    dialogue_id = take_legacy(
+                        legacy_by_record,
+                        (*base, int(quest_id or 0), str(text_row["source_record_id"])),
+                    )
+                if not dialogue_id and quest_id is not None:
+                    dialogue_id = take_legacy(legacy_by_quest, (*base, quest_id))
+                if not dialogue_id and quest_id is None:
+                    dialogue_id = take_legacy(
+                        legacy_by_gossip, (*base, str(text_row["original_text"]))
+                    )
+                dialogue_id = dialogue_id or binding_id
+                if dialogue_id in claimed_dialogue_ids:
+                    raise AlphaError(
+                        f"Dialogue projection {dialogue_id} was claimed by multiple bindings."
+                    )
+                claimed_dialogue_ids.add(dialogue_id)
                 source_changed = 1 if content_id in source_changed_ids else 0
                 metadata = {
                     "content_kind": text_row["kind"],

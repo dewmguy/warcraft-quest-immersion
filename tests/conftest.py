@@ -70,10 +70,15 @@ def azerothcore_tables() -> dict[str, list[dict]]:
         "item_template": [{"entry": 30, "name": "Sealed Warning", "StartQuest": 100}],
         "disables": [{"sourceType": 1, "entry": 200, "flags": 0}],
         "quest_greeting": [{"ID": 1, "Type": 0, "Greeting": "The pass needs you."}],
-        "gossip_menu": [{"MenuID": 10, "TextID": 500}, {"MenuID": 11, "TextID": 501}],
+        "gossip_menu": [
+            {"MenuID": 10, "TextID": 500},
+            {"MenuID": 11, "TextID": 501},
+            {"MenuID": 12, "TextID": 502},
+        ],
         "gossip_menu_option": [
             {"MenuID": 10, "OptionID": 0, "OptionText": "Tell me more.", "ActionMenuID": 11},
             {"MenuID": 11, "OptionID": 0, "OptionText": "Go back.", "ActionMenuID": 10},
+            {"MenuID": 11, "OptionID": 1, "OptionText": "Continue.", "ActionMenuID": 12},
         ],
         "conditions": [
             {
@@ -87,6 +92,7 @@ def azerothcore_tables() -> dict[str, list[dict]]:
         "npc_text": [
             {"ID": 500, "BroadcastTextID0": 600, "Probability0": 1.0},
             {"ID": 501, "text0_0": "The lower path is safer.", "text0_1": ""},
+            {"ID": 502, "text0_0": "The lower path is safer.", "text0_1": ""},
             {"ID": 999, "text0_0": "Unrooted but retained.", "text0_1": ""},
         ],
         "broadcast_text": [

@@ -207,6 +207,14 @@ def test_atomic_import_preserves_overrides_and_shares_spoken_text(
     applied = store.import_corpus_bundle(corpus_bundle_path)
     assert applied["applied"] is True
     assert store.dashboard()["counts"]["dialogue"] == applied["counts"]["active_bindings"]
+    repeated_gossip = [
+        row
+        for row in store.list_dialogue(source="gossip", page_size=50)["rows"]
+        if row["original_text"] == "The lower path is safer." and row["speaker_id"] == "creature-1"
+    ]
+    assert len(repeated_gossip) == 2
+    assert len({row["dialogue_id"] for row in repeated_gossip}) == 2
+    assert len({row["content_id"] for row in repeated_gossip}) == 2
 
     rowan = store.get_speaker("creature-1")["speaker"]
     assert rowan["faction"] == "alliance"
