@@ -45,9 +45,9 @@ race/gender/delivery presets, quest audio, and gossip audio.
 The certified 3.3.5 enUS extractor, corpus bundle contract, validate/dry-run/
 atomic-import path, normalized content and per-deliverer binding schema, and
 additive per-entity addon resolver are implemented. The phase remains in
-progress until the private AzerothCore snapshot and matching DBC exports are
-supplied, the full corpus reconciliation is reviewed, and the required in-game
-per-NPC playback acceptance passes.
+progress until the private AzerothCore snapshot is supplied, the extracted
+build-12340 DBC enrichment is restored, the full corpus reconciliation is
+reviewed, and the required in-game per-NPC playback acceptance passes.
 
 Exit gate:
 

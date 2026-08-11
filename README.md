@@ -200,7 +200,9 @@ docker compose exec warcraft-quest-immersion wqi generate-lookups --input-csv /a
 The database import is large and can take considerable time. Its named volume, `warcraft-quest-db-data`, persists independently of container replacement.
 
 For the authoritative AzerothCore workflow, stage the private dump and matching
-DBC exports under `data/sources/azerothcore/3.3.5/enUS/`, configure the
+DBC artifacts under `data/sources/azerothcore/3.3.5/enUS/`. Raw build-12340 DBCs
+can be extracted and converted with `scripts/extract-335a-dbc.ps1` and
+`wqi corpus dbc-to-sql`. Configure the
 `AZEROTHCORE_MYSQL_*` values in `.env`, then follow
 [`docs/CORPUS.md`](docs/CORPUS.md). The `corpus-build` service has no published
 port and is started only for restore and extraction.

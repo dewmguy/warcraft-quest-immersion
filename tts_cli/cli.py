@@ -21,6 +21,7 @@ from tts_cli.corpus import (
     write_corpus_bundle,
 )
 from tts_cli.data_sources import DataSourceError, load_dialogue_csv, write_dialogue_csv
+from tts_cli.dbc import convert_dbc_directory_to_sql
 from tts_cli.init_db import download_and_extract_latest_db_dump, import_sql_files_to_database
 from tts_cli.paths import PROJECT_ROOT, SAMPLE_DATA_PATH
 from tts_cli.sql_queries import (
@@ -112,6 +113,11 @@ def build_parser() -> argparse.ArgumentParser:
     extract_parser.add_argument("--expansion", default="3.3.5")
     extract_parser.add_argument("--locale", default="enUS")
     extract_parser.add_argument("--output", type=Path, required=True)
+    dbc_parser = corpus_commands.add_parser(
+        "dbc-to-sql", help="Convert the five raw build-12340 DBC files into enrichment SQL"
+    )
+    dbc_parser.add_argument("dbc_directory", type=Path)
+    dbc_parser.add_argument("--output", type=Path, required=True)
     validate_parser = corpus_commands.add_parser(
         "validate", help="Validate a complete corpus bundle without changing Alpha"
     )
@@ -143,6 +149,11 @@ def _alpha_store() -> AlphaStore:
 
 
 def corpus_command(args: argparse.Namespace) -> int:
+    if args.corpus_command == "dbc-to-sql":
+        report = convert_dbc_directory_to_sql(args.dbc_directory, args.output)
+        print(json.dumps(report, indent=2))
+        return 0
+
     if args.corpus_command == "extract":
         source_dump = args.source_dump.expanduser().resolve()
         if not source_dump.is_file():

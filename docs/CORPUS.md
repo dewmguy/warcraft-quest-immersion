@@ -14,10 +14,34 @@ data/sources/azerothcore/3.3.5/enUS/
 ```
 
 The restored database must contain the AzerothCore world tables used by the
-extractor and provenance-matched 3.3.5 exports of CreatureDisplayInfo,
-CreatureDisplayInfoExtra, FactionTemplate, Faction, and AreaTable. The accepted
-DBC table names are documented in `AzerothCoreCorpusExtractor.REQUIRED_TABLE_VARIANTS`.
-Missing or unrecognized variants stop extraction.
+extractor and provenance-matched 3.3.5 data from CreatureDisplayInfo,
+CreatureDisplayInfoExtra, FactionTemplate, Faction, and AreaTable. Missing or
+unrecognized variants stop extraction.
+
+For a clean Windows 3.3.5a build 12340 client, extract the five raw files with
+Ladik's MPQ Editor. The script opens `locale-enUS.MPQ` and applies
+`patch-enUS.MPQ`, `patch-enUS-2.MPQ`, and `patch-enUS-3.MPQ` in order. It checks
+the client build, validates every WDBC header, hashes the source archives and
+outputs, and writes `dbc/source-manifest.json`. It does not modify the client.
+
+```powershell
+.\scripts\extract-335a-dbc.ps1 `
+  -ClientRoot "D:\World of Warcraft Unmodded" `
+  -MPQEditorPath "S:\Games\Warcraft\Utilities\MPQ Editor\MPQEditor.exe"
+```
+
+Convert the raw files into the minimal enrichment tables consumed by the
+corpus extractor:
+
+```powershell
+docker compose run --rm warcraft-quest-immersion wqi corpus dbc-to-sql `
+  /app/data/sources/azerothcore/3.3.5/enUS/dbc `
+  --output /app/data/sources/azerothcore/3.3.5/enUS/dbc.sql
+```
+
+The accepted SQL table names are documented in
+`AzerothCoreCorpusExtractor.REQUIRED_TABLE_VARIANTS`. The raw DBCs, extraction
+manifest, generated SQL, and SQL manifest all remain beneath ignored `data/`.
 
 The source database is an on-demand `warcraft-quest-source-db` container in the
 `corpus-build` Compose profile. It has no published port and is not part of the
@@ -26,7 +50,7 @@ normal application stack.
 ```bash
 scripts/restore-azerothcore-snapshot.sh \
   /opt/warcraft-quest-immersion/data/sources/azerothcore/3.3.5/enUS/world.sql.gz \
-  /opt/warcraft-quest-immersion/data/sources/azerothcore/3.3.5/enUS/dbc.sql.gz
+  /opt/warcraft-quest-immersion/data/sources/azerothcore/3.3.5/enUS/dbc.sql
 ```
 
 ## Extract and certify
@@ -35,7 +59,8 @@ scripts/restore-azerothcore-snapshot.sh \
 docker compose -f /home/plex/docker-compose.yml run --rm \
   warcraft-quest-immersion wqi corpus extract \
   --source-dump /app/data/sources/azerothcore/3.3.5/enUS/world.sql.gz \
-  --source-artifact /app/data/sources/azerothcore/3.3.5/enUS/dbc.sql.gz \
+  --source-artifact /app/data/sources/azerothcore/3.3.5/enUS/dbc.sql \
+  --source-artifact /app/data/sources/azerothcore/3.3.5/enUS/dbc.sql.manifest.json \
   --source-version "AzerothCore DB version or commit" \
   --output /app/data/sources/azerothcore/3.3.5/enUS/corpus/wqi-3.3.5-enUS.zip
 ```
