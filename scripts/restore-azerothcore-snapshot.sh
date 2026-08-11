@@ -50,8 +50,9 @@ for _ in {1..30}; do
   sleep 2
 done
 
-docker exec "$service" sh -lc \
-  'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" -e "DROP DATABASE IF EXISTS `'$database'`; CREATE DATABASE `'$database'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"'
+printf 'DROP DATABASE IF EXISTS `%s`;\nCREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n' \
+  "$database" "$database" | docker exec -i "$service" sh -lc \
+  'mariadb -uroot --password="$MARIADB_ROOT_PASSWORD"'
 
 for source_file in "${source_files[@]}"; do
   if [[ "$source_file" == *.gz ]]; then
