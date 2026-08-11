@@ -412,7 +412,8 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert page.text.count("data-auto-save-form") == 5
     assert "data-dirty-submit" not in page.text
     assert 'class="fa-solid fa-floppy-disk"' not in page.text
-    assert page.text.count("Generate sample") == 5
+    assert page.text.count("Generate Sample") == 5
+    assert page.text.count('class="delivery-test-form delivery-test-header-form"') == 5
     assert "Preset Settings" in page.text
     assert '<span class="delivery-preset-section-label">Sample</span>' not in page.text
     assert page.text.count("metering-preview compact delivery-section-metering") == 2
@@ -616,12 +617,12 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert page.text.count('class="delivery-preview"') == 3
     assert page.text.count('data-audio-disclosure="delivery-samples"') == 3
     assert page.text.count("<summary>") >= 3
-    assert page.text.count('class="delivery-preview-chevron"') == 3
-    assert 'data-audio-name="Neutral sample #3"' in page.text
-    assert page.text.count("Neutral sample #1") >= 1
-    assert "Restrained Warmth</span>" in page.text
-    assert page.text.count("Neutral sample #2") >= 1
-    assert page.text.count("Neutral sample #3") >= 1
+    assert page.text.count('class="delivery-preview-chevron"') == 4
+    assert 'data-audio-name="Neutral Sample #3"' in page.text
+    assert page.text.count("Neutral Sample #1") >= 1
+    assert "Restrained Warmth</strong>" in page.text
+    assert page.text.count("Neutral Sample #2") >= 1
+    assert page.text.count("Neutral Sample #3") >= 1
     assert (
         f'<audio hidden preload="metadata" src="/api/alpha/delivery-previews/{preview["preview_id"]}/audio">'
         in page.text
@@ -629,11 +630,22 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert f'data-url="/api/alpha/delivery-previews/{preview["preview_id"]}"' in page.text
     assert page.text.count('class="secondary icon-button delivery-preview-delete"') == 3
     assert page.text.count('class="icon-button delivery-sample-approve"') == 3
-    assert page.text.count('data-confirm="Approve neutral sample #') == 3
-    assert page.text.count('data-confirm="Permanently delete neutral sample #') == 3
+    assert page.text.count('data-confirm="Approve Neutral Sample #') == 3
+    assert page.text.count('data-confirm="Permanently delete Neutral Sample #') == 3
     assert page.text.count("Stored Samples") == 1
     assert page.text.count('class="reference-player delivery-player"') == 3
     assert page.text.count('class="delivery-preview-metadata"') == 3
+    assert page.text.count("data-created-at") == 4
+    assert page.text.count('class="asset-name-edit"') == 4
+    assert 'class="delivery-preview voice-id-candidate"' in page.text
+    assert 'data-audio-disclosure="voice-id-candidates"' in page.text
+    assert 'class="fa-solid fa-fingerprint"' in page.text
+    assert 'class="candidate-name-form asset-name-form"' in page.text
+    assert 'class="delivery-preview-name-form asset-name-form"' in page.text
+    assert "Sample Name (Optional)" not in page.text
+    assert "Name (Optional)" not in page.text
+    assert "Generated Sample</span><strong>Neutral Sample #1</strong>" in page.text
+    assert "Creation Method</span><strong>External / Imported #1</strong>" in page.text
     assert page.text.count("Voice actor notes") == 3
     assert page.text.count(">with restrained warmth</dd>") == 3
     assert 'value="more brightly"' in page.text
@@ -659,6 +671,19 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
     assert ".delivery-preview-delete:hover" in stylesheet
     assert "background: var(--danger); color: #100f12; filter: none;" in stylesheet
     assert ".delivery-preview-summary code { color: var(--success);" in stylesheet
+    assert (
+        ".creation-workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) "
+        "minmax(360px, 400px);" in stylesheet
+    )
+    assert (
+        ".delivery-preset-card { display: grid; grid-template-columns: minmax(0, 1fr) "
+        "minmax(360px, 400px);" in stylesheet
+    )
+    assert (
+        ".creation-candidates .voice-id-candidate .candidate-card-footer { "
+        "grid-template-columns: minmax(0, 1fr) 30px; }" in stylesheet
+    )
+    assert ".alpha-body .delivery-test-header-form button { min-height: 30px;" in stylesheet
     assert deleted.status_code == 200
     assert deleted.json()["message"] == "Delivery sample was deleted from local storage."
     assert not preview_path.exists()
@@ -720,8 +745,13 @@ def test_delivery_preset_settings_auto_save_and_build_actions_skip_confirmations
     assert "state.saved = serialized" in script
     assert "updatePresetStatus(form, payload.voice)" in script
     assert "function syncOptionalName(input)" in script
+    assert 'document.querySelectorAll("[data-voice-title-for]")' in script
     assert 'document.querySelectorAll("[data-voice-name-for]")' in script
-    assert 'document.querySelectorAll("[data-sample-name-for]")' in script
+    assert 'document.querySelectorAll("[data-sample-title-for]")' in script
+    assert 'document.querySelectorAll("[data-name-editor-target]")' in script
+    assert 'document.querySelectorAll("[data-created-at]")' in script
+    assert "function formatCreationTime(value)" in script
+    assert 'disclosure.dataset.suppressAudioOnce = "true"' in script
     assert "if (form.dataset.autoSaveForm !== undefined) continue" in script
     assert "data-dirty-form" not in script
     assert 'deliveryBatchButton.textContent = "Generate all samples"' in script
@@ -964,7 +994,9 @@ def test_reusable_voice_id_candidate_survives_new_design_previews(monkeypatch):
     assert "Generated voice ID candidate #2" in activated.json()["message"]
     assert "Deleted 3 temporary Voice Design previews" in activated.json()["message"]
     assert selected_page.status_code == 200
-    assert 'class="voice-id-candidate"' in selected_page.text
+    assert 'class="delivery-preview voice-id-candidate"' in selected_page.text
+    assert 'data-audio-disclosure="voice-id-candidates"' in selected_page.text
+    assert 'class="fa-solid fa-fingerprint"' in selected_page.text
     assert "candidate-selected" not in selected_page.text
     assert "Generated Voice IDs" in selected_page.text
     assert "Voice Design #2" in selected_page.text

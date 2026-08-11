@@ -97,6 +97,20 @@ function formatElapsedTime(seconds) {
   return `${minutes}:${String(wholeSeconds % 60).padStart(2, "0")}`;
 }
 
+function formatCreationTime(value) {
+  const createdAt = new Date(value);
+  if (Number.isNaN(createdAt.getTime())) return value;
+  const pad = (number) => String(number).padStart(2, "0");
+  const hours = createdAt.getHours();
+  const meridiem = hours < 12 ? "am" : "pm";
+  const displayHours = hours % 12 || 12;
+  return `${pad(createdAt.getMonth() + 1)}/${pad(createdAt.getDate())}/${String(createdAt.getFullYear()).slice(-2)} ${displayHours}:${pad(createdAt.getMinutes())} ${meridiem}`;
+}
+
+for (const output of document.querySelectorAll("[data-created-at]")) {
+  output.textContent = formatCreationTime(output.dateTime || output.textContent.trim());
+}
+
 function renderAlphaMessage({ title, detail = "", state = "working", elapsed = "", provider = false }) {
   if (alphaMessageDismissed) return;
   alphaMessage.hidden = false;
@@ -349,6 +363,11 @@ function syncOptionalName(input) {
   const displayName = input.value.trim();
   if (input.dataset.voiceNameInput !== undefined) {
     const providerVoiceId = input.dataset.providerVoiceId;
+    for (const target of document.querySelectorAll("[data-voice-title-for]")) {
+      if (target.dataset.voiceTitleFor === providerVoiceId) {
+        target.textContent = displayName || target.dataset.defaultTitle;
+      }
+    }
     for (const target of document.querySelectorAll("[data-voice-name-for]")) {
       if (target.dataset.voiceNameFor === providerVoiceId) {
         target.textContent = displayName ? ` · ${displayName}` : "";
@@ -361,9 +380,9 @@ function syncOptionalName(input) {
   }
   if (input.dataset.sampleNameInput !== undefined) {
     const previewId = input.dataset.previewId;
-    for (const target of document.querySelectorAll("[data-sample-name-for]")) {
-      if (target.dataset.sampleNameFor === previewId) {
-        target.textContent = displayName ? ` · ${displayName}` : "";
+    for (const target of document.querySelectorAll("[data-sample-title-for]")) {
+      if (target.dataset.sampleTitleFor === previewId) {
+        target.textContent = displayName || target.dataset.defaultTitle;
       }
     }
   }
@@ -421,6 +440,39 @@ for (const form of document.querySelectorAll("[data-auto-save-form]")) {
     });
     field.addEventListener("change", () => queueAutoSave(form, 0));
   }
+}
+
+for (const button of document.querySelectorAll("[data-name-editor-target]")) {
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const editor = document.getElementById(button.dataset.nameEditorTarget);
+    if (!editor) return;
+    const disclosure = button.closest("details");
+    if (disclosure && !disclosure.open) {
+      disclosure.dataset.suppressAudioOnce = "true";
+      disclosure.open = true;
+    }
+    editor.hidden = false;
+    const input = editor.querySelector('input[name="display_name"]');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  });
+}
+
+for (const form of document.querySelectorAll(".asset-name-form")) {
+  const input = form.querySelector('input[name="display_name"]');
+  if (!input) continue;
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    input.blur();
+  });
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => { form.hidden = true; }, 0);
+  });
 }
 
 for (const review of document.querySelectorAll("[data-spoken-review]")) {
@@ -691,6 +743,10 @@ for (const disclosure of audioDisclosures) {
   disclosure.addEventListener("toggle", () => {
     if (!disclosure.open) {
       resetCompactAudio(player);
+      return;
+    }
+    if (disclosure.dataset.suppressAudioOnce === "true") {
+      delete disclosure.dataset.suppressAudioOnce;
       return;
     }
     for (const otherDisclosure of audioDisclosures) {

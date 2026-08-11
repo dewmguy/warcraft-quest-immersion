@@ -6,7 +6,7 @@
     'designed': 'Voice Design',
     'reference_design': 'Reference-guided Voice Design',
     'instant_clone': 'Instant Voice Clone',
-    'external': 'External / imported',
+    'external': 'External / Imported',
     'library': 'ElevenLabs Voice Library',
     'legacy_unknown': 'Legacy candidate · method not recorded'
   } %}
@@ -159,19 +159,27 @@
         <div class="candidate-heading"><div><h3 id="voice-candidates-heading">Generated Voice IDs</h3></div><span>{{ voice.voice_id_candidates|length }}</span></div>
         <div class="candidate-method-groups">{% for group in voice.voice_id_candidate_groups %}<section class="candidate-method-group">
           <h4>{{ candidate_method_labels.get(group.creation_method, group.creation_method | replace('_', ' ') | title) }}</h4>
-          <div class="candidate-list">{% for candidate in group.candidates %}<article class="voice-id-candidate">
-            <header>
-              <strong>{{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | title) }} #{{ candidate.generation_number }}</strong>
-              <form class="candidate-name-form" data-auto-save-form data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}" data-method="PATCH">
-                <label><span>Name (Optional)</span><input name="display_name" value="{{ candidate.display_name }}" maxlength="80" placeholder="Add a memorable name" aria-label="Name for {{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | lower) }} #{{ candidate.generation_number }}" data-voice-name-input data-provider-voice-id="{{ candidate.provider_voice_id }}"></label>
+          <div class="candidate-list">{% for candidate in group.candidates %}{% set candidate_title = candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | title) ~ ' #' ~ candidate.generation_number %}<details class="delivery-preview voice-id-candidate" data-audio-disclosure="voice-id-candidates">
+            <summary>
+              <span class="delivery-preview-icon voice-id-candidate-icon" aria-hidden="true"><i class="fa-solid fa-fingerprint"></i></span>
+              <span class="delivery-preview-summary">
+                <span class="asset-preview-title"><strong data-voice-title-for="{{ candidate.provider_voice_id }}" data-default-title="{{ candidate_title }}">{{ candidate.display_name or candidate_title }}</strong><button type="button" class="asset-name-edit" data-name-editor-target="candidate-name-{{ candidate.candidate_id }}" aria-label="Name {{ candidate_title }}" title="Name this Voice ID"><i class="fa-solid fa-pencil" aria-hidden="true"></i></button></span>
+                <small><time datetime="{{ candidate.created_at }}" data-created-at>{{ candidate.created_at }}</time> · Voice ID · <code>{{ candidate.provider_voice_id }}</code></small>
+              </span>
+              <span class="delivery-preview-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
+            </summary>
+            <div class="delivery-preview-body voice-id-candidate-body">
+              <div class="asset-standard-title"><span>Creation Method</span><strong>{{ candidate_title }}</strong></div>
+              <form id="candidate-name-{{ candidate.candidate_id }}" class="candidate-name-form asset-name-form" data-auto-save-form data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}" data-method="PATCH" hidden>
+                <input name="display_name" value="{{ candidate.display_name }}" maxlength="80" placeholder="Add a memorable name" aria-label="Name for {{ candidate_title }}" data-voice-name-input data-provider-voice-id="{{ candidate.provider_voice_id }}">
               </form>
-            </header>
-            <div class="candidate-id-row"><span>Voice ID: <code>{{ candidate.provider_voice_id }}</code></span>{% if candidate.credit_cost is not none %}<strong>{{ candidate.credit_cost }} credits</strong>{% endif %}</div>
-            <footer class="candidate-card-footer">
-              {% if candidate.sample_storage_path %}<div class="reference-player candidate-player" data-compact-audio data-audio-name="{{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | title) }} {{ candidate.generation_number }} sample" data-duration="{{ candidate.sample_duration_seconds or 0 }}"><button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play {{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | lower) }} {{ candidate.generation_number }} sample" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button><input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ candidate.sample_duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for {{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | lower) }} {{ candidate.generation_number }} sample"><span class="reference-player-time" data-audio-time>0:00 / 0:00</span><audio hidden preload="metadata" src="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}/audio"></audio></div>{% else %}<button type="button" class="candidate-sample-missing" data-action data-paid data-provider-operation="Generating voice ID sample" data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}/audition" data-method="POST" {% if not provider_configured %}disabled{% endif %}><i class="fa-solid fa-waveform-lines" aria-hidden="true"></i><span>Generate Sample</span></button>{% endif %}
-              <button type="button" class="secondary icon-button candidate-delete" title="Delete {{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | lower) }} {{ candidate.generation_number }}" aria-label="Delete {{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | lower) }} {{ candidate.generation_number }}" data-action data-confirm-required data-confirm="Delete {{ candidate_method_labels.get(candidate.creation_method, candidate.creation_method | replace('_', ' ') | title) }} #{{ candidate.generation_number }} from ElevenLabs and local storage? Any delivery preset using it will be disconnected and returned to review. Existing API usage cannot be refunded." data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-            </footer>
-          </article>{% endfor %}</div>
+              <div class="candidate-id-row"><span>Voice ID: <code>{{ candidate.provider_voice_id }}</code></span>{% if candidate.credit_cost is not none %}<strong>{{ candidate.credit_cost }} credits</strong>{% endif %}</div>
+              <footer class="candidate-card-footer">
+                {% if candidate.sample_storage_path %}<div class="reference-player candidate-player" data-compact-audio data-audio-name="{{ candidate_title }} sample" data-duration="{{ candidate.sample_duration_seconds or 0 }}"><button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play {{ candidate_title }} sample" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button><input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ candidate.sample_duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for {{ candidate_title }} sample"><span class="reference-player-time" data-audio-time>0:00 / 0:00</span><audio hidden preload="metadata" src="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}/audio"></audio></div>{% else %}<button type="button" class="candidate-sample-missing" data-action data-paid data-provider-operation="Generating voice ID sample" data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}/audition" data-method="POST" {% if not provider_configured %}disabled{% endif %}><i class="fa-solid fa-waveform-lines" aria-hidden="true"></i><span>Generate Sample</span></button>{% endif %}
+                <button type="button" class="secondary icon-button candidate-delete" title="Delete {{ candidate_title }}" aria-label="Delete {{ candidate_title }}" data-action data-confirm-required data-confirm="Delete {{ candidate_title }} from ElevenLabs and local storage? Any delivery preset using it will be disconnected and returned to review. Existing API usage cannot be refunded." data-url="/api/alpha/voice-id-candidates/{{ candidate.candidate_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+              </footer>
+            </div>
+          </details>{% endfor %}</div>
         </section>{% else %}<p class="empty-copy">No generated Voice IDs yet.</p>{% endfor %}</div>
         {% if voice.previews %}<div class="proposed-candidates">
           <div class="candidate-heading"><div><h3>Proposed Voices</h3></div><span>{{ voice.previews|length }}</span></div>
@@ -201,7 +209,7 @@
       </div>
     </div>
     <div class="delivery-preset-grid">{% for preset in voice.delivery_presets %}<article class="delivery-preset-card" id="delivery-{{ preset.delivery }}" data-delivery-preset="{{ preset.delivery }}">
-      <header class="delivery-preset-heading"><div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}" data-preset-status>{{ preset.status | replace('_',' ') | title }}</span></div><p>{{ delivery_guidance[preset.delivery] }}</p></header>
+      <header class="delivery-preset-heading"><div><strong>{{ preset.delivery | title }}</strong><span class="work-status {{ 'status-approved' if preset.status == 'approved' else '' }}" data-preset-status>{{ preset.status | replace('_',' ') | title }}</span></div><p>{{ delivery_guidance[preset.delivery] }}</p><form data-json-form data-delivery-generation data-delivery-name="{{ preset.delivery | title }}" data-paid data-provider-operation="Generating {{ preset.delivery | title }} delivery sample" data-metering="speech" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form delivery-test-header-form"><input type="hidden" name="sample_text" data-metered-text value="{{ delivery_sample_text }}"><button type="submit" {% if not provider_configured or not preset.effective_provider_voice_id %}disabled{% endif %}>Generate Sample</button></form></header>
       <form class="delivery-preset-settings" data-json-form data-auto-save-form data-delivery="{{ preset.delivery }}" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}" data-method="PATCH">
         <span class="delivery-preset-section-label">Preset Settings</span>
         <label><span>Reusable Voice ID</span><select name="provider_voice_id" {% if not voice.voice_id_candidates %}disabled{% endif %}>
@@ -215,24 +223,21 @@
         </select></label>
       </form>
       <div class="delivery-preset-review">
-      <form data-json-form data-delivery-generation data-delivery-name="{{ preset.delivery | title }}" data-paid data-provider-operation="Generating {{ preset.delivery | title }} delivery sample" data-metering="speech" data-url="/api/alpha/voices/{{ voice.voice_id }}/deliveries/{{ preset.delivery }}/generate" data-method="POST" class="delivery-test-form">
-        <input type="hidden" name="sample_text" data-metered-text value="{{ delivery_sample_text }}">
-        <button type="submit" {% if not provider_configured or not preset.effective_provider_voice_id %}disabled{% endif %}>Generate sample</button>
-      </form>
       {% if preset.previews %}<div class="reference-library-separator delivery-sample-separator" role="separator"><span>Stored Samples</span></div>{% endif %}
-      <div class="delivery-preview-list">{% for preview in preset.previews %}<details class="delivery-preview" data-audio-disclosure="delivery-samples">
+      <div class="delivery-preview-list">{% for preview in preset.previews %}{% set sample_title = preset.delivery | title ~ ' Sample #' ~ preview.generation_number %}<details class="delivery-preview" data-audio-disclosure="delivery-samples">
         <summary>
           <span class="delivery-preview-icon" aria-hidden="true"><i class="fa-solid {{ 'fa-circle-check' if preview.status == 'approved' else 'fa-waveform-lines' }}"></i></span>
-          <span class="delivery-preview-summary"><strong>{{ preset.delivery | title }} sample #{{ preview.generation_number }}<span data-sample-name-for="{{ preview.preview_id }}">{% if preview.display_name %} · {{ preview.display_name }}{% endif %}</span></strong><small>Voice ID<span class="delivery-preview-voice-name" data-voice-name-for="{{ preview.baseline_voice_id }}">{% if preview.baseline_voice_name %} · {{ preview.baseline_voice_name }}{% endif %}</span> · <code>{{ preview.baseline_voice_id }}</code></small></span>
+          <span class="delivery-preview-summary"><span class="asset-preview-title"><strong data-sample-title-for="{{ preview.preview_id }}" data-default-title="{{ sample_title }}">{{ preview.display_name or sample_title }}</strong><button type="button" class="asset-name-edit" data-name-editor-target="sample-name-{{ preview.preview_id }}" aria-label="Name {{ sample_title }}" title="Name this sample"><i class="fa-solid fa-pencil" aria-hidden="true"></i></button></span><small><time datetime="{{ preview.created_at }}" data-created-at>{{ preview.created_at }}</time> · Voice ID<span class="delivery-preview-voice-name" data-voice-name-for="{{ preview.baseline_voice_id }}">{% if preview.baseline_voice_name %} · {{ preview.baseline_voice_name }}{% endif %}</span> · <code>{{ preview.baseline_voice_id }}</code></small></span>
           <span class="delivery-preview-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
         </summary>
         <div class="delivery-preview-body">
-          <form class="delivery-preview-name-form" data-auto-save-form data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="PATCH">
-            <label><span>Sample Name (Optional)</span><input name="display_name" value="{{ preview.display_name }}" maxlength="80" placeholder="Add a memorable name" aria-label="Name for {{ preset.delivery }} sample #{{ preview.generation_number }}" data-sample-name-input data-preview-id="{{ preview.preview_id }}"></label>
+          <div class="asset-standard-title"><span>Generated Sample</span><strong>{{ sample_title }}</strong></div>
+          <form id="sample-name-{{ preview.preview_id }}" class="delivery-preview-name-form asset-name-form" data-auto-save-form data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="PATCH" hidden>
+            <input name="display_name" value="{{ preview.display_name }}" maxlength="80" placeholder="Add a memorable name" aria-label="Name for {{ sample_title }}" data-sample-name-input data-preview-id="{{ preview.preview_id }}">
           </form>
-          <div class="reference-player delivery-player" data-compact-audio data-audio-name="{{ preset.delivery | title }} sample #{{ preview.generation_number }}" data-duration="{{ preview.duration_seconds or 0 }}">
-            <button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play {{ preset.delivery }} sample #{{ preview.generation_number }}" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button>
-            <input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ preview.duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for {{ preset.delivery }} sample #{{ preview.generation_number }}">
+          <div class="reference-player delivery-player" data-compact-audio data-audio-name="{{ sample_title }}" data-duration="{{ preview.duration_seconds or 0 }}">
+            <button type="button" class="reference-player-toggle" data-audio-toggle aria-label="Play {{ sample_title }}" aria-pressed="false"><i class="fa-solid fa-play" aria-hidden="true"></i></button>
+            <input type="range" class="reference-player-progress" data-audio-progress min="0" max="{{ preview.duration_seconds or 0 }}" step="0.01" value="0" aria-label="Playback position for {{ sample_title }}">
             <span class="reference-player-time" data-audio-time>0:00 / 0:00</span>
             <audio hidden preload="metadata" src="/api/alpha/delivery-previews/{{ preview.preview_id }}/audio"></audio>
           </div>
@@ -241,7 +246,7 @@
             <div><dt>Performance method</dt><dd>{{ preview.performance_method_label }}</dd></div>
             <div><dt>Sample details</dt><dd>{{ "%.2f"|format(preview.duration_seconds) }} sec · {{ preview.status | title }}{% if preview.subscription.get('request_character_cost') is not none %} · {{ preview.subscription.request_character_cost }} credits{% endif %}</dd></div>
           </dl>
-          <div class="delivery-preview-footer"><small>{{ preview.created_at[:19] | replace('T', ' ') }} UTC</small><div class="delivery-preview-actions">{% if preview.status == 'candidate' %}<button type="button" class="icon-button delivery-sample-approve" title="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}" aria-label="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}" data-action data-confirm-required data-confirm="Approve {{ preset.delivery }} sample #{{ preview.generation_number }}? This will mark it ready for future lines using this delivery preset." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST"><i class="fa-solid fa-check" aria-hidden="true"></i></button>{% endif %}<button type="button" class="secondary icon-button delivery-preview-delete" title="Delete {{ preset.delivery }} sample #{{ preview.generation_number }}" aria-label="Delete {{ preset.delivery }} sample #{{ preview.generation_number }}" data-action data-confirm-required data-confirm="Permanently delete {{ preset.delivery }} sample #{{ preview.generation_number }} from local storage?{% if preview.status == 'approved' %} This will remove its approval; approve another sample when you are satisfied.{% endif %} ElevenLabs usage cannot be refunded." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div></div>
+          <div class="delivery-preview-footer"><div class="delivery-preview-actions">{% if preview.status == 'candidate' %}<button type="button" class="icon-button delivery-sample-approve" title="Approve {{ sample_title }}" aria-label="Approve {{ sample_title }}" data-action data-confirm-required data-confirm="Approve {{ sample_title }}? This will mark it ready for future lines using this delivery preset." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}/approve" data-method="POST"><i class="fa-solid fa-check" aria-hidden="true"></i></button>{% endif %}<button type="button" class="secondary icon-button delivery-preview-delete" title="Delete {{ sample_title }}" aria-label="Delete {{ sample_title }}" data-action data-confirm-required data-confirm="Permanently delete {{ sample_title }} from local storage?{% if preview.status == 'approved' %} This will remove its approval; approve another sample when you are satisfied.{% endif %} ElevenLabs usage cannot be refunded." data-url="/api/alpha/delivery-previews/{{ preview.preview_id }}" data-method="DELETE"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button></div></div>
         </div>
       </details>{% endfor %}</div>
       </div>
