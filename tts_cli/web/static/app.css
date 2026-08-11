@@ -506,6 +506,7 @@ dialog .actions { justify-content: flex-end; }
 .alpha-body .asset-name-edit { display: inline-flex; width: auto; min-height: 0; flex: none; align-items: center; border: 0; border-radius: 0; padding: 0; color: var(--gold-bright); background: transparent; box-shadow: none; font-size: .78rem; line-height: 1; }
 .alpha-body .asset-name-edit:hover, .alpha-body .asset-name-edit:focus-visible { border: 0; color: var(--gold-bright); background: transparent; box-shadow: none; filter: none; }
 .asset-standard-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #aaa3ad; }
+.asset-standard-title[hidden] { display: none; }
 .asset-standard-title span { color: #8f8793; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .asset-standard-title strong { color: #d9d0db; font-size: .74rem; text-align: right; }
 .voice-id-candidate-icon { color: #70c994; }
