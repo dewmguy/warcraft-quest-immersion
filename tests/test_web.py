@@ -121,6 +121,36 @@ def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatc
     assert ">Voices<" not in response.text
 
 
+def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bundle_path):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        page = client.get("/alpha/import-export")
+        with corpus_bundle_path.open("rb") as bundle_file:
+            validation = client.post(
+                "/api/alpha/corpus/validate",
+                files={"file": (corpus_bundle_path.name, bundle_file, "application/zip")},
+            )
+        with corpus_bundle_path.open("rb") as bundle_file:
+            imported = client.post(
+                "/api/alpha/corpus/import",
+                headers={"X-WQI-Action": "confirmed"},
+                files={"file": (corpus_bundle_path.name, bundle_file, "application/zip")},
+            )
+
+    assert page.status_code == 200
+    assert "Authoritative Import" in page.text
+    assert "/api/alpha/corpus/validate" in page.text
+    assert "/api/alpha/corpus/import" in page.text
+    assert validation.status_code == 200
+    assert validation.json()["report"]["valid"] is True
+    assert imported.status_code == 200
+    assert imported.json()["report"]["applied"] is True
+    assert (
+        web.alpha_store.dashboard()["counts"]["dialogue"]
+        == imported.json()["report"]["counts"]["active_bindings"]
+    )
+
+
 def test_quest_gossip_and_npc_filters_apply_immediately_and_use_one_clear_button(
     monkeypatch,
 ):
@@ -353,17 +383,28 @@ def test_upload_adds_an_expansion_without_replacing_other_sources(monkeypatch):
     assert "3 matching records" in vanilla.text
 
 
-def test_import_export_explains_demo_data_and_exact_schema(monkeypatch):
+def test_import_export_prioritizes_certified_bundle_and_retains_legacy_csv(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
         page = client.get("/alpha/import-export")
         old_export = client.get("/alpha/export", follow_redirects=False)
 
     assert page.status_code == 200
-    assert "demonstration rows" in page.text
-    assert "3.3.5 AzerothCore" in page.text
-    assert "Exact CSV contract" in page.text
-    assert all(column in page.text for column in web.REQUIRED_COLUMNS)
+    assert "demonstration records" in page.text
+    assert "3.3.5 enUS Corpus Bundle" in page.text
+    assert "Bundle Contract" in page.text
+    assert all(
+        artifact in page.text
+        for artifact in (
+            "manifest.json",
+            "entities.csv",
+            "texts.csv",
+            "bindings.csv",
+            "triggers.csv",
+            "quarantine.csv",
+        )
+    )
+    assert "Legacy CSV Import" in page.text
     assert old_export.status_code == 307
     assert old_export.headers["location"] == "/alpha/import-export"
 

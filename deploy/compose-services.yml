@@ -1,5 +1,5 @@
 # These blocks are merged into /home/plex/docker-compose.yml on the homelab server.
-# Only warcraft-quest-immersion publishes a host port. The optional database is private.
+# Only warcraft-quest-immersion publishes a host port. Both optional databases are private.
 services:
   warcraft-quest-immersion:
     build:
@@ -39,6 +39,28 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  warcraft-quest-source-db:
+    profiles: ["corpus-build"]
+    image: mariadb:11.4
+    container_name: warcraft-quest-source-db
+    environment:
+      MARIADB_ROOT_PASSWORD: "${AZEROTHCORE_MYSQL_PASSWORD:-change-me-before-corpus-restore}"
+      MARIADB_DATABASE: "${AZEROTHCORE_MYSQL_DATABASE:-acore_world}"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - warcraft-quest-source-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    restart: "no"
+
 volumes:
   warcraft-quest-db-data:
     name: warcraft-quest-db-data
+  warcraft-quest-source-db-data:
+    name: warcraft-quest-source-db-data

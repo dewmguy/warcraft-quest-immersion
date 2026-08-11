@@ -24,6 +24,9 @@ local LOAD_ALL_MODULES = true
 ---@field NPCIDLookupByQuestID table<number, number> Maps Quest ID to quest giver Creature ID
 ---@field ObjectIDLookupByQuestID table<number, number> Maps Quest ID to quest giver GameObject ID
 ---@field ItemIDLookupByQuestID table<number, number> Maps Quest ID to quest giver Item ID
+---@field QuestAudioLookupByNPCID? table<number, table<string, table<number, string>>> Maps quest, stage, and Creature ID to an additive per-deliverer filename
+---@field QuestAudioLookupByObjectID? table<number, table<string, table<number, string>>> Maps quest, stage, and GameObject ID to an additive per-deliverer filename
+---@field QuestAudioLookupByItemID? table<number, table<string, table<number, string>>> Maps quest, stage, and Item ID to an additive per-deliverer filename
 ---@field NPCNameLookupByNPCID table<number, string> Maps Creature ID to Creature name
 ---@field ObjectNameLookupByObjectID table<number, string> Maps GameObject ID to GameObject name
 ---@field ItemNameLookupByItemID table<number, string> Maps Item ID to Item name
@@ -416,11 +419,49 @@ function DataModules:GetObjectName(type, id)
 end
 
 ---@type table<SoundEvent, fun(soundData: SoundData): string|nil>
+---@param soundData SoundData
+---@param stage QuestIDLookupSource
+---@return string fileName
+function DataModules:GetQuestAudioFileName(soundData, stage)
+    local objectType, objectID
+    if soundData.unitGUID and Utils.GetGUIDType and Utils.GetIDFromGUID then
+        objectType = Utils:GetGUIDType(soundData.unitGUID)
+        if objectType and Enums.GUID:CanHaveID(objectType) then
+            objectID = Utils:GetIDFromGUID(soundData.unitGUID)
+        end
+    end
+    if not objectID then
+        objectType, objectID = self:GetQuestLogQuestGiverTypeAndID(soundData.questID)
+    end
+
+    local lookupName
+    if objectType and Enums.GUID:IsCreature(objectType) then
+        lookupName = "QuestAudioLookupByNPCID"
+    elseif objectType == Enums.GUID.GameObject then
+        lookupName = "QuestAudioLookupByObjectID"
+    elseif objectType == Enums.GUID.Item then
+        lookupName = "QuestAudioLookupByItemID"
+    end
+
+    if lookupName and objectID then
+        for _, module in self:GetModules() do
+            local lookup = module[lookupName]
+            local questLookup = lookup and lookup[soundData.questID]
+            local stageLookup = questLookup and questLookup[stage]
+            local fileName = stageLookup and stageLookup[objectID]
+            if fileName then
+                return fileName
+            end
+        end
+    end
+    return format("%d-%s", soundData.questID, stage)
+end
+
 local getFileNameForEvent =
 {
-    [Enums.SoundEvent.QuestAccept]   = function(soundData) return format("%d-%s", soundData.questID, "accept") end,
-    [Enums.SoundEvent.QuestProgress] = function(soundData) return format("%d-%s", soundData.questID, "progress") end,
-    [Enums.SoundEvent.QuestComplete] = function(soundData) return format("%d-%s", soundData.questID, "complete") end,
+    [Enums.SoundEvent.QuestAccept]   = function(soundData) return DataModules:GetQuestAudioFileName(soundData, "accept") end,
+    [Enums.SoundEvent.QuestProgress] = function(soundData) return DataModules:GetQuestAudioFileName(soundData, "progress") end,
+    [Enums.SoundEvent.QuestComplete] = function(soundData) return DataModules:GetQuestAudioFileName(soundData, "complete") end,
     [Enums.SoundEvent.QuestGreeting] = function(soundData) return DataModules:GetNPCGossipTextHash(soundData) end,
     [Enums.SoundEvent.Gossip]        = function(soundData) return DataModules:GetNPCGossipTextHash(soundData) end,
 }

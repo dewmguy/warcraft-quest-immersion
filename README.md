@@ -5,7 +5,7 @@ Warcraft Quest Immersion is a maintainable local workspace around the VoiceOver 
 - the in-game `AI_VoiceOver` addon;
 - the `AI_VoiceOverData_Vanilla` data module;
 - a Python CLI for dialogue extraction, lookup generation, and ElevenLabs audio generation;
-- a web control panel for CSV validation and lookup generation, with optional Basic Auth;
+- a web production portal for corpus validation, review, and addon export, with optional Basic Auth;
 - a single-container default deployment, with MySQL available as an optional profile for full vMaNGOS data rebuilds.
 
 The addon began with the open-source [WoW VoiceOver project](https://github.com/mrthinger/wow-voiceover). See [LICENSE](LICENSE) for licensing details.
@@ -83,14 +83,20 @@ contacting ElevenLabs. Gossip spoken text remains explicitly prepared. The
 uploaded sources, SQLite database, reference clips,
 voice previews, and generated audio remain outside Git under `data/`.
 
+The authoritative 3.3.5 enUS workflow uses a certified, versioned corpus ZIP,
+not the flat demonstration CSV. Extraction, reconciliation, atomic import,
+source-change handling, and the additive per-NPC addon contract are documented
+in [`docs/CORPUS.md`](docs/CORPUS.md).
+
 ## Container layout
 
 | Container | Purpose | Published port | Required |
 | --- | --- | --- | --- |
 | `warcraft-quest-immersion` | Web control panel and all Python tooling | Host `8090` → container `8080` | Yes |
 | `warcraft-quest-db` | MySQL 8.4 for rebuilding the full vMaNGOS dataset | None; private Compose network only | No |
+| `warcraft-quest-source-db` | On-demand MariaDB restore of the authoritative AzerothCore snapshot | None; private Compose network only | No |
 
-The normal CSV workflow uses only `warcraft-quest-immersion`. Do not publish the MySQL port through a reverse proxy.
+Normal portal operation uses only `warcraft-quest-immersion`. Do not publish either database through a reverse proxy.
 
 ## Quick start with Docker
 
@@ -123,8 +129,9 @@ Invoke-RestMethod http://localhost:8090/health
 
 The Alpha portal is the working production surface:
 
-1. Construct a joined dialogue source from the AzerothCore quest, gossip, NPC,
-   faction, and area data, then validate it through **Import / Export**.
+1. Extract a certified corpus bundle from the restored AzerothCore world
+   snapshot, validate its reconciliation report, then explicitly apply it
+   through **Import / Export**.
 2. Filter the complete queue by expansion, status, content type, race, gender,
    NPC, quest, or text.
 3. Review the automatically prepared quest spoken text and edit it only when
@@ -180,12 +187,8 @@ The expected CSV columns are:
 
 ## Full database workflow
 
-The current optional MySQL query path reflects the inherited vMaNGOS source and
-is not the intended final 3.3.5 source of truth. The Phase 2 target is a
-dedicated read-only AzerothCore extractor that emits the documented CSV transfer
-contract with joined identifiers and NPC context fields.
-
-Start the optional database container only when the full vMaNGOS source needs to be rebuilt:
+The inherited vMaNGOS database remains available only for legacy comparison.
+Start it only when that older dataset needs to be rebuilt:
 
 ```powershell
 docker compose --profile warcraft-data up -d warcraft-quest-db
@@ -195,6 +198,12 @@ docker compose exec warcraft-quest-immersion wqi generate-lookups --input-csv /a
 ```
 
 The database import is large and can take considerable time. Its named volume, `warcraft-quest-db-data`, persists independently of container replacement.
+
+For the authoritative AzerothCore workflow, stage the private dump and matching
+DBC exports under `data/sources/azerothcore/3.3.5/enUS/`, configure the
+`AZEROTHCORE_MYSQL_*` values in `.env`, then follow
+[`docs/CORPUS.md`](docs/CORPUS.md). The `corpus-build` service has no published
+port and is started only for restore and extraction.
 
 Supported locale codes are `enUS`, `enGB`, `koKR`, `frFR`, `deDE`, `zhCN`, `zhTW`, `esES`, `esMX`, and `ruRU`.
 

@@ -3,7 +3,7 @@
 {% set active_nav = "gossip" if dialogue.source == 'gossip' else "quests" %}
 {% block title %}{{ dialogue.quest_title or dialogue.speaker_name }}{% endblock %}
 {% block content %}
-  <nav class="breadcrumbs"><a href="{{ '/alpha/gossip' if dialogue.source == 'gossip' else '/alpha' }}">{{ 'Gossip' if dialogue.source == 'gossip' else 'Quests' }}</a><span>›</span><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></nav>
+  <nav class="breadcrumbs"><a href="{{ '/alpha/gossip' if dialogue.source == 'gossip' else '/alpha' }}">{{ 'Gossip' if dialogue.source == 'gossip' else 'Quests' }}</a><span>›</span><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a></nav>
   <section class="alpha-page-heading record-heading">
     <div>
       <span class="alpha-kicker">{{ dialogue.source | title }}{% if dialogue.quest_id %} · Quest {{ dialogue.quest_id }}{% endif %}</span>
@@ -34,7 +34,7 @@
       {% if dialogue.changes %}<details><summary>Preparation Changes</summary><ul>{% for change in dialogue.changes %}<li>{{ change }}</li>{% endfor %}</ul></details>{% endif %}
     </div>
     <dl class="record-facts quest-source-facts">
-      <div><dt>NPC</dt><dd><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></dd></div>
+      <div><dt>NPC</dt><dd><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a></dd></div>
       <div><dt>Database Key</dt><dd>{{ dialogue.dialogue_id }}</dd></div>
       {% if dialogue.source_record_id %}<div><dt>Source Record</dt><dd>{{ dialogue.source_record_id }}</dd></div>{% endif %}
       <div><dt>Expansion</dt><dd>{{ dialogue.expansion }} · {{ dialogue.locale }}</dd></div>
@@ -48,7 +48,7 @@
       <div class="panel-heading"><div><span class="panel-step">Source</span><h2>Original Text</h2></div><span>Immutable</span></div>
       <blockquote>{{ dialogue.original_text }}</blockquote>
       <dl class="record-facts">
-        <div><dt>NPC</dt><dd><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a></dd></div>
+        <div><dt>NPC</dt><dd><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a></dd></div>
         <div><dt>Database Key</dt><dd>{{ dialogue.dialogue_id }}</dd></div>
         {% if dialogue.source_record_id %}<div><dt>Source Record</dt><dd>{{ dialogue.source_record_id }}</dd></div>{% endif %}
         <div><dt>Expansion</dt><dd>{{ dialogue.expansion }} · {{ dialogue.locale }}</dd></div>
@@ -77,11 +77,11 @@
     <section class="alpha-panel" id="voice-assignment">
       <div class="panel-heading"><div><span class="panel-step">NPC</span><h2>Voice and Delivery</h2></div>{% if not dialogue.can_generate_audio %}<span class="work-status status-needs_voice">Audio Unavailable</span>{% endif %}</div>
       {% if dialogue.voice_scope == 'unique' %}
-        <p><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a> delivers this line through a <strong>unique NPC voice profile</strong>.</p>
+        <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> delivers this line through a <strong>unique NPC voice profile</strong>.</p>
       {% elif dialogue.voice_scope == 'baseline' %}
-        <p><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a> delivers this line through the <strong>{{ dialogue.voice_name }} baseline voice</strong>.</p>
+        <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> delivers this line through the <strong>{{ dialogue.voice_name }} baseline voice</strong>.</p>
       {% else %}
-        <p><a href="/alpha/npcs/{{ dialogue.entity_type }}/{{ dialogue.entity_id }}">{{ dialogue.speaker_name }}</a> does not have an active voice profile.</p>
+        <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> does not have an active voice profile.</p>
       {% endif %}
       {% if not dialogue.can_generate_audio %}
         <aside class="generation-blocker" role="status">
@@ -141,7 +141,7 @@
           {% for phase in dialogue.quest_phases %}
           <tr>
             <td><a class="record-link" href="/alpha/dialogue/{{ phase.dialogue_id }}"><strong>{{ phase.source | title }}</strong><span>Quest {{ phase.quest_id }}</span></a></td>
-            <td><a href="/alpha/npcs/{{ phase.entity_type }}/{{ phase.entity_id }}">{{ phase.speaker_name }}</a></td>
+            <td><a href="{{ npc_profile_path(phase.entity_type, phase.entity_id, phase.expansion) }}">{{ phase.speaker_name }}</a></td>
             <td>{{ phase.original_text[:120] }}{% if phase.original_text|length > 120 %}…{% endif %}</td>
             <td>{{ dialogue_status(phase) }}</td>
           </tr>

@@ -21,6 +21,11 @@ class Settings:
     mysql_user: str = "root"
     mysql_password: str = "wow"
     mysql_database: str = "mangos"
+    azerothcore_mysql_host: str = "warcraft-quest-source-db"
+    azerothcore_mysql_port: int = 3306
+    azerothcore_mysql_user: str = "root"
+    azerothcore_mysql_password: str = ""
+    azerothcore_mysql_database: str = "acore_world"
     elevenlabs_api_key: str | None = None
 
     def require_elevenlabs(self) -> str:
@@ -32,14 +37,14 @@ class Settings:
         return self.elevenlabs_api_key
 
 
-def _parse_port(raw_port: str) -> int:
+def _parse_port(raw_port: str, name: str = "MYSQL_PORT") -> int:
     try:
         port = int(raw_port)
     except (TypeError, ValueError) as error:
-        raise ConfigurationError("MYSQL_PORT must be an integer.") from error
+        raise ConfigurationError(f"{name} must be an integer.") from error
 
     if not 1 <= port <= 65535:
-        raise ConfigurationError("MYSQL_PORT must be between 1 and 65535.")
+        raise ConfigurationError(f"{name} must be between 1 and 65535.")
     return port
 
 
@@ -59,5 +64,14 @@ def load_settings(
         mysql_user=environ.get("MYSQL_USER", "root").strip(),
         mysql_password=environ.get("MYSQL_PASSWORD", "wow"),
         mysql_database=environ.get("MYSQL_DATABASE", "mangos").strip(),
+        azerothcore_mysql_host=environ.get(
+            "AZEROTHCORE_MYSQL_HOST", "warcraft-quest-source-db"
+        ).strip(),
+        azerothcore_mysql_port=_parse_port(
+            environ.get("AZEROTHCORE_MYSQL_PORT", "3306"), "AZEROTHCORE_MYSQL_PORT"
+        ),
+        azerothcore_mysql_user=environ.get("AZEROTHCORE_MYSQL_USER", "root").strip(),
+        azerothcore_mysql_password=environ.get("AZEROTHCORE_MYSQL_PASSWORD", ""),
+        azerothcore_mysql_database=environ.get("AZEROTHCORE_MYSQL_DATABASE", "acore_world").strip(),
         elevenlabs_api_key=environ.get("ELEVENLABS_API_KEY") or None,
     )

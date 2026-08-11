@@ -60,6 +60,7 @@ def test_initialize_adds_new_columns_to_existing_alpha_database(tmp_path: Path):
         voice_id_candidate_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(voice_id_candidates)")
         }
+        speaker_columns = {row["name"] for row in connection.execute("PRAGMA table_info(speakers)")}
 
     assert "creation_method" in columns
     assert "generation_number" in columns
@@ -68,6 +69,54 @@ def test_initialize_adds_new_columns_to_existing_alpha_database(tmp_path: Path):
     assert "generation_number" in delivery_preview_columns
     assert "display_name" in delivery_preview_columns
     assert "display_name" in voice_id_candidate_columns
+    assert "expansion" in speaker_columns
+
+
+def test_initialize_migrates_unscoped_speakers_without_breaking_dialogue(tmp_path: Path):
+    database = tmp_path / "unscoped.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE source_snapshots (
+                snapshot_id TEXT PRIMARY KEY, source_name TEXT NOT NULL, source_hash TEXT NOT NULL UNIQUE,
+                expansion TEXT NOT NULL, locale TEXT NOT NULL, row_count INTEGER NOT NULL,
+                imported_at TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE TABLE speakers (
+                speaker_id TEXT PRIMARY KEY, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,
+                name TEXT NOT NULL, race_id INTEGER NOT NULL, gender_id INTEGER NOT NULL,
+                race_name TEXT NOT NULL, gender_name TEXT NOT NULL, voice_id TEXT, role TEXT NOT NULL DEFAULT '',
+                faction TEXT NOT NULL DEFAULT '', zone TEXT NOT NULL DEFAULT '',
+                context_summary TEXT NOT NULL DEFAULT '', importance TEXT NOT NULL DEFAULT 'unassessed',
+                uniqueness TEXT NOT NULL DEFAULT 'unassessed', source_snapshot_id TEXT,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(entity_type, entity_id)
+            );
+            INSERT INTO speakers VALUES (
+                'creature-1', 'creature', 1, 'Existing NPC', 1, 0, 'human', 'male', NULL,
+                'default', 'alliance', 'Elwynn', '', 'one_off', 'baseline', NULL, 'now', 'now'
+            );
+            """
+        )
+
+    migrated = AlphaStore(database, tmp_path / "storage")
+    migrated.initialize()
+
+    with migrated.connect() as connection:
+        speaker = connection.execute(
+            "SELECT expansion, name FROM speakers WHERE speaker_id='creature-1'"
+        ).fetchone()
+        connection.execute(
+            "INSERT INTO speakers(speaker_id, expansion, entity_type, entity_id, name, race_id, "
+            "gender_id, race_name, gender_name, created_at, updated_at) VALUES "
+            "('1.12.1:creature:1', '1.12.1', 'creature', 1, 'Vanilla NPC', 1, 0, "
+            "'human', 'male', 'now', 'now')"
+        )
+        scoped_count = connection.execute(
+            "SELECT COUNT(*) FROM speakers WHERE entity_type='creature' AND entity_id=1"
+        ).fetchone()[0]
+
+    assert dict(speaker) == {"expansion": "3.3.5", "name": "Existing NPC"}
+    assert scoped_count == 2
 
 
 def test_initialize_backfills_current_provider_voice_into_candidate_registry(store: AlphaStore):

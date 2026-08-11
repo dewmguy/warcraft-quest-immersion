@@ -35,18 +35,18 @@
     </details>
   {%- endmacro %}
   {% if voice.npc %}
-  <nav class="breadcrumbs"><a href="/alpha/npcs">NPCs</a><span>›</span><a href="/alpha/npcs/{{ voice.npc.entity_type }}/{{ voice.npc.entity_id }}">{{ voice.npc.name }}</a><span>›</span><span>Unique Voice</span></nav>
+  <nav class="breadcrumbs"><a href="/alpha/npcs">NPCs</a><span>›</span><a href="{{ npc_profile_path(voice.npc.entity_type, voice.npc.entity_id, voice.npc.expansion) }}">{{ voice.npc.name }}</a><span>›</span><span>Unique Voice</span></nav>
   {% else %}
   <nav class="breadcrumbs"><a href="/alpha/races">Races</a><span>›</span><span>{{ voice.name }}</span></nav>
   {% endif %}
   <section class="alpha-page-heading record-heading">
-    <div><span class="alpha-kicker">{{ voice.scope | title }} Voice Profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching NPCs · {{ voice.dialogue_count }} quest and gossip lines · {{ voice.missing_dialogue_count }} missing audio</p>{% if voice.npc %}<a class="back-to-npc" href="/alpha/npcs/{{ voice.npc.entity_type }}/{{ voice.npc.entity_id }}"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to {{ voice.npc.name }}</a>{% endif %}</div>
+    <div><span class="alpha-kicker">{{ voice.scope | title }} Voice Profile</span><h1>{{ voice.name }}</h1><p>{{ voice.matching_speaker_count }} matching NPCs · {{ voice.dialogue_count }} quest and gossip lines · {{ voice.missing_dialogue_count }} missing audio</p>{% if voice.npc %}<a class="back-to-npc" href="{{ npc_profile_path(voice.npc.entity_type, voice.npc.entity_id, voice.npc.expansion) }}"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to {{ voice.npc.name }}</a>{% endif %}</div>
     <div class="record-statuses"><span class="work-status lifecycle-status lifecycle-{{ voice.status }}" title="{{ voice.lifecycle_reason }}">Lifecycle · {{ voice.status | title }}</span>{% if voice.voice_id_candidates %}<span class="work-status status-approved">{{ voice.voice_id_candidates|length }} reusable voice ID{{ 's' if voice.voice_id_candidates|length != 1 else '' }}</span>{% else %}<a class="work-status status-needs_voice status-action" href="#provider-creation">Voice ID needed &rarr;</a>{% endif %}</div>
   </section>
 
   {% if voice.npc %}
   <section class="alpha-panel npc-profile-context">
-    <div class="panel-heading"><div><span class="panel-step">Unique Voice Direction</span><h2>NPC Context</h2><p>Current character properties from the NPC profile.</p></div><a class="button-link secondary" href="/alpha/npcs/{{ voice.npc.entity_type }}/{{ voice.npc.entity_id }}">Edit NPC Context</a></div>
+    <div class="panel-heading"><div><span class="panel-step">Unique Voice Direction</span><h2>NPC Context</h2><p>Current character properties from the NPC profile.</p></div><a class="button-link secondary" href="{{ npc_profile_path(voice.npc.entity_type, voice.npc.entity_id, voice.npc.expansion) }}">Edit NPC Context</a></div>
     <dl class="record-facts npc-context-facts">
       <div><dt>Race / Gender</dt><dd>{{ voice.npc.race_name | title }} · {{ voice.npc.gender_name | title }}</dd></div>
       <div><dt>Role or Occupation</dt><dd>{{ voice.npc.role | replace('_',' ') | title }}</dd></div>
@@ -252,5 +252,5 @@
     </article>{% endfor %}</div>
   </section>
 
-  <section class="alpha-panel"><div class="panel-heading"><div><h2>Assigned NPCs</h2></div><span>{{ voice.npcs|length }}</span></div><ul class="link-list">{% for npc in voice.npcs %}<li><a href="/alpha/npcs/{{ npc.entity_type }}/{{ npc.entity_id }}">{{ npc.name }}</a></li>{% else %}<li>No NPCs directly assigned.</li>{% endfor %}</ul></section>
+  <section class="alpha-panel"><div class="panel-heading"><div><h2>Assigned NPCs</h2></div><span>{{ voice.npcs|length }}</span></div><ul class="link-list">{% for npc in voice.npcs %}<li><a href="{{ npc_profile_path(npc.entity_type, npc.entity_id, npc.expansion) }}">{{ npc.name }}</a></li>{% else %}<li>No NPCs directly assigned.</li>{% endfor %}</ul></section>
 {% endblock %}

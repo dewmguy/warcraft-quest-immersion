@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -9,8 +12,14 @@ import pymysql
 from prompt_toolkit.shortcuts import checkboxlist_dialog, radiolist_dialog, yes_no_dialog
 
 from tts_cli import __version__, utils
+from tts_cli.alpha_store import AlphaError, AlphaStore
 from tts_cli.config import ConfigurationError, load_settings
 from tts_cli.consts import GENDER_DICT_INV, RACE_DICT_INV, race_gender_tuple_to_strings
+from tts_cli.corpus import (
+    AzerothCoreCorpusExtractor,
+    MySQLCorpusSource,
+    write_corpus_bundle,
+)
 from tts_cli.data_sources import DataSourceError, load_dialogue_csv, write_dialogue_csv
 from tts_cli.init_db import download_and_extract_latest_db_dump, import_sql_files_to_database
 from tts_cli.paths import PROJECT_ROOT, SAMPLE_DATA_PATH
@@ -82,7 +91,116 @@ def build_parser() -> argparse.ArgumentParser:
         aliases=["extract_model_data"],
         help="Generate NPC model metadata from MySQL",
     )
+
+    corpus_parser = subparsers.add_parser(
+        "corpus", help="Extract, validate, and atomically import corpus bundles"
+    )
+    corpus_commands = corpus_parser.add_subparsers(dest="corpus_command", required=True)
+    extract_parser = corpus_commands.add_parser(
+        "extract", help="Extract a certified bundle from the restored AzerothCore snapshot"
+    )
+    extract_parser.add_argument("--source-dump", type=Path, required=True)
+    extract_parser.add_argument(
+        "--source-artifact",
+        type=Path,
+        action="append",
+        default=[],
+        help="additional provenance-matched DBC SQL artifact; may be repeated",
+    )
+    extract_parser.add_argument("--source-version", required=True)
+    extract_parser.add_argument("--source-name", default="azerothcore-world")
+    extract_parser.add_argument("--expansion", default="3.3.5")
+    extract_parser.add_argument("--locale", default="enUS")
+    extract_parser.add_argument("--output", type=Path, required=True)
+    validate_parser = corpus_commands.add_parser(
+        "validate", help="Validate a complete corpus bundle without changing Alpha"
+    )
+    validate_parser.add_argument("bundle", type=Path)
+    import_parser = corpus_commands.add_parser(
+        "import", help="Dry-run or atomically apply a validated corpus bundle"
+    )
+    import_parser.add_argument("bundle", type=Path)
+    import_parser.add_argument("--dry-run", action="store_true")
+    import_parser.add_argument(
+        "--yes", action="store_true", help="confirm the production snapshot replacement"
+    )
     return parser
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _alpha_store() -> AlphaStore:
+    data_dir = Path(os.getenv("WQI_DATA_DIR", PROJECT_ROOT / "data")).resolve()
+    store = AlphaStore(data_dir / "alpha" / "production.sqlite3", data_dir / "alpha")
+    store.initialize()
+    return store
+
+
+def corpus_command(args: argparse.Namespace) -> int:
+    if args.corpus_command == "extract":
+        source_dump = args.source_dump.expanduser().resolve()
+        if not source_dump.is_file():
+            raise FileNotFoundError(f"AzerothCore snapshot was not found: {source_dump}")
+        source_artifacts = []
+        for artifact in args.source_artifact:
+            artifact = artifact.expanduser().resolve()
+            if not artifact.is_file():
+                raise FileNotFoundError(f"AzerothCore source artifact was not found: {artifact}")
+            source_artifacts.append({"name": artifact.name, "sha256": _file_sha256(artifact)})
+        settings = load_settings()
+        connection = pymysql.connect(
+            host=settings.azerothcore_mysql_host,
+            port=settings.azerothcore_mysql_port,
+            user=settings.azerothcore_mysql_user,
+            password=settings.azerothcore_mysql_password,
+            database=settings.azerothcore_mysql_database,
+            charset="utf8mb4",
+            autocommit=True,
+        )
+        try:
+            source = MySQLCorpusSource(connection, settings.azerothcore_mysql_database)
+            bundle = AzerothCoreCorpusExtractor(
+                source,
+                expansion=args.expansion,
+                locale=args.locale,
+                source_name=args.source_name,
+                source_sha256=_file_sha256(source_dump),
+                source_version=args.source_version,
+                source_artifacts=source_artifacts,
+            ).extract()
+            output = write_corpus_bundle(bundle, args.output)
+        finally:
+            connection.close()
+        print(json.dumps({"bundle": str(output), "manifest": bundle.manifest}, indent=2))
+        return 0
+
+    store = _alpha_store()
+    if args.corpus_command == "validate":
+        report = store.validate_corpus_bundle(args.bundle)
+        print(json.dumps(report, indent=2))
+        return 0 if report["valid"] else 2
+    if args.corpus_command == "import":
+        report = store.import_corpus_bundle(args.bundle, dry_run=True)
+        print(json.dumps(report, indent=2))
+        if args.dry_run:
+            return 0 if report["valid"] else 2
+        if not report["valid"]:
+            return 2
+        if not args.yes:
+            confirmation = input("Type IMPORT to atomically replace the active corpus snapshot: ")
+            if confirmation.strip() != "IMPORT":
+                print("Import cancelled.")
+                return 2
+        applied = store.import_corpus_bundle(args.bundle)
+        print(json.dumps(applied, indent=2))
+        return 0
+    raise AlphaError("Unknown corpus command.")
 
 
 def _select_database_area():
@@ -258,7 +376,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Exported dialogue data to {output}")
         elif args.command in {"extract-model-data", "extract_model_data"}:
             write_model_data()
-    except (ConfigurationError, DataSourceError, FileNotFoundError, ValueError) as error:
+        elif args.command == "corpus":
+            return corpus_command(args)
+    except (
+        AlphaError,
+        ConfigurationError,
+        DataSourceError,
+        FileNotFoundError,
+        ValueError,
+    ) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
     except (pymysql.MySQLError, RuntimeError) as error:

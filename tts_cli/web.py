@@ -17,6 +17,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Annotated
 
+import pandas as pd
 import pymysql
 from fastapi import (
     Body,
@@ -119,6 +120,15 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Warcraft Quest Immersion", version="0.1.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
+
+
+def npc_profile_path(entity_type: str, entity_id: int, expansion: str = "3.3.5") -> str:
+    if expansion == "3.3.5":
+        return f"/alpha/npcs/{entity_type}/{entity_id}"
+    return f"/alpha/npcs/{expansion}/{entity_type}/{entity_id}"
+
+
+templates.env.globals["npc_profile_path"] = npc_profile_path
 security = HTTPBasic(auto_error=False)
 
 
@@ -523,7 +533,30 @@ def alpha_npc(
             request=request,
             name="alpha-speaker.html",
             context=_alpha_context(
-                record=alpha_store.get_speaker(f"{entity_type}-{entity_id}"),
+                record=alpha_store.get_speaker_by_entity("3.3.5", entity_type, entity_id),
+                role_options=ROLE_OPTIONS,
+                affiliation_options=AFFILIATION_OPTIONS,
+                importance_scores=IMPORTANCE_SCORES,
+            ),
+        )
+    except AlphaError as error:
+        raise _alpha_error(error, 404) from error
+
+
+@app.get("/alpha/npcs/{expansion}/{entity_type}/{entity_id}", response_class=HTMLResponse)
+def alpha_npc_scoped(
+    expansion: str,
+    entity_type: str,
+    entity_id: int,
+    request: Request,
+    _: Annotated[str, Depends(require_auth)],
+):
+    try:
+        return templates.TemplateResponse(
+            request=request,
+            name="alpha-speaker.html",
+            context=_alpha_context(
+                record=alpha_store.get_speaker_by_entity(expansion, entity_type, entity_id),
                 role_options=ROLE_OPTIONS,
                 affiliation_options=AFFILIATION_OPTIONS,
                 importance_scores=IMPORTANCE_SCORES,
@@ -719,6 +752,74 @@ async def upload_data(
         "message": f"Loaded {len(dataframe):,} dialogue rows into the Alpha database.",
         "rows": len(dataframe),
         "snapshot_id": imported["snapshot_id"],
+    }
+
+
+async def _receive_corpus_bundle(file: UploadFile) -> Path:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    temporary_path = DATA_DIR / f".{secrets.token_hex(8)}.corpus.zip"
+    size = 0
+    try:
+        with temporary_path.open("wb") as output:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="Corpus bundle is too large.")
+                output.write(chunk)
+        return temporary_path
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    finally:
+        await file.close()
+
+
+@app.post("/api/alpha/corpus/validate")
+async def api_alpha_corpus_validate(
+    _: Annotated[str, Depends(require_auth)],
+    file: Annotated[UploadFile, File()],
+) -> dict:
+    temporary_path = await _receive_corpus_bundle(file)
+    try:
+        report = alpha_store.validate_corpus_bundle(temporary_path)
+    except AlphaError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return {
+        "message": "Corpus bundle passed structural and reconciliation validation."
+        if report["valid"]
+        else "Corpus validation found blocking addon filename conflicts.",
+        "report": report,
+    }
+
+
+@app.post("/api/alpha/corpus/import")
+async def api_alpha_corpus_import(
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+    file: Annotated[UploadFile, File()],
+) -> dict:
+    temporary_path = await _receive_corpus_bundle(file)
+    try:
+        dry_run = alpha_store.import_corpus_bundle(temporary_path, dry_run=True)
+        if not dry_run["valid"]:
+            raise AlphaError("Corpus has blocking addon filename conflicts.")
+        source = dry_run["source"]
+        bundle_dir = (
+            SOURCE_DIR / "azerothcore" / str(source["expansion"]) / str(source["locale"]) / "corpus"
+        )
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        stored_path = bundle_dir / (f"{dry_run['snapshot_id']}-{dry_run['bundle_sha256'][:12]}.zip")
+        temporary_path.replace(stored_path)
+        applied = alpha_store.import_corpus_bundle(stored_path)
+    except AlphaError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return {
+        "message": "The validated corpus snapshot was applied atomically.",
+        "report": applied,
     }
 
 
@@ -1627,7 +1728,8 @@ def _run_lookup_generation() -> None:
         job.state = "running"
         job.message = "Generating addon lookup tables..."
     try:
-        dataframe = load_dialogue_csv(DIALOGUE_PATH)
+        corpus_rows = alpha_store.addon_lookup_rows()
+        dataframe = pd.DataFrame(corpus_rows) if corpus_rows else load_dialogue_csv(DIALOGUE_PATH)
         processor = TTSProcessor(fetch_voices=False)
         processor.generate_lookup_tables(processor.preprocess_dataframe(dataframe))
         with job_lock:

@@ -673,6 +673,65 @@ for (const form of document.querySelectorAll("[data-upload-form]")) {
   });
 }
 
+const corpusReportPanel = document.querySelector("[data-corpus-report-panel]");
+const corpusReport = document.querySelector("[data-corpus-report]");
+const corpusReportState = document.querySelector("[data-corpus-report-state]");
+
+function renderCorpusReport(report) {
+  if (!corpusReportPanel || !corpusReport || !corpusReportState) return;
+  const preferredCounts = [
+    ["active_bindings", "Active Bindings"],
+    ["added", "Added"],
+    ["changed", "Changed"],
+    ["removed", "Removed"],
+    ["source_changed", "Source Changed"],
+    ["quarantined", "Quarantined"],
+    ["ambiguous_models", "Ambiguous Models"],
+    ["addon_conflicts", "Addon Conflicts"],
+  ];
+  corpusReport.replaceChildren();
+  for (const [key, label] of preferredCounts) {
+    const article = document.createElement("article");
+    const value = document.createElement("strong");
+    const caption = document.createElement("span");
+    value.textContent = Number(report.counts?.[key] || 0).toLocaleString();
+    caption.textContent = label;
+    article.append(value, caption);
+    corpusReport.append(article);
+  }
+  corpusReportState.textContent = report.valid ? "Valid" : "Blocked";
+  corpusReportState.className = report.valid ? "status-approved" : "status-needs_voice";
+  corpusReportPanel.hidden = false;
+}
+
+for (const form of document.querySelectorAll("[data-corpus-form]")) {
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return;
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+    form.setAttribute("aria-busy", "true");
+    try {
+      const payload = await runAlphaAction({
+        url: form.dataset.url,
+        method: "POST",
+        body: new FormData(form),
+      });
+      renderCorpusReport(payload.report);
+      form.reset();
+      showAlphaMessage(payload.message, payload.report.valid ? "complete" : "failed");
+      if (form.dataset.reload === "true") {
+        window.setTimeout(() => window.location.reload(), 900);
+      }
+    } catch (error) {
+      showAlphaMessage(error.message, "failed");
+    } finally {
+      form.removeAttribute("aria-busy");
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+}
+
 const compactAudioPlayers = [...document.querySelectorAll("[data-compact-audio]")];
 const audioDisclosures = [...document.querySelectorAll("[data-audio-disclosure]")];
 

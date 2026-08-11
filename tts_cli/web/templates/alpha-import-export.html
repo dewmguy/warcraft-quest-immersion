@@ -4,57 +4,88 @@
 {% block content %}
   <section class="alpha-page-heading">
     <div>
-      <span class="alpha-kicker">Source of truth</span>
+      <span class="alpha-kicker">Corpus Control</span>
       <h1>Import / Export</h1>
-      <p>Build the production database from a validated Warcraft source, and later hand approved audio to the addon packaging workflow.</p>
+      <p>Validate a certified AzerothCore corpus, review its reconciliation report, and apply it as one transaction.</p>
     </div>
   </section>
 
   <section class="alpha-panel source-explainer">
-    <div class="panel-heading"><div><h2>What the current import is for</h2></div><span>Alpha transfer format</span></div>
-    <p>The four records currently visible are demonstration rows from <code>dialogue.csv</code>. The real work queue is expected to be constructed from joined 3.3.5 AzerothCore quest, gossip, creature, faction, and area tables—not manually authored one row at a time.</p>
-    <p>The CSV uploader is the repeatable transfer boundary for that constructed dataset. It also lets us validate other expansions and locales independently while the direct AzerothCore extractor is being built.</p>
-    {% if dashboard.counts.dialogue < 100 %}<aside class="inline-warning">This deployment still contains only {{ dashboard.counts.dialogue }} demonstration records. It is not the full Warcraft corpus.</aside>{% endif %}
+    <div class="panel-heading">
+      <div><h2>3.3.5 enUS Corpus Bundle</h2></div>
+      <span>Authoritative Import</span>
+    </div>
+    <p>The bundle preserves shared source text separately from each NPC, object, or item that delivers it. Every extracted candidate must resolve to an active binding or a documented quarantine finding.</p>
+    {% if dashboard.counts.dialogue < 100 %}<aside class="inline-warning">This deployment currently contains {{ dashboard.counts.dialogue }} demonstration records, not the certified 3.3.5 corpus.</aside>{% endif %}
   </section>
 
   <div class="record-grid import-grid">
     <section class="alpha-panel">
-      <div class="panel-heading"><div><h2>Import a validated source</h2><p>Replacing one expansion and locale leaves every other active source intact.</p></div></div>
-      <form data-upload-form data-url="/api/data">
-        <div class="form-grid">
-          <label><span>Expansion</span><select name="expansion"><option>1.12.1</option><option>2.4.3</option><option selected>3.3.5</option><option value="classic">Current Classic</option></select></label>
-          <label><span>Locale</span><input name="locale" value="enUS" pattern="[A-Za-z]{4}" required></label>
-        </div>
-        <label><span>Validated dialogue CSV</span><input name="file" type="file" accept=".csv,text/csv" required></label>
-        <button type="submit">Validate and import source</button>
+      <div class="panel-heading">
+        <div><h2>Validate Bundle</h2><p>Checks hashes, schema, relationships, stable keys, quarantine coverage, and addon filename conflicts without changing the active snapshot.</p></div>
+      </div>
+      <form data-corpus-form data-url="/api/alpha/corpus/validate">
+        <label><span>Corpus ZIP</span><input name="file" type="file" accept=".zip,application/zip" required></label>
+        <button type="submit"><i class="fa-solid fa-shield-check" aria-hidden="true"></i> Validate</button>
       </form>
     </section>
     <section class="alpha-panel">
-      <div class="panel-heading"><div><h2>Active source snapshots</h2></div><span>{{ dashboard.snapshots|length }}</span></div>
-      <div class="source-list">{% for snapshot in dashboard.snapshots %}<article><strong>{{ snapshot.expansion }} · {{ snapshot.locale }}</strong><span>{{ snapshot.source_name }} · {{ "{:,}".format(snapshot.row_count) }} rows</span><small>Imported {{ snapshot.imported_at[:19] | replace('T',' ') }} UTC</small></article>{% else %}<p class="empty-copy">No source has been imported.</p>{% endfor %}</div>
+      <div class="panel-heading">
+        <div><h2>Apply Snapshot</h2><p>Runs the dry run again, preserves reviewed work and manual overrides, then replaces the active expansion and locale atomically.</p></div>
+      </div>
+      <form data-corpus-form data-url="/api/alpha/corpus/import" data-reload="true" data-confirm="Apply this corpus snapshot to the production database?">
+        <label><span>Validated Corpus ZIP</span><input name="file" type="file" accept=".zip,application/zip" required></label>
+        <button type="submit"><i class="fa-solid fa-database" aria-hidden="true"></i> Import</button>
+      </form>
     </section>
   </div>
 
-  <section class="alpha-panel">
-    <div class="panel-heading"><div><h2>Exact CSV contract</h2><p>UTF-8, comma-delimited, one spoken quest stage or gossip line per row.</p></div><a class="button-link secondary" href="/api/alpha/import-template.csv">Download example</a></div>
-    <div class="alpha-table-wrap"><table class="alpha-table schema-table"><thead><tr><th>Column</th><th>Required content</th></tr></thead><tbody>
-      <tr><td><code>source</code></td><td>One of <code>accept</code>, <code>progress</code>, <code>complete</code>, or <code>gossip</code>.</td></tr>
-      <tr><td><code>quest</code></td><td>Numeric quest ID; empty only for gossip.</td></tr>
-      <tr><td><code>quest_title</code></td><td>Localized quest title; empty is allowed for gossip.</td></tr>
-      <tr><td><code>text</code></td><td>Localized dialogue text selected by the source query. It must not be empty.</td></tr>
-      <tr><td><code>DisplayRaceID</code></td><td>Numeric display race used to assign the baseline voice; <code>-1</code> is the narrator/inanimate fallback.</td></tr>
-      <tr><td><code>DisplaySexID</code></td><td><code>0</code> male, <code>1</code> female.</td></tr>
-      <tr><td><code>name</code></td><td>NPC, game object, or item delivering the line.</td></tr>
-      <tr><td><code>type</code></td><td>One of <code>creature</code>, <code>gameobject</code>, or <code>item</code>.</td></tr>
-      <tr><td><code>id</code></td><td>Numeric creature, game-object, or item entry ID.</td></tr>
-      <tr><td><code>original_text</code></td><td>Immutable source text retained for review and addon identity.</td></tr>
-    </tbody></table></div>
-    <details class="schema-extras"><summary>Recommended joined fields</summary><p><code>source_record_id</code> or <code>broadcast_text_id</code>, <code>zone_name</code>, <code>area_name</code>, <code>map_name</code>, <code>faction_name</code>, <code>role</code>, <code>occupation</code>, <code>rank</code>, and <code>subname</code>. Any additional columns are retained as source metadata instead of discarded.</p></details>
+  <section class="alpha-panel corpus-report-panel" data-corpus-report-panel hidden>
+    <div class="panel-heading"><div><h2>Reconciliation Report</h2></div><span data-corpus-report-state></span></div>
+    <div class="corpus-report-grid" data-corpus-report></div>
   </section>
 
+  <section class="alpha-panel">
+    <div class="panel-heading"><div><h2>Active Source Snapshots</h2></div><span>{{ dashboard.snapshots|length }}</span></div>
+    <div class="source-list">
+      {% for snapshot in dashboard.snapshots %}
+        <article>
+          <strong>{{ snapshot.expansion }} · {{ snapshot.locale }}</strong>
+          <span>{{ snapshot.source_name }} · {{ "{:,}".format(snapshot.row_count) }} bindings</span>
+          <small>Imported {{ snapshot.imported_at[:19] | replace('T',' ') }} UTC</small>
+        </article>
+      {% else %}<p class="empty-copy">No source has been imported.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section class="alpha-panel">
+    <div class="panel-heading"><div><h2>Bundle Contract</h2><p>A versioned ZIP with a manifest and five UTF-8 CSV artifacts.</p></div></div>
+    <div class="alpha-table-wrap"><table class="alpha-table schema-table"><thead><tr><th>Artifact</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>manifest.json</code></td><td>Snapshot provenance, source and artifact hashes, schema fingerprints, extractor version, and reconciled counts.</td></tr>
+      <tr><td><code>entities.csv</code></td><td>Expansion-scoped NPC, game-object, and item identities with deterministic context inference.</td></tr>
+      <tr><td><code>texts.csv</code></td><td>Stable shared text identities and immutable source text for this snapshot.</td></tr>
+      <tr><td><code>bindings.csv</code></td><td>One production unit for every text and delivery endpoint.</td></tr>
+      <tr><td><code>triggers.csv</code></td><td>Quest relations and complete gossip-menu traversal paths.</td></tr>
+      <tr><td><code>quarantine.csv</code></td><td>Retained unresolved candidates with explicit reasons.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <details class="alpha-panel legacy-import">
+    <summary>Legacy CSV Import</summary>
+    <p>The flat CSV remains available for fixtures and demonstrations. It is not the authoritative full-corpus path.</p>
+    <form data-upload-form data-url="/api/data">
+      <div class="form-grid">
+        <label><span>Expansion</span><select name="expansion"><option>1.12.1</option><option>2.4.3</option><option selected>3.3.5</option><option value="classic">Current Classic</option></select></label>
+        <label><span>Locale</span><input name="locale" value="enUS" pattern="[A-Za-z]{4}" required></label>
+      </div>
+      <label><span>Dialogue CSV</span><input name="file" type="file" accept=".csv,text/csv" required></label>
+      <div class="actions"><button type="submit">Import CSV</button><a class="button-link secondary" href="/api/alpha/import-template.csv">Download Example</a></div>
+    </form>
+  </details>
+
   <section class="alpha-panel future-export">
-    <div class="panel-heading"><div><span class="panel-step">Later phase</span><h2>Addon production export</h2></div><span>{{ manifest.asset_count }} approved assets</span></div>
-    <p>This handoff is intentionally secondary until the complete source corpus, voice profiles, and production approval rules are validated.</p>
-    {% if manifest.asset_count %}<details><summary>Show preliminary export tools</summary><div class="actions"><a class="button-link" href="/api/alpha/export.json">Download manifest</a><a class="button-link secondary" href="/api/alpha/export.zip">Download approved audio ZIP</a></div></details>{% else %}<p class="empty-copy">No production export is available because no audio candidate has been approved.</p>{% endif %}
+    <div class="panel-heading"><div><span class="panel-step">Later Phase</span><h2>Addon Production Export</h2></div><span>{{ manifest.asset_count }} approved assets</span></div>
+    <p>Exports carry the corpus binding, quest stage, delivery endpoint, deterministic filename, duration, and hash.</p>
+    {% if manifest.asset_count %}<div class="actions"><a class="button-link" href="/api/alpha/export.json">Download Manifest</a><a class="button-link secondary" href="/api/alpha/export.zip">Download Approved Audio ZIP</a></div>{% endif %}
   </section>
 {% endblock %}

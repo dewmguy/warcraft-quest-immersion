@@ -42,6 +42,13 @@ unique voices, reference clips, provider attempts, audio candidates, approvals,
 and later addon-ready exports. Each workspace displays progress for 230 baseline
 race/gender/delivery presets, quest audio, and gossip audio.
 
+The certified 3.3.5 enUS extractor, corpus bundle contract, validate/dry-run/
+atomic-import path, normalized content and per-deliverer binding schema, and
+additive per-entity addon resolver are implemented. The phase remains in
+progress until the private AzerothCore snapshot and matching DBC exports are
+supplied, the full corpus reconciliation is reviewed, and the required in-game
+per-NPC playback acceptance passes.
+
 Exit gate:
 
 - accept and version a complete quest and gossip export;
@@ -52,7 +59,8 @@ Exit gate:
   explicit;
 - assign baseline or unique voices at the NPC level;
 - keep delivery at the dialogue level;
-- require separate confirmation for every provider request;
+- keep provider requests explicit while allowing low-friction generation and
+  confirmation-protected deletion;
 - approve an exact audio candidate without regeneration;
 - export deterministic addon filenames, hashes, and durations;
 - validate one real record through the existing addon packaging and playback path.

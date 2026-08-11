@@ -72,7 +72,7 @@ function Addon:OnInitialize()
 
     self:RegisterEvent("ADDON_LOADED")
     self:RegisterEvent("QUEST_DETAIL")
-    -- self:RegisterEvent("QUEST_PROGRESS")
+    self:RegisterEvent("QUEST_PROGRESS")
     self:RegisterEvent("QUEST_COMPLETE")
     self:RegisterEvent("QUEST_GREETING")
     self:RegisterEvent("QUEST_FINISHED")
@@ -200,6 +200,22 @@ local function QuestSoundDataAdded(soundData)
 end
 
 local GetTitleText = GetTitleText -- Store original function before EQL3 (Extended Quest Log 3) overrides it and starts prepending quest level
+
+local function ResolveQuestGiver(questID, guid, targetName)
+    local type = guid and Utils.GetGUIDType and Utils:GetGUIDType(guid)
+    if type == Enums.GUID.Item then
+        -- Item instance GUIDs do not expose a template ID. Resolve the unique quest relation below.
+    elseif type and Enums.GUID:CanHaveID(type) then
+        return guid, targetName
+    end
+
+    local id
+    type, id = DataModules:GetQuestLogQuestGiverTypeAndID(questID)
+    guid = id and Enums.GUID:CanHaveID(type) and Utils:MakeGUID(type, id) or guid
+    targetName = id and DataModules:GetObjectName(type, id) or targetName or "Unknown Name"
+    return guid, targetName
+end
+
 function Addon:QUEST_DETAIL()
     local questID = GetQuestID()
     local questTitle = GetTitleText()
@@ -220,21 +236,45 @@ function Addon:QUEST_DETAIL()
         Addon.db.char.RecentQuestTitleToID[questTitle] = questID
     end
 
-    local type = guid and Utils:GetGUIDType(guid)
-    if type == Enums.GUID.Item then
-        -- Allow quests started from items to have VO, book icon will be displayed for them
-    elseif not type or not Enums.GUID:CanHaveID(type) then
-        -- If the quest is started by something that we cannot extract the ID of (e.g. Player, when sharing a quest) - try to fallback to a questgiver from a module's database
-        local id
-        type, id = DataModules:GetQuestLogQuestGiverTypeAndID(questID)
-        guid = id and Enums.GUID:CanHaveID(type) and Utils:MakeGUID(type, id) or guid
-        targetName = id and DataModules:GetObjectName(type, id) or targetName or "Unknown Name"
-    end
+    guid, targetName = ResolveQuestGiver(questID, guid, targetName)
 
     -- print("QUEST_DETAIL", questID, questTitle);
     ---@type SoundData
     local soundData = {
         event = Enums.SoundEvent.QuestAccept,
+        questID = questID,
+        name = targetName,
+        title = questTitle,
+        text = questText,
+        unitGUID = guid,
+        unitIsObjectOrItem = Utils:IsNPCObjectOrItem(),
+        addedCallback = QuestSoundDataAdded,
+    }
+    SoundQueue:AddSoundToQueue(soundData)
+end
+
+function Addon:QUEST_PROGRESS()
+    local questID = GetQuestID()
+    local questTitle = GetTitleText()
+    local questText = GetProgressText()
+    local guid = Utils:GetNPCGUID()
+    local targetName = Utils:GetNPCName()
+
+    if not questID or questID == 0 then
+        return
+    end
+    if not guid and not targetName then
+        return
+    end
+
+    if Addon.db.char.RecentQuestTitleToID and questID ~= 0 then
+        Addon.db.char.RecentQuestTitleToID[questTitle] = questID
+    end
+    guid, targetName = ResolveQuestGiver(questID, guid, targetName)
+
+    ---@type SoundData
+    local soundData = {
+        event = Enums.SoundEvent.QuestProgress,
         questID = questID,
         name = targetName,
         title = questTitle,
@@ -265,6 +305,7 @@ function Addon:QUEST_COMPLETE()
     if Addon.db.char.RecentQuestTitleToID and questID ~= 0 then
         Addon.db.char.RecentQuestTitleToID[questTitle] = questID
     end
+    guid, targetName = ResolveQuestGiver(questID, guid, targetName)
 
     -- print("QUEST_COMPLETE", questID, questTitle);
     ---@type SoundData

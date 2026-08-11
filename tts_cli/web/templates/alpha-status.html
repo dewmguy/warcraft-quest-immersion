@@ -8,7 +8,7 @@
   {% elif state == 'needs_voice' and row.voice_id %}
     <a class="work-status status-{{ state }} status-action" href="{{ '/alpha/races/' if row.voice_scope == 'baseline' else '/alpha/voices/' }}{{ row.voice_id }}#provider-creation" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
   {% elif state == 'needs_voice' %}
-    <a class="work-status status-{{ state }} status-action" href="/alpha/npcs/{{ row.entity_type }}/{{ row.entity_id }}#voice-approach" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
+    <a class="work-status status-{{ state }} status-action" href="{{ npc_profile_path(row.entity_type, row.entity_id, row.expansion) }}#voice-approach" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
   {% elif state == 'generation_failed' %}
     <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#generation" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
   {% elif state == 'audio_to_review' %}

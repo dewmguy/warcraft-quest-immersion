@@ -40,6 +40,13 @@ def create_output_subdirs(subdir: str):
         os.makedirs(output_subdir)
 
 
+def _per_entity_audio_ready(row) -> bool:
+    value = row.get("per_entity_audio_ready", True)
+    if pd.isna(value):
+        return False
+    return str(value).strip().lower() not in {"", "0", "false", "no"}
+
+
 def prune_quest_id_table(quest_id_table):
     def is_single_quest_id(nested_dict):
         if isinstance(nested_dict, dict):
@@ -204,17 +211,16 @@ class TTSProcessor:
             custom_message = f"skipping due to invalid chars: {row['cleanedText']}"
         elif voice_name not in self.selected_voice_names:
             custom_message = f"skipping due to voice being unselected or unavailable: {voice_name}"
-        elif (
-            row["source"] == "progress"
-        ):  # skip progress text (progress text is usually better left unread since its always played before quest completion)
-            custom_message = f"skipping progress text: {row['quest']}-{row['source']}"
         else:
             self.tts_row(row, voice_name)
         return custom_message
 
     def tts_row(self, row, voice_name):
         tts_text = row["cleanedText"]
-        file_name = (
+        addon_file_key = row.get("addon_file_key", "")
+        if pd.isna(addon_file_key):
+            addon_file_key = ""
+        file_name = str(addon_file_key).strip() or (
             f"{row['quest']}-{row['source']}"
             if row["quest"]
             else f"{row['templateText_race_gender_hash']}"
@@ -269,8 +275,14 @@ class TTSProcessor:
                 gossip_table[row["id"]] = {}
 
             escapedText = row["text"].replace('"', "'").replace("\r", " ").replace("\n", " ")
-
-            gossip_table[row["id"]][escapedText] = row["templateText_race_gender_hash"]
+            addon_file_key = row.get("addon_file_key", "")
+            if pd.isna(addon_file_key):
+                addon_file_key = ""
+            gossip_table[row["id"]][escapedText] = (
+                str(addon_file_key).strip()
+                if _per_entity_audio_ready(row) and str(addon_file_key).strip()
+                else row["templateText_race_gender_hash"]
+            )
 
         with open(output_file, "w", encoding="UTF-8") as f:
             f.write(DATAMODULE_TABLE_GUARD_CLAUSE + "\n")
@@ -283,16 +295,40 @@ class TTSProcessor:
     def write_questlog_npc_lookups_table(self, df, module_name, type, table, filename):
         output_file = OUTPUT_FOLDER + f"/{filename}.lua"
         questlog_table = {}
+        audio_table = {}
 
         accept_df = df[(df["source"] == "accept") & (df["type"] == type)]
+        for quest_id, rows in accept_df.groupby("quest"):
+            entity_ids = sorted({int(value) for value in rows["id"]})
+            if len(entity_ids) == 1:
+                questlog_table[int(quest_id)] = entity_ids[0]
 
-        for _i, row in tqdm(accept_df.iterrows()):
-            questlog_table[int(row["quest"])] = row["id"]
+        quest_df = df[(df["quest"] != "") & (df["type"] == type)]
+        for _i, row in tqdm(quest_df.iterrows()):
+            if not _per_entity_audio_ready(row):
+                continue
+            quest_id = int(row["quest"])
+            stage = str(row["source"])
+            entity_id = int(row["id"])
+            addon_file_key = row.get("addon_file_key", "")
+            if pd.isna(addon_file_key):
+                addon_file_key = ""
+            filename_key = str(addon_file_key).strip() or f"{quest_id}-{stage}"
+            audio_table.setdefault(quest_id, {}).setdefault(stage, {})[entity_id] = filename_key
+
+        audio_table_name = {
+            "creature": "QuestAudioLookupByNPCID",
+            "gameobject": "QuestAudioLookupByObjectID",
+            "item": "QuestAudioLookupByItemID",
+        }[type]
 
         with open(output_file, "w", encoding="UTF-8") as f:
             f.write(DATAMODULE_TABLE_GUARD_CLAUSE + "\n")
             f.write(f"{module_name}.{table} = ")
             f.write(lua.encode(questlog_table))
+            f.write("\n")
+            f.write(f"{module_name}.{audio_table_name} = ")
+            f.write(lua.encode(audio_table))
             f.write("\n")
 
         print(f"Finished writing {filename}.lua")
@@ -322,9 +358,6 @@ class TTSProcessor:
 
         for _i, row in tqdm(quest_df.iterrows()):
             quest_source = row["source"]
-            if quest_source == "progress":  # skipping progress text for now
-                continue
-
             quest_id = int(row["quest"])
             quest_title = row["quest_title"]
             quest_text = (
@@ -381,7 +414,14 @@ class TTSProcessor:
 
             escapedText = row["text"].replace('"', "'").replace("\r", " ").replace("\n", " ")
 
-            gossip_table[escaped_npc_name][escapedText] = row["templateText_race_gender_hash"]
+            addon_file_key = row.get("addon_file_key", "")
+            if pd.isna(addon_file_key):
+                addon_file_key = ""
+            gossip_table[escaped_npc_name][escapedText] = (
+                str(addon_file_key).strip()
+                if _per_entity_audio_ready(row) and str(addon_file_key).strip()
+                else row["templateText_race_gender_hash"]
+            )
 
         with open(output_file, "w", encoding="UTF-8") as f:
             f.write(DATAMODULE_TABLE_GUARD_CLAUSE + "\n")

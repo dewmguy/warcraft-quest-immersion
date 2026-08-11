@@ -6,7 +6,7 @@ workflow.
 
 ## Controlled path
 
-1. Import the complete validated quest and gossip source.
+1. Validate, dry-run, and atomically import the certified quest and gossip corpus.
 2. Find a dialogue record in the work queue.
 3. Review the NPC, object, or item delivering it.
 4. Quest spoken text is prepared deterministically during import. Open the quest
@@ -26,8 +26,11 @@ and each provider operation require separate user actions.
 
 ## Primary records
 
-- **Source snapshot:** content-addressed input, expansion, locale, and import count.
-- **Dialogue:** immutable source text and stable addon identity.
+- **Source snapshot:** content-addressed input, provenance, schema fingerprints,
+  expansion, locale, and reconciled counts.
+- **Dialogue content:** stable shared text identity with immutable source versions.
+- **Dialogue binding:** one NPC/object/item production unit, addon filename, and
+  all source triggers capable of presenting it.
 - **Speaker:** inferred and reviewable role, affiliation, zone, story reach,
   concise context, and voice assignment.
 - **Spoken-text revision:** separately created and never overwrites the source.

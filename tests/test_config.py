@@ -9,12 +9,17 @@ def test_load_settings_has_safe_local_defaults():
     assert settings.mysql_host == "localhost"
     assert settings.mysql_port == 3306
     assert settings.mysql_database == "mangos"
+    assert settings.azerothcore_mysql_host == "warcraft-quest-source-db"
+    assert settings.azerothcore_mysql_database == "acore_world"
     assert settings.elevenlabs_api_key is None
 
 
 def test_invalid_mysql_port_has_a_clear_error():
     with pytest.raises(ConfigurationError, match="MYSQL_PORT must be an integer"):
         load_settings(environ={"MYSQL_PORT": "not-a-port"})
+
+    with pytest.raises(ConfigurationError, match="AZEROTHCORE_MYSQL_PORT must be an integer"):
+        load_settings(environ={"AZEROTHCORE_MYSQL_PORT": "not-a-port"})
 
 
 def test_elevenlabs_is_required_only_on_demand():

@@ -622,6 +622,13 @@ dialog .actions { justify-content: flex-end; }
 .metering-preview.compact { grid-template-columns: repeat(3, auto); padding: 8px; }
 .metering-preview.compact span { display: block; }
 .metering-preview.compact strong { font-size: .78rem; }
+.corpus-report-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.corpus-report-grid article { display: grid; gap: 3px; border: 1px solid #39343d; border-radius: 7px; padding: 12px; background: #111014; }
+.corpus-report-grid strong { color: #e4c777; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.corpus-report-grid span { color: #918995; font-size: .7rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.legacy-import { overflow: hidden; }
+.legacy-import > summary { color: #dec274; cursor: pointer; font-weight: 800; }
+.legacy-import[open] > summary { margin-bottom: 18px; }
 
 @media (max-width: 1050px) {
   .alpha-header { grid-template-columns: 1fr auto; }
@@ -633,6 +640,7 @@ dialog .actions { justify-content: flex-end; }
   .delivery-preset-card { grid-template-columns: 1fr; grid-template-areas: "heading" "settings" "review"; }
   .delivery-preset-review { border-top: 1px solid #302c33; border-left: 0; padding-top: 16px; padding-left: 0; }
   .cost-guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .corpus-report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .creation-workspace-grid { grid-template-columns: 1fr; }
   .creation-candidates { border-top: 1px solid #39343d; border-left: 0; padding-top: 20px; padding-left: 0; }
 }
@@ -644,7 +652,7 @@ dialog .actions { justify-content: flex-end; }
   .alpha-header nav { overflow-x: auto; }
   .alpha-main { width: min(100% - 24px, 1480px); padding-top: 26px; }
   .source-banner, .alpha-page-heading, .panel-heading { align-items: flex-start; flex-direction: column; }
-  .alpha-metrics, .record-grid, .form-grid, .filter-bar, .record-facts, .export-summary, .corpus-progress, .provider-account .usage-facts, .cost-guide-grid, .metering-preview, .provider-advanced-grid { grid-template-columns: 1fr; }
+  .alpha-metrics, .record-grid, .form-grid, .filter-bar, .record-facts, .export-summary, .corpus-progress, .provider-account .usage-facts, .cost-guide-grid, .metering-preview, .provider-advanced-grid, .corpus-report-grid { grid-template-columns: 1fr; }
   .search-field { grid-column: auto; }
   .candidate-list article, .reference-list article { grid-template-columns: 1fr; }
   .compact-form { grid-template-columns: 1fr; }

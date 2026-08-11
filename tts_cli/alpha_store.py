@@ -12,6 +12,7 @@ from typing import Any
 from mutagen import File as MutagenFile
 
 from tts_cli.consts import GENDER_DICT, RACE_DICT
+from tts_cli.corpus import CorpusBundle, CorpusError, corpus_bundle_summary, load_corpus_bundle
 from tts_cli.data_sources import REQUIRED_COLUMNS, VALID_SOURCES, load_dialogue_csv
 from tts_cli.voice_profiles import load_phase2_review
 
@@ -84,6 +85,7 @@ PERFORMANCE_METHODS = {
     1.0: ("robust", "Robust"),
 }
 PRODUCTION_STATES = (
+    "source_changed",
     "needs_text",
     "needs_voice",
     "ready_to_generate",
@@ -98,6 +100,15 @@ BASELINE_CONTEXT_REVISION = 2
 
 class AlphaError(ValueError):
     pass
+
+
+class _ClosingConnection(sqlite3.Connection):
+    """Commit or roll back a context-managed connection, then release its file handle."""
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        result = super().__exit__(exc_type, exc_value, traceback)
+        self.close()
+        return result
 
 
 def utc_now() -> str:
@@ -333,6 +344,16 @@ def _infer_affiliation(metadata: dict[str, Any]) -> str:
         return "unspecified"
     normalized = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
     aliases = {
+        "stormwind": "alliance",
+        "ironforge": "alliance",
+        "gnomeregan_exiles": "alliance",
+        "darnassus": "alliance",
+        "exodar": "alliance",
+        "orgrimmar": "horde",
+        "darkspear_trolls": "horde",
+        "undercity": "horde",
+        "thunder_bluff": "horde",
+        "silvermoon_city": "horde",
         "argent_dawn": "argent_crusade",
         "argent_crusade": "argent_crusade",
         "kirin_tor": "kirin_tor",
@@ -352,7 +373,7 @@ class AlphaStore:
         self.storage_root = storage_root.resolve()
 
     def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database_path, timeout=30)
+        connection = sqlite3.connect(self.database_path, timeout=30, factory=_ClosingConnection)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
@@ -373,6 +394,37 @@ class AlphaStore:
                     row_count INTEGER NOT NULL,
                     imported_at TEXT NOT NULL,
                     is_active INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE TABLE IF NOT EXISTS source_artifacts (
+                    snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+                    artifact_name TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    byte_count INTEGER NOT NULL,
+                    row_count INTEGER NOT NULL,
+                    PRIMARY KEY(snapshot_id, artifact_name)
+                );
+                CREATE TABLE IF NOT EXISTS corpus_entities (
+                    entity_key TEXT PRIMARY KEY,
+                    expansion TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    subname TEXT NOT NULL DEFAULT '',
+                    race_id INTEGER NOT NULL DEFAULT 0,
+                    gender_id INTEGER NOT NULL DEFAULT 0,
+                    race_name TEXT NOT NULL DEFAULT '',
+                    gender_name TEXT NOT NULL DEFAULT '',
+                    faction TEXT NOT NULL DEFAULT '',
+                    zone TEXT NOT NULL DEFAULT '',
+                    zone_ids_json TEXT NOT NULL DEFAULT '[]',
+                    role TEXT NOT NULL DEFAULT 'default',
+                    story_reach TEXT NOT NULL DEFAULT 'one_off',
+                    inference_json TEXT NOT NULL DEFAULT '{}',
+                    source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(expansion, entity_type, entity_id)
                 );
                 CREATE TABLE IF NOT EXISTS voices (
                     voice_id TEXT PRIMARY KEY,
@@ -423,6 +475,7 @@ class AlphaStore:
                 );
                 CREATE TABLE IF NOT EXISTS speakers (
                     speaker_id TEXT PRIMARY KEY,
+                    expansion TEXT NOT NULL DEFAULT '3.3.5',
                     entity_type TEXT NOT NULL,
                     entity_id INTEGER NOT NULL,
                     name TEXT NOT NULL,
@@ -440,7 +493,14 @@ class AlphaStore:
                     source_snapshot_id TEXT REFERENCES source_snapshots(snapshot_id),
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    UNIQUE(entity_type, entity_id)
+                    UNIQUE(expansion, entity_type, entity_id)
+                );
+                CREATE TABLE IF NOT EXISTS speaker_manual_overrides (
+                    speaker_id TEXT NOT NULL REFERENCES speakers(speaker_id) ON DELETE CASCADE,
+                    field_name TEXT NOT NULL,
+                    value_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(speaker_id, field_name)
                 );
                 CREATE TABLE IF NOT EXISTS dialogue_entries (
                     dialogue_id TEXT PRIMARY KEY,
@@ -460,6 +520,78 @@ class AlphaStore:
                     active INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS dialogue_contents (
+                    content_id TEXT PRIMARY KEY,
+                    expansion TEXT NOT NULL,
+                    locale TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    quest_id INTEGER,
+                    stage TEXT NOT NULL DEFAULT '',
+                    source_table TEXT NOT NULL,
+                    source_record_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(expansion, locale, kind, source_table, source_record_id, stage)
+                );
+                CREATE TABLE IF NOT EXISTS dialogue_content_versions (
+                    content_version_id TEXT PRIMARY KEY,
+                    content_id TEXT NOT NULL REFERENCES dialogue_contents(content_id),
+                    source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+                    original_text TEXT NOT NULL,
+                    source_text_sha256 TEXT NOT NULL,
+                    context_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    UNIQUE(content_id, source_snapshot_id)
+                );
+                CREATE TABLE IF NOT EXISTS dialogue_bindings (
+                    binding_id TEXT PRIMARY KEY,
+                    content_id TEXT NOT NULL REFERENCES dialogue_contents(content_id),
+                    entity_key TEXT NOT NULL REFERENCES corpus_entities(entity_key),
+                    dialogue_id TEXT REFERENCES dialogue_entries(dialogue_id),
+                    source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+                    expansion TEXT NOT NULL,
+                    locale TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    quest_id INTEGER,
+                    stage TEXT NOT NULL DEFAULT '',
+                    addon_file_key TEXT NOT NULL,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    source_changed INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(source_snapshot_id, content_id, entity_key)
+                );
+                CREATE INDEX IF NOT EXISTS dialogue_bindings_content_idx
+                    ON dialogue_bindings(content_id);
+                CREATE INDEX IF NOT EXISTS dialogue_bindings_entity_idx
+                    ON dialogue_bindings(entity_key);
+                CREATE TABLE IF NOT EXISTS dialogue_triggers (
+                    trigger_id TEXT PRIMARY KEY,
+                    binding_id TEXT NOT NULL REFERENCES dialogue_bindings(binding_id) ON DELETE CASCADE,
+                    source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+                    trigger_type TEXT NOT NULL,
+                    source_table TEXT NOT NULL,
+                    source_record_id TEXT NOT NULL,
+                    menu_path TEXT NOT NULL DEFAULT '',
+                    context_json TEXT NOT NULL DEFAULT '{}'
+                );
+                CREATE TABLE IF NOT EXISTS corpus_findings (
+                    finding_id TEXT PRIMARY KEY,
+                    source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+                    content_id TEXT,
+                    binding_id TEXT,
+                    entity_key TEXT,
+                    reason TEXT NOT NULL,
+                    details TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    resolved INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS legacy_dialogue_aliases (
+                    alias_id TEXT PRIMARY KEY,
+                    binding_id TEXT NOT NULL REFERENCES dialogue_bindings(binding_id),
+                    created_at TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS dialogue_speaker_idx ON dialogue_entries(speaker_id);
                 CREATE INDEX IF NOT EXISTS dialogue_quest_idx ON dialogue_entries(quest_id);
@@ -607,6 +739,7 @@ class AlphaStore:
     @staticmethod
     def _ensure_columns(connection: sqlite3.Connection) -> None:
         """Apply additive migrations to Alpha databases created by earlier builds."""
+        AlphaStore._migrate_speakers_to_expansion_scope(connection)
         voice_columns = {row["name"] for row in connection.execute("PRAGMA table_info(voices)")}
         if "candidate_sequence" not in voice_columns:
             connection.execute(
@@ -620,6 +753,37 @@ class AlphaStore:
         if "metadata_json" not in columns:
             connection.execute(
                 "ALTER TABLE dialogue_entries ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "binding_id" not in columns:
+            connection.execute(
+                "ALTER TABLE dialogue_entries ADD COLUMN binding_id TEXT NOT NULL DEFAULT ''"
+            )
+        if "content_id" not in columns:
+            connection.execute(
+                "ALTER TABLE dialogue_entries ADD COLUMN content_id TEXT NOT NULL DEFAULT ''"
+            )
+        if "source_text_sha256" not in columns:
+            connection.execute(
+                "ALTER TABLE dialogue_entries ADD COLUMN source_text_sha256 TEXT NOT NULL DEFAULT ''"
+            )
+        if "source_changed" not in columns:
+            connection.execute(
+                "ALTER TABLE dialogue_entries ADD COLUMN source_changed INTEGER NOT NULL DEFAULT 0"
+            )
+        snapshot_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(source_snapshots)")
+        }
+        if "manifest_json" not in snapshot_columns:
+            connection.execute(
+                "ALTER TABLE source_snapshots ADD COLUMN manifest_json TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "schema_version" not in snapshot_columns:
+            connection.execute(
+                "ALTER TABLE source_snapshots ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 0"
+            )
+        if "extractor_version" not in snapshot_columns:
+            connection.execute(
+                "ALTER TABLE source_snapshots ADD COLUMN extractor_version TEXT NOT NULL DEFAULT ''"
             )
         preview_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(voice_previews)")
@@ -665,6 +829,64 @@ class AlphaStore:
                 "ALTER TABLE voice_delivery_previews ADD COLUMN generation_number "
                 "INTEGER NOT NULL DEFAULT 0"
             )
+
+    @staticmethod
+    def _migrate_speakers_to_expansion_scope(connection: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(speakers)")}
+        if not columns or "expansion" in columns:
+            return
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("PRAGMA legacy_alter_table = ON")
+        try:
+            connection.executescript(
+                """
+                BEGIN IMMEDIATE;
+                ALTER TABLE speakers RENAME TO speakers_unscoped;
+                CREATE TABLE speakers (
+                    speaker_id TEXT PRIMARY KEY,
+                    expansion TEXT NOT NULL DEFAULT '3.3.5',
+                    entity_type TEXT NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    race_id INTEGER NOT NULL,
+                    gender_id INTEGER NOT NULL,
+                    race_name TEXT NOT NULL,
+                    gender_name TEXT NOT NULL,
+                    voice_id TEXT REFERENCES voices(voice_id),
+                    role TEXT NOT NULL DEFAULT '',
+                    faction TEXT NOT NULL DEFAULT '',
+                    zone TEXT NOT NULL DEFAULT '',
+                    context_summary TEXT NOT NULL DEFAULT '',
+                    importance TEXT NOT NULL DEFAULT 'unassessed',
+                    uniqueness TEXT NOT NULL DEFAULT 'unassessed',
+                    source_snapshot_id TEXT REFERENCES source_snapshots(snapshot_id),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(expansion, entity_type, entity_id)
+                );
+                INSERT INTO speakers(
+                    speaker_id, expansion, entity_type, entity_id, name, race_id, gender_id,
+                    race_name, gender_name, voice_id, role, faction, zone, context_summary,
+                    importance, uniqueness, source_snapshot_id, created_at, updated_at
+                )
+                SELECT speaker_id, '3.3.5', entity_type, entity_id, name, race_id, gender_id,
+                    race_name, gender_name, voice_id, role, faction, zone, context_summary,
+                    importance, uniqueness, source_snapshot_id, created_at, updated_at
+                FROM speakers_unscoped;
+                DROP TABLE speakers_unscoped;
+                COMMIT;
+                """
+            )
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.execute("PRAGMA legacy_alter_table = OFF")
+            connection.execute("PRAGMA foreign_keys = ON")
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise AlphaError("Expansion-scoped NPC migration created foreign-key violations.")
 
     @staticmethod
     def _normalize_instant_clone_previews(connection: sqlite3.Connection) -> None:
@@ -1081,7 +1303,11 @@ class AlphaStore:
                 }
                 entity_type = str(row["type"])
                 entity_id = int(row["id"])
-                speaker_id = f"{entity_type}-{entity_id}"
+                speaker_id = (
+                    f"{entity_type}-{entity_id}"
+                    if expansion == "3.3.5"
+                    else f"{expansion}:{entity_type}:{entity_id}"
+                )
                 imported_speaker_ids.add(speaker_id)
                 race_id = int(row["DisplayRaceID"])
                 gender_id = int(row["DisplaySexID"])
@@ -1097,10 +1323,10 @@ class AlphaStore:
                     metadata, "zone_name", "zone", "area_name", "area", "map_name"
                 )
                 connection.execute(
-                    "INSERT INTO speakers(speaker_id, entity_type, entity_id, name, race_id, "
+                    "INSERT INTO speakers(speaker_id, expansion, entity_type, entity_id, name, race_id, "
                     "gender_id, race_name, gender_name, voice_id, role, faction, zone, "
                     "source_snapshot_id, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(speaker_id) DO UPDATE SET name=excluded.name, race_id=excluded.race_id, "
                     "gender_id=excluded.gender_id, race_name=excluded.race_name, "
                     "gender_name=excluded.gender_name, source_snapshot_id=excluded.source_snapshot_id, "
@@ -1110,6 +1336,7 @@ class AlphaStore:
                     "updated_at=excluded.updated_at",
                     (
                         speaker_id,
+                        expansion,
                         entity_type,
                         entity_id,
                         str(row["name"]),
@@ -1187,6 +1414,626 @@ class AlphaStore:
         }
 
     @staticmethod
+    def _corpus_snapshot_identity(bundle: CorpusBundle) -> tuple[str, str]:
+        source = bundle.manifest.get("source", {})
+        payload = {
+            "schema_version": bundle.manifest.get("schema_version"),
+            "extractor_version": bundle.manifest.get("extractor_version"),
+            "source": source,
+            "tables": bundle.manifest.get("tables", {}),
+            "artifacts": bundle.manifest.get("artifacts", {}),
+        }
+        bundle_hash = sha256_bytes(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        )
+        return bundle_hash[:24], bundle_hash
+
+    @staticmethod
+    def _corpus_plan(connection: sqlite3.Connection, bundle: CorpusBundle) -> dict[str, Any]:
+        summary = corpus_bundle_summary(bundle)
+        source = summary["source"]
+        expansion = str(source["expansion"])
+        locale = str(source["locale"])
+        incoming = {str(row["binding_id"]): row for row in bundle.bindings}
+        incoming_active = {
+            binding_id for binding_id, row in incoming.items() if int(row["active"] or 0) == 1
+        }
+        existing_rows = connection.execute(
+            "SELECT binding_id, content_id, entity_key, stage, addon_file_key "
+            "FROM dialogue_bindings WHERE expansion=? AND locale=? AND active=1",
+            (expansion, locale),
+        ).fetchall()
+        existing = {str(row["binding_id"]): dict(row) for row in existing_rows}
+        existing_active = set(existing)
+        added = incoming_active - existing_active
+        removed = existing_active - incoming_active
+        changed = {
+            binding_id
+            for binding_id in incoming_active & existing_active
+            if any(
+                str(incoming[binding_id].get(field, "")) != str(existing[binding_id][field])
+                for field in ("content_id", "entity_key", "stage", "addon_file_key")
+            )
+        }
+
+        source_changed = {
+            str(row["content_id"])
+            for row in connection.execute(
+                "SELECT DISTINCT content_id FROM dialogue_bindings "
+                "WHERE expansion=? AND locale=? AND source_changed=1",
+                (expansion, locale),
+            )
+        }
+        for text_row in bundle.texts:
+            previous = connection.execute(
+                "SELECT source_text_sha256 FROM dialogue_content_versions "
+                "WHERE content_id=? ORDER BY created_at DESC LIMIT 1",
+                (text_row["content_id"],),
+            ).fetchone()
+            if previous and previous["source_text_sha256"] != text_row["source_text_sha256"]:
+                source_changed.add(str(text_row["content_id"]))
+
+        addon_keys: dict[str, list[str]] = {}
+        for binding_id in incoming_active:
+            addon_keys.setdefault(str(incoming[binding_id]["addon_file_key"]), []).append(
+                binding_id
+            )
+        conflicts = {
+            key: sorted(binding_ids)
+            for key, binding_ids in addon_keys.items()
+            if len(binding_ids) > 1
+        }
+        counts = dict(summary["counts"])
+        counts.update(
+            {
+                "added": len(added),
+                "changed": len(changed),
+                "removed": len(removed),
+                "source_changed": sum(
+                    1 for row in bundle.bindings if row["content_id"] in source_changed
+                ),
+                "quarantined": int(
+                    bundle.manifest.get("counts", {}).get("quarantined_bindings", 0)
+                ),
+                "addon_conflicts": len(conflicts),
+            }
+        )
+        snapshot_id, bundle_hash = AlphaStore._corpus_snapshot_identity(bundle)
+        return {
+            "valid": not conflicts,
+            "snapshot_id": snapshot_id,
+            "bundle_sha256": bundle_hash,
+            "schema_version": summary["schema_version"],
+            "source": source,
+            "counts": counts,
+            "added_binding_ids": sorted(added),
+            "changed_binding_ids": sorted(changed),
+            "removed_binding_ids": sorted(removed),
+            "source_changed_content_ids": sorted(source_changed),
+            "addon_conflicts": conflicts,
+        }
+
+    def validate_corpus_bundle(self, path: Path) -> dict[str, Any]:
+        try:
+            bundle = load_corpus_bundle(path)
+        except CorpusError as error:
+            raise AlphaError(str(error)) from error
+        with self.connect() as connection:
+            return self._corpus_plan(connection, bundle)
+
+    def backup_and_integrity_check(self) -> dict[str, Any]:
+        backups = self.storage_root / "backups"
+        backups.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        destination = backups / f"production-{stamp}.sqlite3"
+        with self.connect() as source:
+            if source.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise AlphaError("The production database failed its pre-import integrity check.")
+            backup = sqlite3.connect(destination)
+            try:
+                source.backup(backup)
+            finally:
+                backup.close()
+        backup = sqlite3.connect(destination)
+        try:
+            backup_integrity = backup.execute("PRAGMA integrity_check").fetchone()[0]
+        finally:
+            backup.close()
+        if backup_integrity != "ok":
+            destination.unlink(missing_ok=True)
+            raise AlphaError("The corpus pre-import backup failed its integrity check.")
+        return {
+            "path": str(destination),
+            "sha256": sha256_bytes(destination.read_bytes()),
+        }
+
+    def _validate_corpus_import_on_clone(
+        self, bundle_path: Path, backup_path: Path
+    ) -> dict[str, Any]:
+        clone_path = backup_path.parent / f".corpus-validation-{uuid.uuid4().hex}.sqlite3"
+        try:
+            source = sqlite3.connect(backup_path)
+            clone = sqlite3.connect(clone_path)
+            try:
+                source.backup(clone)
+            finally:
+                source.close()
+                clone.close()
+            clone_store = AlphaStore(clone_path, self.storage_root)
+            clone_store.initialize()
+            report = clone_store.import_corpus_bundle(bundle_path, _skip_safety_checks=True)
+            connection = clone_store.connect()
+            try:
+                integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            finally:
+                connection.close()
+            if integrity != "ok":
+                raise AlphaError("The cloned corpus import failed its integrity check.")
+            return {
+                "integrity": integrity,
+                "snapshot_id": report["snapshot_id"],
+                "active_bindings": report["counts"]["active_bindings"],
+            }
+        finally:
+            clone_path.unlink(missing_ok=True)
+            Path(f"{clone_path}-wal").unlink(missing_ok=True)
+            Path(f"{clone_path}-shm").unlink(missing_ok=True)
+
+    @staticmethod
+    def _corpus_speaker_id(
+        connection: sqlite3.Connection, entity: dict[str, Any]
+    ) -> tuple[str, bool]:
+        existing = connection.execute(
+            "SELECT speaker_id FROM speakers WHERE expansion=? AND entity_type=? AND entity_id=?",
+            (entity["expansion"], entity["entity_type"], int(entity["entity_id"])),
+        ).fetchone()
+        if existing:
+            return str(existing["speaker_id"]), True
+        if entity["expansion"] == "3.3.5":
+            return f"{entity['entity_type']}-{entity['entity_id']}", False
+        return str(entity["entity_key"]), False
+
+    def import_corpus_bundle(
+        self,
+        path: Path,
+        *,
+        dry_run: bool = False,
+        _skip_safety_checks: bool = False,
+    ) -> dict[str, Any]:
+        try:
+            bundle = load_corpus_bundle(path)
+        except CorpusError as error:
+            raise AlphaError(str(error)) from error
+        if dry_run:
+            with self.connect() as connection:
+                return self._corpus_plan(connection, bundle)
+
+        with self.connect() as connection:
+            preview_plan = self._corpus_plan(connection, bundle)
+        if not preview_plan["valid"]:
+            raise AlphaError(
+                "Corpus import has conflicting addon filenames; review the dry-run report."
+            )
+        backup = None if _skip_safety_checks else self.backup_and_integrity_check()
+        clone_validation = (
+            None
+            if _skip_safety_checks
+            else self._validate_corpus_import_on_clone(path, Path(backup["path"]))
+        )
+
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            plan = self._corpus_plan(connection, bundle)
+            if not plan["valid"]:
+                raise AlphaError(
+                    "Corpus import has conflicting addon filenames; review the dry-run report."
+                )
+            source = plan["source"]
+            expansion = str(source["expansion"])
+            locale = str(source["locale"])
+            snapshot_id = str(plan["snapshot_id"])
+            source_name = str(source.get("name") or "azerothcore-world")
+
+            connection.execute(
+                "UPDATE source_snapshots SET is_active=0 WHERE expansion=? AND locale=?",
+                (expansion, locale),
+            )
+            connection.execute(
+                "UPDATE corpus_entities SET active=0 WHERE expansion=?", (expansion,)
+            )
+            connection.execute(
+                "UPDATE dialogue_bindings SET active=0 WHERE expansion=? AND locale=?",
+                (expansion, locale),
+            )
+            connection.execute(
+                "UPDATE dialogue_entries SET active=0 WHERE expansion=? AND locale=?",
+                (expansion, locale),
+            )
+            connection.execute(
+                "INSERT INTO source_snapshots(snapshot_id, source_name, source_hash, expansion, "
+                "locale, row_count, imported_at, is_active, manifest_json, schema_version, "
+                "extractor_version) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?) "
+                "ON CONFLICT(snapshot_id) DO UPDATE SET source_name=excluded.source_name, "
+                "source_hash=excluded.source_hash, row_count=excluded.row_count, "
+                "imported_at=excluded.imported_at, is_active=1, "
+                "manifest_json=excluded.manifest_json, schema_version=excluded.schema_version, "
+                "extractor_version=excluded.extractor_version",
+                (
+                    snapshot_id,
+                    source_name,
+                    plan["bundle_sha256"],
+                    expansion,
+                    locale,
+                    len(bundle.bindings),
+                    now,
+                    _json(bundle.manifest),
+                    int(bundle.manifest["schema_version"]),
+                    str(bundle.manifest.get("extractor_version", "")),
+                ),
+            )
+            connection.execute("DELETE FROM source_artifacts WHERE snapshot_id=?", (snapshot_id,))
+            for artifact_name, artifact in bundle.manifest.get("artifacts", {}).items():
+                connection.execute(
+                    "INSERT INTO source_artifacts(snapshot_id, artifact_name, sha256, byte_count, "
+                    "row_count) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        snapshot_id,
+                        artifact_name,
+                        str(artifact["sha256"]),
+                        int(artifact["bytes"]),
+                        int(artifact["rows"]),
+                    ),
+                )
+
+            speaker_by_entity: dict[str, str] = {}
+            for entity in bundle.entities:
+                entity_key = str(entity["entity_key"])
+                entity_type = str(entity["entity_type"])
+                entity_id = int(entity["entity_id"])
+                role = str(entity["role"] or "default")
+                faction = _infer_affiliation({"faction_name": entity["faction_name"]})
+                connection.execute(
+                    "INSERT INTO corpus_entities(entity_key, expansion, entity_type, entity_id, "
+                    "name, subname, race_id, gender_id, race_name, gender_name, faction, zone, "
+                    "zone_ids_json, role, story_reach, inference_json, source_snapshot_id, active, "
+                    "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    "?, ?, 1, ?, ?) ON CONFLICT(entity_key) DO UPDATE SET name=excluded.name, "
+                    "subname=excluded.subname, race_id=excluded.race_id, "
+                    "gender_id=excluded.gender_id, race_name=excluded.race_name, "
+                    "gender_name=excluded.gender_name, faction=excluded.faction, zone=excluded.zone, "
+                    "zone_ids_json=excluded.zone_ids_json, role=excluded.role, "
+                    "story_reach=excluded.story_reach, inference_json=excluded.inference_json, "
+                    "source_snapshot_id=excluded.source_snapshot_id, active=1, "
+                    "updated_at=excluded.updated_at",
+                    (
+                        entity_key,
+                        expansion,
+                        entity_type,
+                        entity_id,
+                        str(entity["name"]),
+                        str(entity["subname"]),
+                        int(entity["race_id"]),
+                        int(entity["gender_id"]),
+                        str(entity["race_name"]),
+                        str(entity["gender_name"]),
+                        faction,
+                        str(entity["zone_name"]),
+                        str(entity["zone_ids"]),
+                        role,
+                        str(entity["story_reach"]),
+                        str(entity["inference_json"]),
+                        snapshot_id,
+                        now,
+                        now,
+                    ),
+                )
+                speaker_id, existed = self._corpus_speaker_id(connection, entity)
+                speaker_by_entity[entity_key] = speaker_id
+                baseline_voice_id = (
+                    f"baseline--{entity['race_name']}-{entity['gender_name']}"
+                    if entity_type == "creature"
+                    else None
+                )
+                if (
+                    baseline_voice_id
+                    and not connection.execute(
+                        "SELECT 1 FROM voices WHERE voice_id=?", (baseline_voice_id,)
+                    ).fetchone()
+                ):
+                    baseline_voice_id = None
+                if not existed:
+                    context = (
+                        f"{entity['name']} is inferred as {str(role).replace('_', ' ')}. "
+                        f"Corpus evidence: {entity['inference_json']}"
+                    )
+                    connection.execute(
+                        "INSERT INTO speakers(speaker_id, expansion, entity_type, entity_id, name, race_id, "
+                        "gender_id, race_name, gender_name, voice_id, role, faction, zone, "
+                        "context_summary, importance, uniqueness, source_snapshot_id, created_at, "
+                        "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                        "'unassessed', ?, ?, ?)",
+                        (
+                            speaker_id,
+                            expansion,
+                            entity_type,
+                            entity_id,
+                            str(entity["name"]),
+                            int(entity["race_id"]),
+                            int(entity["gender_id"]),
+                            str(entity["race_name"]),
+                            str(entity["gender_name"]),
+                            baseline_voice_id,
+                            role,
+                            faction,
+                            str(entity["zone_name"]),
+                            context,
+                            str(entity["story_reach"]),
+                            snapshot_id,
+                            now,
+                            now,
+                        ),
+                    )
+                else:
+                    connection.execute(
+                        "UPDATE speakers SET name=?, race_id=?, gender_id=?, race_name=?, "
+                        "gender_name=?, source_snapshot_id=?, updated_at=? WHERE speaker_id=?",
+                        (
+                            str(entity["name"]),
+                            int(entity["race_id"]),
+                            int(entity["gender_id"]),
+                            str(entity["race_name"]),
+                            str(entity["gender_name"]),
+                            snapshot_id,
+                            now,
+                            speaker_id,
+                        ),
+                    )
+
+            text_by_id = {str(row["content_id"]): row for row in bundle.texts}
+            for text_row in bundle.texts:
+                content_id = str(text_row["content_id"])
+                quest_id = int(text_row["quest_id"]) if str(text_row["quest_id"]) else None
+                connection.execute(
+                    "INSERT INTO dialogue_contents(content_id, expansion, locale, kind, quest_id, "
+                    "stage, source_table, source_record_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, "
+                    "?, ?) ON CONFLICT(content_id) DO NOTHING",
+                    (
+                        content_id,
+                        expansion,
+                        locale,
+                        str(text_row["kind"]),
+                        quest_id,
+                        str(text_row["stage"]),
+                        str(text_row["source_table"]),
+                        str(text_row["source_record_id"]),
+                        now,
+                    ),
+                )
+                version_id = sha256_bytes(
+                    f"{content_id}|{snapshot_id}|{text_row['source_text_sha256']}".encode()
+                )[:32]
+                connection.execute(
+                    "INSERT OR IGNORE INTO dialogue_content_versions(content_version_id, "
+                    "content_id, source_snapshot_id, original_text, source_text_sha256, "
+                    "context_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        version_id,
+                        content_id,
+                        snapshot_id,
+                        str(text_row["original_text"]),
+                        str(text_row["source_text_sha256"]),
+                        str(text_row["context_json"]),
+                        now,
+                    ),
+                )
+
+            source_changed_ids = set(plan["source_changed_content_ids"])
+            for binding in bundle.bindings:
+                binding_id = str(binding["binding_id"])
+                content_id = str(binding["content_id"])
+                entity_key = str(binding["entity_key"])
+                text_row = text_by_id[content_id]
+                speaker_id = speaker_by_entity[entity_key]
+                quest_id = int(binding["quest_id"]) if str(binding["quest_id"]) else None
+                source_type = str(binding["stage"] or "gossip")
+                existing_projection = connection.execute(
+                    "SELECT dialogue_id FROM dialogue_entries WHERE binding_id=?",
+                    (binding_id,),
+                ).fetchone()
+                if not existing_projection:
+                    alias = connection.execute(
+                        "SELECT alias_id AS dialogue_id FROM legacy_dialogue_aliases "
+                        "WHERE binding_id=? LIMIT 1",
+                        (binding_id,),
+                    ).fetchone()
+                    existing_projection = alias
+                if not existing_projection:
+                    existing_projection = connection.execute(
+                        "SELECT dialogue_id FROM dialogue_entries WHERE expansion=? AND locale=? "
+                        "AND source=? AND speaker_id=? AND COALESCE(quest_id, 0)=COALESCE(?, 0) "
+                        "AND source_record_id=? ORDER BY active DESC, created_at LIMIT 1",
+                        (
+                            expansion,
+                            locale,
+                            source_type,
+                            speaker_id,
+                            quest_id,
+                            str(text_row["source_record_id"]),
+                        ),
+                    ).fetchone()
+                if not existing_projection and quest_id is not None:
+                    existing_projection = connection.execute(
+                        "SELECT dialogue_id FROM dialogue_entries WHERE expansion=? AND locale=? "
+                        "AND source=? AND speaker_id=? AND quest_id=? "
+                        "ORDER BY active DESC, created_at LIMIT 1",
+                        (expansion, locale, source_type, speaker_id, quest_id),
+                    ).fetchone()
+                if not existing_projection and quest_id is None:
+                    existing_projection = connection.execute(
+                        "SELECT dialogue_id FROM dialogue_entries WHERE expansion=? AND locale=? "
+                        "AND source='gossip' AND speaker_id=? AND original_text=? "
+                        "ORDER BY active DESC, created_at LIMIT 1",
+                        (
+                            expansion,
+                            locale,
+                            speaker_id,
+                            str(text_row["original_text"]),
+                        ),
+                    ).fetchone()
+                dialogue_id = (
+                    str(existing_projection["dialogue_id"]) if existing_projection else binding_id
+                )
+                source_changed = 1 if content_id in source_changed_ids else 0
+                metadata = {
+                    "content_kind": text_row["kind"],
+                    "variant": text_row["variant"],
+                    "source_table": text_row["source_table"],
+                    "source_context": _loads(str(text_row["context_json"]), {}),
+                    "entity_key": entity_key,
+                }
+                connection.execute(
+                    "INSERT INTO dialogue_entries(dialogue_id, source_snapshot_id, expansion, "
+                    "locale, source_record_id, source, quest_id, quest_title, speaker_id, "
+                    "original_text, metadata_json, addon_file_key, active, created_at, updated_at, "
+                    "binding_id, content_id, source_text_sha256, source_changed) VALUES (?, ?, ?, ?, "
+                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dialogue_id) DO "
+                    "UPDATE SET source_snapshot_id=excluded.source_snapshot_id, "
+                    "source_record_id=excluded.source_record_id, source=excluded.source, "
+                    "quest_id=excluded.quest_id, quest_title=excluded.quest_title, "
+                    "speaker_id=excluded.speaker_id, original_text=excluded.original_text, "
+                    "metadata_json=excluded.metadata_json, addon_file_key=excluded.addon_file_key, "
+                    "active=excluded.active, binding_id=excluded.binding_id, "
+                    "content_id=excluded.content_id, source_text_sha256=excluded.source_text_sha256, "
+                    "source_changed=excluded.source_changed, updated_at=excluded.updated_at",
+                    (
+                        dialogue_id,
+                        snapshot_id,
+                        expansion,
+                        locale,
+                        str(text_row["source_record_id"]),
+                        source_type,
+                        quest_id,
+                        str(text_row["quest_title"]),
+                        speaker_id,
+                        str(text_row["original_text"]),
+                        _json(metadata),
+                        str(binding["addon_file_key"]),
+                        int(binding["active"]),
+                        now,
+                        now,
+                        binding_id,
+                        content_id,
+                        str(text_row["source_text_sha256"]),
+                        source_changed,
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO dialogue_bindings(binding_id, content_id, entity_key, dialogue_id, "
+                    "source_snapshot_id, expansion, locale, entity_type, entity_id, quest_id, stage, "
+                    "addon_file_key, active, source_changed, created_at, updated_at) VALUES (?, ?, ?, "
+                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(binding_id) DO UPDATE SET "
+                    "content_id=excluded.content_id, entity_key=excluded.entity_key, "
+                    "dialogue_id=excluded.dialogue_id, source_snapshot_id=excluded.source_snapshot_id, "
+                    "addon_file_key=excluded.addon_file_key, active=excluded.active, "
+                    "source_changed=excluded.source_changed, updated_at=excluded.updated_at",
+                    (
+                        binding_id,
+                        content_id,
+                        entity_key,
+                        dialogue_id,
+                        snapshot_id,
+                        expansion,
+                        locale,
+                        str(binding["entity_type"]),
+                        int(binding["entity_id"]),
+                        quest_id,
+                        str(binding["stage"]),
+                        str(binding["addon_file_key"]),
+                        int(binding["active"]),
+                        source_changed,
+                        now,
+                        now,
+                    ),
+                )
+                asset_folder = "quests" if source_type != "gossip" else "gossip"
+                connection.execute(
+                    "UPDATE production_assets SET addon_filename=? WHERE dialogue_id=?",
+                    (
+                        f"generated/sounds/{asset_folder}/{binding['addon_file_key']}.mp3",
+                        dialogue_id,
+                    ),
+                )
+                if dialogue_id != binding_id:
+                    connection.execute(
+                        "INSERT INTO legacy_dialogue_aliases(alias_id, binding_id, created_at) "
+                        "VALUES (?, ?, ?) ON CONFLICT(alias_id) DO UPDATE SET "
+                        "binding_id=excluded.binding_id",
+                        (dialogue_id, binding_id, now),
+                    )
+                if (
+                    int(binding["active"])
+                    and str(text_row["kind"]) == "quest"
+                    and not source_changed
+                ):
+                    self._ensure_spoken_text_revision(
+                        connection, dialogue_id, str(text_row["original_text"])
+                    )
+
+            connection.execute(
+                "DELETE FROM dialogue_triggers WHERE source_snapshot_id=?", (snapshot_id,)
+            )
+            for trigger in bundle.triggers:
+                connection.execute(
+                    "INSERT INTO dialogue_triggers(trigger_id, binding_id, source_snapshot_id, "
+                    "trigger_type, source_table, source_record_id, menu_path, context_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(trigger_id) DO UPDATE SET "
+                    "binding_id=excluded.binding_id, source_snapshot_id=excluded.source_snapshot_id, "
+                    "context_json=excluded.context_json",
+                    (
+                        str(trigger["trigger_id"]),
+                        str(trigger["binding_id"]),
+                        snapshot_id,
+                        str(trigger["trigger_type"]),
+                        str(trigger["source_table"]),
+                        str(trigger["source_record_id"]),
+                        str(trigger["menu_path"]),
+                        str(trigger["context_json"]),
+                    ),
+                )
+            connection.execute(
+                "DELETE FROM corpus_findings WHERE source_snapshot_id=?", (snapshot_id,)
+            )
+            for finding in bundle.quarantine:
+                connection.execute(
+                    "INSERT INTO corpus_findings(finding_id, source_snapshot_id, content_id, "
+                    "binding_id, entity_key, reason, details, severity, created_at) VALUES (?, ?, ?, "
+                    "?, ?, ?, ?, ?, ? ) ON CONFLICT(finding_id) DO UPDATE SET "
+                    "source_snapshot_id=excluded.source_snapshot_id, details=excluded.details, "
+                    "severity=excluded.severity",
+                    (
+                        str(finding["finding_id"]),
+                        snapshot_id,
+                        str(finding["content_id"]) or None,
+                        str(finding["binding_id"]) or None,
+                        str(finding["entity_key"]) or None,
+                        str(finding["reason"]),
+                        str(finding["details"]),
+                        str(finding["severity"]),
+                        now,
+                    ),
+                )
+            for speaker_id in set(speaker_by_entity.values()):
+                self._refresh_speaker_inference(connection, speaker_id)
+
+        return {
+            **plan,
+            "applied": True,
+            "backup": backup,
+            "clone_validation": clone_validation,
+        }
+
+    @staticmethod
     def _refresh_speaker_inference(connection: sqlite3.Connection, speaker_id: str) -> None:
         speaker = connection.execute(
             "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
@@ -1236,6 +2083,7 @@ class AlphaStore:
     def _status_expression() -> str:
         return """
             CASE
+                WHEN d.source_changed = 1 THEN 'source_changed'
                 WHEN pa.dialogue_id IS NOT NULL THEN 'approved'
                 WHEN EXISTS (
                     SELECT 1 FROM audio_candidates ac
@@ -1646,6 +2494,23 @@ class AlphaStore:
         )
         return True
 
+    @staticmethod
+    def _shared_content_dialogue_ids(connection: sqlite3.Connection, dialogue_id: str) -> list[str]:
+        row = connection.execute(
+            "SELECT content_id FROM dialogue_entries WHERE dialogue_id=?", (dialogue_id,)
+        ).fetchone()
+        if not row:
+            raise AlphaError("Dialogue record was not found.")
+        content_id = str(row["content_id"] or "")
+        if not content_id:
+            return [dialogue_id]
+        rows = connection.execute(
+            "SELECT dialogue_id FROM dialogue_entries WHERE content_id=? AND active=1 "
+            "ORDER BY dialogue_id",
+            (content_id,),
+        ).fetchall()
+        return [str(item["dialogue_id"]) for item in rows] or [dialogue_id]
+
     def ensure_spoken_text(self, dialogue_id: str) -> dict[str, Any]:
         """Create deterministic spoken text when a legacy quest record is missing it."""
         with self.connect() as connection:
@@ -1657,7 +2522,8 @@ class AlphaStore:
                 raise AlphaError("Dialogue record was not found.")
             if row["source"] == "gossip":
                 raise AlphaError("Gossip spoken text is prepared through its review workflow.")
-            self._ensure_spoken_text_revision(connection, dialogue_id, row["original_text"])
+            for target_id in self._shared_content_dialogue_ids(connection, dialogue_id):
+                self._ensure_spoken_text_revision(connection, target_id, row["original_text"])
         return self.get_dialogue(dialogue_id)
 
     def prepare_spoken_text(self, dialogue_id: str) -> dict[str, Any]:
@@ -1673,7 +2539,8 @@ class AlphaStore:
             ).fetchone()
             if existing:
                 raise AlphaError("Spoken text has already been prepared; save a revision instead.")
-            self._ensure_spoken_text_revision(connection, dialogue_id, row["original_text"])
+            for target_id in self._shared_content_dialogue_ids(connection, dialogue_id):
+                self._ensure_spoken_text_revision(connection, target_id, row["original_text"])
         return self.get_dialogue(dialogue_id)
 
     def save_spoken_text(self, dialogue_id: str, spoken_text: str) -> dict[str, Any]:
@@ -1685,17 +2552,26 @@ class AlphaStore:
         if unresolved:
             warnings.append(f"Unresolved game tokens or markup remain: {', '.join(unresolved)}")
         with self.connect() as connection:
-            if not connection.execute(
-                "SELECT 1 FROM dialogue_entries WHERE dialogue_id=?", (dialogue_id,)
-            ).fetchone():
-                raise AlphaError("Dialogue record was not found.")
-            self._insert_revision(
-                connection,
-                dialogue_id,
-                text,
-                "manual",
-                ["Saved a manually reviewed spoken-text revision."],
-                warnings,
+            target_ids = self._shared_content_dialogue_ids(connection, dialogue_id)
+            for target_id in target_ids:
+                self._insert_revision(
+                    connection,
+                    target_id,
+                    text,
+                    "manual",
+                    ["Saved a manually reviewed spoken-text revision."],
+                    warnings,
+                )
+            placeholders = ",".join("?" for _ in target_ids)
+            connection.execute(
+                f"UPDATE dialogue_entries SET source_changed=0, updated_at=? "
+                f"WHERE dialogue_id IN ({placeholders})",
+                (utc_now(), *target_ids),
+            )
+            connection.execute(
+                f"UPDATE dialogue_bindings SET source_changed=0, updated_at=? "
+                f"WHERE dialogue_id IN ({placeholders})",
+                (utc_now(), *target_ids),
             )
         return self.get_dialogue(dialogue_id)
 
@@ -1755,6 +2631,25 @@ class AlphaStore:
             )
             if not cursor.rowcount:
                 raise AlphaError("NPC was not found.")
+            override_values = {
+                "role": role,
+                "faction": faction,
+                "zone": str(payload.get("zone", existing["zone"]))[:200].strip(),
+                "context_summary": str(payload.get("context_summary", existing["context_summary"]))[
+                    :4000
+                ].strip(),
+                "importance": importance,
+                "uniqueness": uniqueness,
+                "voice_id": voice_id,
+            }
+            changed_fields = set(payload) & set(override_values)
+            for field_name in changed_fields:
+                connection.execute(
+                    "INSERT INTO speaker_manual_overrides(speaker_id, field_name, value_json, "
+                    "updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(speaker_id, field_name) DO "
+                    "UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+                    (speaker_id, field_name, _json(override_values[field_name]), utc_now()),
+                )
         return self.get_speaker(speaker_id)
 
     def get_speaker(self, speaker_id: str) -> dict[str, Any]:
@@ -1835,6 +2730,19 @@ class AlphaStore:
             "unique_voice": unique_payload,
         }
         return record
+
+    def get_speaker_by_entity(
+        self, expansion: str, entity_type: str, entity_id: int
+    ) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT speaker_id FROM speakers WHERE expansion=? AND entity_type=? "
+                "AND entity_id=?",
+                (expansion, entity_type, entity_id),
+            ).fetchone()
+        if not row:
+            raise AlphaError("NPC was not found.")
+        return self.get_speaker(str(row["speaker_id"]))
 
     def create_unique_voice(self, speaker_id: str) -> dict[str, Any]:
         now = utc_now()
@@ -3330,12 +4238,15 @@ class AlphaStore:
                 "ORDER BY imported_at DESC, expansion, locale"
             ).fetchall()
             rows = connection.execute(
-                "SELECT pa.*, d.expansion, d.locale, d.source, d.quest_id, d.quest_title, "
-                "d.original_text, d.speaker_id, s.name AS speaker_name, ac.storage_path "
+                "SELECT pa.*, pa.addon_filename AS filename, d.expansion, d.locale, d.source, "
+                "d.source AS stage, d.quest_id, d.quest_title, "
+                "d.original_text, d.speaker_id, d.binding_id, d.content_id, "
+                "s.name AS speaker_name, s.entity_type, s.entity_id, ac.storage_path "
                 "FROM production_assets pa "
                 "JOIN dialogue_entries d ON d.dialogue_id=pa.dialogue_id "
                 "JOIN speakers s ON s.speaker_id=d.speaker_id "
                 "JOIN audio_candidates ac ON ac.candidate_id=pa.candidate_id "
+                "WHERE d.active=1 AND d.source_changed=0 "
                 "ORDER BY pa.addon_filename"
             ).fetchall()
         assets = [dict(row) for row in rows]
@@ -3344,10 +4255,27 @@ class AlphaStore:
                 f"{asset['expansion']}/{asset['locale']}/{asset['addon_filename']}"
             )
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "generated_at": utc_now(),
             "source_snapshot": dict(snapshots[0]) if snapshots else None,
             "source_snapshots": [dict(snapshot) for snapshot in snapshots],
             "asset_count": len(rows),
             "assets": assets,
         }
+
+    def addon_lookup_rows(self) -> list[dict[str, Any]]:
+        """Return the active corpus projection in the inherited lookup-generator shape."""
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT d.source, COALESCE(CAST(d.quest_id AS TEXT), '') AS quest, "
+                "d.quest_title, d.original_text AS text, d.original_text, d.addon_file_key, "
+                "CASE WHEN pa.dialogue_id IS NOT NULL AND d.source_changed=0 THEN 1 ELSE 0 END "
+                "AS per_entity_audio_ready, "
+                "s.race_id AS DisplayRaceID, s.gender_id AS DisplaySexID, s.name, "
+                "s.entity_type AS type, s.entity_id AS id FROM dialogue_entries d "
+                "JOIN speakers s ON s.speaker_id=d.speaker_id "
+                "JOIN dialogue_bindings db ON db.binding_id=d.binding_id AND db.active=1 "
+                "LEFT JOIN production_assets pa ON pa.dialogue_id=d.dialogue_id "
+                "WHERE d.active=1 ORDER BY d.quest_id, d.source, s.entity_type, s.entity_id"
+            ).fetchall()
+        return [dict(row) for row in rows]
