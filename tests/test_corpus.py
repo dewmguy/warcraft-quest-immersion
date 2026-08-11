@@ -60,6 +60,7 @@ def test_extractor_reconciles_shared_quest_givers_and_nested_gossip(azerothcore_
     assert bundle.manifest["source"]["database_version_rows"] == [
         {"required_rev": "2026_08_10_00", "sql_rev": "2026_08_11_00"}
     ]
+    assert bundle.manifest["source"]["database_version_table"] == "version_db_world"
     assert bundle.manifest["source"]["additional_artifacts"] == [
         {"name": "dbc.sql.gz", "sha256": "b" * 64}
     ]
@@ -69,6 +70,27 @@ def test_extractor_reconciles_shared_quest_givers_and_nested_gossip(azerothcore_
     )
     disabled = next(row for row in bundle.bindings if row["quest_id"] == 200)
     assert disabled["active"] == 0
+
+
+def test_current_azerothcore_version_table_is_recorded(azerothcore_tables):
+    tables = dict(azerothcore_tables)
+    tables["version"] = [
+        {
+            "core_version": "AzerothCore rev. cb999cf88954",
+            "core_revision": "cb999cf88954",
+            "db_version": "ACDB 335.16-dev",
+            "cache_id": 16,
+        }
+    ]
+    tables.pop("version_db_world")
+
+    bundle = extract(tables)
+
+    assert bundle.manifest["source"]["database_version_table"] == "version"
+    assert bundle.manifest["source"]["database_version_rows"][0]["db_version"] == (
+        "ACDB 335.16-dev"
+    )
+    assert bundle.manifest["tables"]["version"]["rows"] == 1
 
 
 def test_stable_ids_ignore_source_row_order(azerothcore_tables):

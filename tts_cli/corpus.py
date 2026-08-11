@@ -1097,10 +1097,12 @@ class AzerothCoreCorpusExtractor:
             ).items()
             if total > 1 and content_id
         )
+        database_version_table = next(
+            (table for table in ("version_db_world", "version") if self.source.has_table(table)),
+            "",
+        )
         database_version_rows = (
-            json.loads(_json(self._rows("version_db_world")))
-            if self.source.has_table("version_db_world")
-            else []
+            json.loads(_json(self._rows(database_version_table))) if database_version_table else []
         )
         manifest = {
             "schema_version": CORPUS_SCHEMA_VERSION,
@@ -1109,6 +1111,7 @@ class AzerothCoreCorpusExtractor:
                 "name": self.source_name,
                 "sha256": self.source_sha256,
                 "version": self.source_version,
+                "database_version_table": database_version_table,
                 "database_version_rows": database_version_rows,
                 "additional_artifacts": json.loads(_json(self.source_artifacts)),
                 "expansion": self.expansion,
