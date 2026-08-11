@@ -652,7 +652,7 @@ def test_delivery_samples_use_compact_players_and_confirm_review_actions(monkeyp
         "<strong>External / Imported #1</strong>" in page.text
     )
     assert 'data-standard-title-for="provider-voice-test" hidden>' in unnamed_page.text
-    assert "Creation Method: <strong>External / Imported</strong>" in page.text
+    assert "Creation Method:" not in page.text
     assert page.text.count("Voice ID: <code>provider-voice-test</code>") == 0
     assert page.text.count("Voice actor notes") == 3
     assert page.text.count(">with restrained warmth</dd>") == 3

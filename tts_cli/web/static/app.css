@@ -457,7 +457,6 @@ dialog .actions { justify-content: flex-end; }
 .candidate-id-row > span { display: flex; min-width: 0; align-items: center; gap: 5px; }
 .candidate-id-row code { overflow: hidden; color: #70c994; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
 .candidate-id-row > strong { flex: none; color: #d8b86d; font-size: .68rem; font-weight: 700; }
-.candidate-metadata-row span strong { color: #d9d0db; font-size: .7rem; font-weight: 700; }
 .candidate-proposed-id strong { color: #d8b86d; }
 .candidate-card-footer { display: grid; grid-template-columns: minmax(0, 1fr) 30px 30px; align-items: center; gap: 6px; }
 .candidate-sample-missing { display: flex; width: 100%; min-height: 30px !important; align-items: center; justify-content: center; gap: 7px; border: 1px dashed #66542e !important; padding: 5px 8px !important; color: #d8b86d !important; background: #17130d !important; font-size: .7rem !important; }
