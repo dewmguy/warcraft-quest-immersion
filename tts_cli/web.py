@@ -87,19 +87,27 @@ elevenlabs = ElevenLabsClient()
 SUPPORTED_EXPANSIONS = {"1.12.1", "2.4.3", "3.3.5", "classic"}
 
 
-def _import_alpha_sources() -> list[dict]:
-    results = [alpha_store.import_csv(DIALOGUE_PATH, expansion="3.3.5", locale="enUS")]
+def _import_alpha_sources(
+    protected_scopes: set[tuple[str, str]] | None = None,
+) -> list[dict]:
+    protected = protected_scopes or set()
+    results = []
+    if ("3.3.5", "enUS") not in protected:
+        results.append(alpha_store.import_csv(DIALOGUE_PATH, expansion="3.3.5", locale="enUS"))
     if SOURCE_DIR.exists():
         for source_path in sorted(SOURCE_DIR.glob("*.csv")):
             match = re.fullmatch(r"(.+)-([A-Za-z]{4})\.csv", source_path.name)
             if not match or match.group(1) not in SUPPORTED_EXPANSIONS:
                 continue
+            scope = (match.group(1), match.group(2))
+            if scope in protected:
+                continue
             results.append(
                 alpha_store.import_csv(
                     source_path,
                     source_name=source_path.name,
-                    expansion=match.group(1),
-                    locale=match.group(2),
+                    expansion=scope[0],
+                    locale=scope[1],
                 )
             )
     return results
@@ -112,7 +120,8 @@ async def lifespan(_: FastAPI):
     if not DIALOGUE_PATH.exists():
         shutil.copyfile(SAMPLE_DATA_PATH, DIALOGUE_PATH)
     alpha_store.initialize()
-    _import_alpha_sources()
+    protected_scopes = alpha_store.restore_authoritative_corpus_snapshots()
+    _import_alpha_sources(protected_scopes)
     yield
     executor.shutdown(wait=False, cancel_futures=True)
 
@@ -722,6 +731,14 @@ async def upload_data(
         raise HTTPException(status_code=422, detail="Select a supported expansion.")
     if not re.fullmatch(r"[A-Za-z]{4}", locale):
         raise HTTPException(status_code=422, detail="Locale must look like enUS.")
+    if alpha_store.has_authoritative_corpus(expansion, locale):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"The certified {expansion} {locale} corpus is authoritative. "
+                "Import another corpus bundle instead."
+            ),
+        )
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     SOURCE_DIR.mkdir(parents=True, exist_ok=True)
     temporary_path = DATA_DIR / f".{secrets.token_hex(8)}.csv"

@@ -13,6 +13,7 @@ from tts_cli.corpus import (
     load_corpus_bundle,
     write_corpus_bundle,
 )
+from tts_cli.paths import SAMPLE_DATA_PATH
 
 
 def extract(tables: dict[str, list[dict]]):
@@ -275,6 +276,46 @@ def test_failed_bundle_import_leaves_active_snapshot_unchanged(tmp_path, corpus_
         store.import_corpus_bundle(bad)
 
     assert store.dashboard()["snapshot"]["snapshot_id"] == before
+
+
+def test_certified_corpus_recovers_from_legacy_snapshot_precedence(tmp_path, corpus_bundle_path):
+    store = AlphaStore(tmp_path / "production.sqlite3", tmp_path / "storage")
+    store.initialize()
+    store.import_csv(SAMPLE_DATA_PATH, source_name="dialogue.csv")
+    corpus = store.import_corpus_bundle(corpus_bundle_path)
+    corpus_snapshot_id = corpus["snapshot_id"]
+
+    with store.connect() as connection:
+        legacy_snapshot_id = connection.execute(
+            "SELECT snapshot_id FROM source_snapshots WHERE schema_version=0"
+        ).fetchone()[0]
+        connection.execute(
+            "UPDATE source_snapshots SET is_active=CASE WHEN snapshot_id=? THEN 1 ELSE 0 END",
+            (legacy_snapshot_id,),
+        )
+        connection.execute("UPDATE dialogue_entries SET active=0")
+        connection.execute(
+            "UPDATE dialogue_entries SET active=1 WHERE source_snapshot_id=?",
+            (legacy_snapshot_id,),
+        )
+
+    assert store.dashboard()["counts"]["dialogue"] == 4
+    protected = store.restore_authoritative_corpus_snapshots()
+
+    assert protected == {("3.3.5", "enUS")}
+    assert store.dashboard()["snapshot"]["snapshot_id"] == corpus_snapshot_id
+    with store.connect() as connection:
+        active_bindings = connection.execute(
+            "SELECT COUNT(*) FROM dialogue_bindings WHERE source_snapshot_id=? AND active=1",
+            (corpus_snapshot_id,),
+        ).fetchone()[0]
+        active_dialogue = connection.execute(
+            "SELECT COUNT(*) FROM dialogue_entries WHERE active=1"
+        ).fetchone()[0]
+        assert active_dialogue == active_bindings
+
+    with pytest.raises(AlphaError, match="certified 3.3.5 enUS corpus is authoritative"):
+        store.import_csv(SAMPLE_DATA_PATH)
 
 
 def test_legacy_projection_alias_preserves_voice_samples_generations_and_assets(

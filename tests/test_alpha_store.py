@@ -20,6 +20,27 @@ def _first_dialogue(store: AlphaStore) -> dict:
     return store.list_dialogue(page_size=10)["rows"][0]
 
 
+def test_npc_directory_defaults_to_twenty_five_rows(tmp_path: Path):
+    store = AlphaStore(tmp_path / "pagination.sqlite3", tmp_path / "storage")
+    store.initialize()
+    csv_path = tmp_path / "npcs.csv"
+    rows = ["source,quest,quest_title,text,DisplayRaceID,DisplaySexID,name,type,id,original_text"]
+    rows.extend(
+        f'accept,{index},Quest {index},"Line {index}",1,0,NPC {index},creature,{index},"Line {index}"'
+        for index in range(1, 31)
+    )
+    csv_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    store.import_csv(csv_path)
+
+    first_page = store.list_npcs()
+    second_page = store.list_npcs(page=2)
+
+    assert first_page["page_size"] == 25
+    assert len(first_page["rows"]) == 25
+    assert first_page["page_count"] == 2
+    assert len(second_page["rows"]) == 5
+
+
 def test_initialize_adds_new_columns_to_existing_alpha_database(tmp_path: Path):
     database = tmp_path / "legacy.sqlite3"
     with sqlite3.connect(database) as connection:

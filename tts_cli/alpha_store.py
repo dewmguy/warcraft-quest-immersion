@@ -1267,6 +1267,11 @@ class AlphaStore:
         expansion: str = "3.3.5",
         locale: str = "enUS",
     ) -> dict[str, Any]:
+        if self.has_authoritative_corpus(expansion, locale):
+            raise AlphaError(
+                f"The certified {expansion} {locale} corpus is authoritative. "
+                "A legacy CSV cannot replace it; import another corpus bundle instead."
+            )
         dataframe = load_dialogue_csv(path)
         content_hash = sha256_bytes(path.read_bytes())
         source_hash = sha256_bytes(f"{expansion}|{locale}|{content_hash}".encode())
@@ -1420,6 +1425,51 @@ class AlphaStore:
             "dialogue_records": len(imported_ids),
             "prepared_spoken_texts": prepared_spoken_texts,
         }
+
+    def has_authoritative_corpus(self, expansion: str, locale: str) -> bool:
+        """Return whether a certified corpus has ever been imported for this scope."""
+        with self.connect() as connection:
+            return (
+                connection.execute(
+                    "SELECT 1 FROM source_snapshots WHERE expansion=? AND locale=? "
+                    "AND schema_version>0 LIMIT 1",
+                    (expansion, locale),
+                ).fetchone()
+                is not None
+            )
+
+    def restore_authoritative_corpus_snapshots(self) -> set[tuple[str, str]]:
+        """Restore the newest certified snapshot as authoritative for each scope."""
+        protected_scopes: dict[tuple[str, str], str] = {}
+        with self.connect() as connection:
+            snapshots = connection.execute(
+                "SELECT snapshot_id, expansion, locale FROM source_snapshots "
+                "WHERE schema_version>0 "
+                "ORDER BY expansion, locale, imported_at DESC, snapshot_id DESC"
+            ).fetchall()
+            for snapshot in snapshots:
+                scope = (str(snapshot["expansion"]), str(snapshot["locale"]))
+                protected_scopes.setdefault(scope, str(snapshot["snapshot_id"]))
+
+            for (expansion, locale), snapshot_id in protected_scopes.items():
+                connection.execute(
+                    "UPDATE source_snapshots SET is_active=CASE WHEN snapshot_id=? THEN 1 ELSE 0 "
+                    "END WHERE expansion=? AND locale=?",
+                    (snapshot_id, expansion, locale),
+                )
+                connection.execute(
+                    "UPDATE dialogue_entries SET active=0 WHERE expansion=? AND locale=?",
+                    (expansion, locale),
+                )
+                connection.execute(
+                    "UPDATE dialogue_entries SET active=CASE WHEN EXISTS ("
+                    "SELECT 1 FROM dialogue_bindings db "
+                    "WHERE db.dialogue_id=dialogue_entries.dialogue_id "
+                    "AND db.source_snapshot_id=? AND db.active=1"
+                    ") THEN 1 ELSE 0 END WHERE source_snapshot_id=?",
+                    (snapshot_id, snapshot_id),
+                )
+        return set(protected_scopes)
 
     @staticmethod
     def _corpus_snapshot_identity(bundle: CorpusBundle) -> tuple[str, str]:
@@ -2361,7 +2411,7 @@ class AlphaStore:
         voice_approach: str = "",
         voice_state: str = "",
         page: int = 1,
-        page_size: int = 50,
+        page_size: int = 25,
     ) -> dict[str, Any]:
         """List creature-backed NPCs independently from quest and gossip lines."""
         conditions = ["entity_type = 'creature'"]

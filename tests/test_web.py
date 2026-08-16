@@ -136,6 +136,13 @@ def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bun
                 headers={"X-WQI-Action": "confirmed"},
                 files={"file": (corpus_bundle_path.name, bundle_file, "application/zip")},
             )
+        with web.SAMPLE_DATA_PATH.open("rb") as csv_file:
+            legacy_import = client.post(
+                "/api/data",
+                headers={"X-WQI-Action": "confirmed"},
+                data={"expansion": "3.3.5", "locale": "enUS"},
+                files={"file": ("dialogue.csv", csv_file, "text/csv")},
+            )
 
     assert page.status_code == 200
     assert "Authoritative Import" in page.text
@@ -145,10 +152,20 @@ def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bun
     assert validation.json()["report"]["valid"] is True
     assert imported.status_code == 200
     assert imported.json()["report"]["applied"] is True
+    assert legacy_import.status_code == 409
+    assert "corpus is authoritative" in legacy_import.json()["detail"]
     assert (
         web.alpha_store.dashboard()["counts"]["dialogue"]
         == imported.json()["report"]["counts"]["active_bindings"]
     )
+
+    corpus_count = web.alpha_store.dashboard()["counts"]["dialogue"]
+    with TestClient(web.app) as restarted_client:
+        restarted = restarted_client.get("/alpha")
+
+    assert restarted.status_code == 200
+    assert web.alpha_store.dashboard()["counts"]["dialogue"] == corpus_count
+    assert "A Call to Adventure" not in restarted.text
 
 
 def test_quest_gossip_and_npc_filters_apply_immediately_and_use_one_clear_button(
