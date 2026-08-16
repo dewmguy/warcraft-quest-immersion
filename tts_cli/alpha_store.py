@@ -2283,7 +2283,7 @@ class AlphaStore:
         race_id: str = "",
         gender_id: str = "",
         page: int = 1,
-        page_size: int = 50,
+        page_size: int = 25,
     ) -> dict[str, Any]:
         conditions = ["active = 1"]
         parameters: list[Any] = []

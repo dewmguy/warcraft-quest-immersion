@@ -20,7 +20,7 @@ def _first_dialogue(store: AlphaStore) -> dict:
     return store.list_dialogue(page_size=10)["rows"][0]
 
 
-def test_npc_directory_defaults_to_twenty_five_rows(tmp_path: Path):
+def test_content_and_npc_directories_default_to_twenty_five_rows(tmp_path: Path):
     store = AlphaStore(tmp_path / "pagination.sqlite3", tmp_path / "storage")
     store.initialize()
     csv_path = tmp_path / "npcs.csv"
@@ -29,16 +29,29 @@ def test_npc_directory_defaults_to_twenty_five_rows(tmp_path: Path):
         f'accept,{index},Quest {index},"Line {index}",1,0,NPC {index},creature,{index},"Line {index}"'
         for index in range(1, 31)
     )
+    rows.extend(
+        f'gossip,,,"Gossip {index}",1,0,NPC {index},creature,{index},"Gossip {index}"'
+        for index in range(1, 31)
+    )
     csv_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
     store.import_csv(csv_path)
 
-    first_page = store.list_npcs()
-    second_page = store.list_npcs(page=2)
+    for source in ("quest", "gossip"):
+        first_page = store.list_dialogue(source=source)
+        second_page = store.list_dialogue(source=source, page=2)
 
-    assert first_page["page_size"] == 25
-    assert len(first_page["rows"]) == 25
-    assert first_page["page_count"] == 2
-    assert len(second_page["rows"]) == 5
+        assert first_page["page_size"] == 25
+        assert len(first_page["rows"]) == 25
+        assert first_page["page_count"] == 2
+        assert len(second_page["rows"]) == 5
+
+    first_npc_page = store.list_npcs()
+    second_npc_page = store.list_npcs(page=2)
+
+    assert first_npc_page["page_size"] == 25
+    assert len(first_npc_page["rows"]) == 25
+    assert first_npc_page["page_count"] == 2
+    assert len(second_npc_page["rows"]) == 5
 
 
 def test_initialize_adds_new_columns_to_existing_alpha_database(tmp_path: Path):
