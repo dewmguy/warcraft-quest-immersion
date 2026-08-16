@@ -281,6 +281,10 @@ def test_failed_bundle_import_leaves_active_snapshot_unchanged(tmp_path, corpus_
 def test_certified_corpus_recovers_from_legacy_snapshot_precedence(tmp_path, corpus_bundle_path):
     store = AlphaStore(tmp_path / "production.sqlite3", tmp_path / "storage")
     store.initialize()
+    with store.connect() as connection:
+        assert "dialogue_bindings_dialogue_snapshot_idx" in {
+            row[1] for row in connection.execute("PRAGMA index_list(dialogue_bindings)")
+        }
     store.import_csv(SAMPLE_DATA_PATH, source_name="dialogue.csv")
     corpus = store.import_corpus_bundle(corpus_bundle_path)
     corpus_snapshot_id = corpus["snapshot_id"]

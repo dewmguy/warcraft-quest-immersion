@@ -567,6 +567,8 @@ class AlphaStore:
                     ON dialogue_bindings(content_id);
                 CREATE INDEX IF NOT EXISTS dialogue_bindings_entity_idx
                     ON dialogue_bindings(entity_key);
+                CREATE INDEX IF NOT EXISTS dialogue_bindings_dialogue_snapshot_idx
+                    ON dialogue_bindings(dialogue_id, source_snapshot_id, active);
                 CREATE TABLE IF NOT EXISTS dialogue_triggers (
                     trigger_id TEXT PRIMARY KEY,
                     binding_id TEXT NOT NULL REFERENCES dialogue_bindings(binding_id) ON DELETE CASCADE,
@@ -1462,11 +1464,9 @@ class AlphaStore:
                     (expansion, locale),
                 )
                 connection.execute(
-                    "UPDATE dialogue_entries SET active=CASE WHEN EXISTS ("
-                    "SELECT 1 FROM dialogue_bindings db "
-                    "WHERE db.dialogue_id=dialogue_entries.dialogue_id "
-                    "AND db.source_snapshot_id=? AND db.active=1"
-                    ") THEN 1 ELSE 0 END WHERE source_snapshot_id=?",
+                    "UPDATE dialogue_entries SET active=1 WHERE source_snapshot_id=? "
+                    "AND dialogue_id IN (SELECT dialogue_id FROM dialogue_bindings "
+                    "WHERE source_snapshot_id=? AND active=1)",
                     (snapshot_id, snapshot_id),
                 )
         return set(protected_scopes)
