@@ -11,6 +11,7 @@
     <div class="panel-heading"><div><h2>NPC Directory</h2><p>{{ "{:,}".format(listing.total) }} matching NPC{{ '' if listing.total == 1 else 's' }}</p></div></div>
     <form class="filter-bar npc-filter-bar" method="get" action="/alpha/npcs" data-instant-filters>
       <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ filters.q }}" placeholder="Name, ID, role, faction, zone, or context"></label>
+      <label><span>Zone</span><select name="zone"><option value="">All</option>{% for group, label in [('zone', 'Zones'), ('dungeon', 'Dungeons'), ('raid', 'Raids')] %}<optgroup label="{{ label }}">{% for option in listing.locations if option.location_type == group %}<option value="{{ option.location_key }}" {% if filters.zone == option.location_key %}selected{% endif %}>{{ option.display_name }}</option>{% endfor %}</optgroup>{% endfor %}</select></label>
       <label><span>Race</span><select name="race_id"><option value="">All</option>{% for race in listing.races %}<option value="{{ race.race_id }}" {% if filters.race_id == race.race_id|string %}selected{% endif %}>{{ race.race_name | replace('nightelf','Night Elf') | title }}</option>{% endfor %}</select></label>
       <label><span>Gender</span><select name="gender_id"><option value="">All</option><option value="0" {% if filters.gender_id == '0' %}selected{% endif %}>Male</option><option value="1" {% if filters.gender_id == '1' %}selected{% endif %}>Female</option></select></label>
       <label><span>Role</span><select name="role"><option value="">All</option>{% for value in role_options %}<option value="{{ value }}" {% if filters.role == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select></label>
@@ -39,9 +40,9 @@
     </div>
     {% if listing.page_count > 1 %}
     <nav class="pagination" aria-label="NPC pages">
-      {% if listing.page > 1 %}<a href="?q={{ filters.q }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&role={{ filters.role }}&faction={{ filters.faction }}&importance={{ filters.importance }}&voice_approach={{ filters.voice_approach }}&voice_state={{ filters.voice_state }}&page={{ listing.page - 1 }}">Previous</a>{% endif %}
+      {% if listing.page > 1 %}<a href="?q={{ filters.q }}&zone={{ filters.zone }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&role={{ filters.role }}&faction={{ filters.faction }}&importance={{ filters.importance }}&voice_approach={{ filters.voice_approach }}&voice_state={{ filters.voice_state }}&page={{ listing.page - 1 }}">Previous</a>{% endif %}
       <span>Page {{ listing.page }} of {{ listing.page_count }}</span>
-      {% if listing.page < listing.page_count %}<a href="?q={{ filters.q }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&role={{ filters.role }}&faction={{ filters.faction }}&importance={{ filters.importance }}&voice_approach={{ filters.voice_approach }}&voice_state={{ filters.voice_state }}&page={{ listing.page + 1 }}">Next</a>{% endif %}
+      {% if listing.page < listing.page_count %}<a href="?q={{ filters.q }}&zone={{ filters.zone }}&race_id={{ filters.race_id }}&gender_id={{ filters.gender_id }}&role={{ filters.role }}&faction={{ filters.faction }}&importance={{ filters.importance }}&voice_approach={{ filters.voice_approach }}&voice_state={{ filters.voice_state }}&page={{ listing.page + 1 }}">Next</a>{% endif %}
     </nav>
     {% endif %}
   </section>

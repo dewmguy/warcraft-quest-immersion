@@ -15,11 +15,11 @@ data/sources/azerothcore/3.3.5/enUS/
 
 The restored database must contain the AzerothCore world tables used by the
 extractor and provenance-matched 3.3.5 data from CreatureDisplayInfo,
-CreatureDisplayInfoExtra, CreatureModelData, FactionTemplate, Faction, and
-AreaTable. The AzerothCore `creature_model_info` table supplies model gender.
-Missing or unrecognized variants stop extraction.
+CreatureDisplayInfoExtra, CreatureModelData, FactionTemplate, Faction,
+AreaTable, Map, and WorldMapArea. The AzerothCore `creature_model_info` table
+supplies model gender. Missing or unrecognized variants stop extraction.
 
-For a clean Windows 3.3.5a build 12340 client, extract the six raw files with
+For a clean Windows 3.3.5a build 12340 client, extract the eight raw files with
 Ladik's MPQ Editor. The script opens `locale-enUS.MPQ` and applies
 `patch-enUS.MPQ`, `patch-enUS-2.MPQ`, and `patch-enUS-3.MPQ` in order. It checks
 the client build, validates every WDBC header, hashes the source archives and
@@ -74,6 +74,8 @@ counts.
 
 The ZIP contract is:
 
+- `locations.csv`: canonical outdoor zones and actual dungeon/raid maps, including
+  parent-zone display labels such as `Westfall - Deadmines`;
 - `entities.csv`: expansion-scoped creature, game-object, and item identities,
   inferred context, and inference evidence;
 - `texts.csv`: stable logical quest/gossip identities and immutable source text;

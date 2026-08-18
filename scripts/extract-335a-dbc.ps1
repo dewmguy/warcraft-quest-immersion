@@ -44,7 +44,9 @@ $DBCNames = @(
     "CreatureModelData.dbc",
     "FactionTemplate.dbc",
     "Faction.dbc",
-    "AreaTable.dbc"
+    "AreaTable.dbc",
+    "Map.dbc",
+    "WorldMapArea.dbc"
 )
 $StagingRoot = Join-Path ([IO.Path]::GetTempPath()) ("wqi-dbc-" + [guid]::NewGuid().ToString("N"))
 $StagingDBC = Join-Path $StagingRoot "DBFilesClient"

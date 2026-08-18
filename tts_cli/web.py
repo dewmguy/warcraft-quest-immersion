@@ -576,6 +576,7 @@ def alpha_npc(
                 importance_scores=IMPORTANCE_SCORES,
                 race_options=NPC_RACE_OPTIONS,
                 gender_options=NPC_GENDER_OPTIONS,
+                zone_options=alpha_store.list_locations("3.3.5"),
             ),
         )
     except AlphaError as error:
@@ -591,16 +592,18 @@ def alpha_npc_scoped(
     _: Annotated[str, Depends(require_auth)],
 ):
     try:
+        record = alpha_store.get_speaker_by_entity(expansion, entity_type, entity_id)
         return templates.TemplateResponse(
             request=request,
             name="alpha-speaker.html",
             context=_alpha_context(
-                record=alpha_store.get_speaker_by_entity(expansion, entity_type, entity_id),
+                record=record,
                 role_options=ROLE_OPTIONS,
                 affiliation_options=AFFILIATION_OPTIONS,
                 importance_scores=IMPORTANCE_SCORES,
                 race_options=NPC_RACE_OPTIONS,
                 gender_options=NPC_GENDER_OPTIONS,
+                zone_options=alpha_store.list_locations(expansion),
             ),
         )
     except AlphaError as error:
@@ -612,6 +615,7 @@ def alpha_npcs(
     request: Request,
     _: Annotated[str, Depends(require_auth)],
     q: str = "",
+    zone: str = "",
     race_id: str = "",
     gender_id: str = "",
     role: str = "",
@@ -628,6 +632,7 @@ def alpha_npcs(
             context=_alpha_context(
                 listing=alpha_store.list_npcs(
                     query=q,
+                    zone_location_key=zone,
                     race_id=race_id,
                     gender_id=gender_id,
                     role=role,
@@ -639,6 +644,7 @@ def alpha_npcs(
                 ),
                 filters={
                     "q": q,
+                    "zone": zone,
                     "race_id": race_id,
                     "gender_id": gender_id,
                     "role": role,

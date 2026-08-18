@@ -58,9 +58,9 @@ def azerothcore_tables() -> dict[str, list[dict]]:
             {"DisplayID": 1002, "Gender": 1},
         ],
         "creature": [
-            {"guid": 1, "id1": 1, "zoneId": 12},
-            {"guid": 2, "id1": 1, "zoneId": 12},
-            {"guid": 3, "id1": 2, "zoneId": 14},
+            {"guid": 1, "id1": 1, "map": 0, "zoneId": 12},
+            {"guid": 2, "id1": 1, "map": 0, "zoneId": 12},
+            {"guid": 3, "id1": 2, "map": 1, "zoneId": 14},
         ],
         "creature_queststarter": [
             {"id": 1, "quest": 100},
@@ -123,9 +123,46 @@ def azerothcore_tables() -> dict[str, list[dict]]:
         "db_FactionTemplate": [{"ID": 11, "Faction": 72}],
         "db_Faction": [{"ID": 72, "Name_Lang_enUS": "Stormwind"}],
         "db_AreaTable": [
-            {"ID": 12, "AreaName_Lang_enUS": "Elwynn Forest"},
-            {"ID": 14, "AreaName_Lang_enUS": "Darnassus"},
+            {
+                "ID": 12,
+                "ContinentID": 0,
+                "ParentAreaID": 0,
+                "Flags": 0,
+                "AreaName_Lang_enUS": "Elwynn Forest",
+            },
+            {
+                "ID": 14,
+                "ContinentID": 1,
+                "ParentAreaID": 0,
+                "Flags": 0,
+                "AreaName_Lang_enUS": "Darnassus",
+            },
+            {
+                "ID": 40,
+                "ContinentID": 0,
+                "ParentAreaID": 0,
+                "Flags": 0,
+                "AreaName_Lang_enUS": "Westfall",
+            },
+            {
+                "ID": 1581,
+                "ContinentID": 36,
+                "ParentAreaID": 0,
+                "Flags": 0,
+                "AreaName_Lang_enUS": "The Deadmines",
+            },
         ],
+        "db_Map": [
+            {"ID": 0, "MapType": 0, "MapName_Lang_enUS": "Eastern Kingdoms"},
+            {"ID": 1, "MapType": 0, "MapName_Lang_enUS": "Kalimdor"},
+            {"ID": 36, "MapType": 1, "MapName_Lang_enUS": "Deadmines"},
+        ],
+        "db_WorldMapArea": [
+            {"ID": 1, "MapID": 0, "AreaID": 12, "Y1": 0, "Y2": 1, "X1": 0, "X2": 1},
+            {"ID": 2, "MapID": 1, "AreaID": 14, "Y1": 0, "Y2": 1, "X1": 0, "X2": 1},
+            {"ID": 3, "MapID": 0, "AreaID": 40, "Y1": 0, "Y2": 1, "X1": 0, "X2": 1},
+        ],
+        "instance_template": [{"map": 36, "parent": 0, "script": "instance_deadmines"}],
     }
 
 

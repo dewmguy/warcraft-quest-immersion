@@ -404,6 +404,21 @@ class AlphaStore:
                     row_count INTEGER NOT NULL,
                     PRIMARY KEY(snapshot_id, artifact_name)
                 );
+                CREATE TABLE IF NOT EXISTS corpus_locations (
+                    location_key TEXT PRIMARY KEY,
+                    expansion TEXT NOT NULL,
+                    location_type TEXT NOT NULL CHECK(location_type IN ('zone', 'dungeon', 'raid')),
+                    source_id INTEGER NOT NULL,
+                    map_id INTEGER NOT NULL,
+                    parent_zone_id INTEGER NOT NULL DEFAULT 0,
+                    name TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(expansion, location_type, source_id)
+                );
                 CREATE TABLE IF NOT EXISTS corpus_entities (
                     entity_key TEXT PRIMARY KEY,
                     expansion TEXT NOT NULL,
@@ -417,7 +432,9 @@ class AlphaStore:
                     gender_name TEXT NOT NULL DEFAULT '',
                     faction TEXT NOT NULL DEFAULT '',
                     zone TEXT NOT NULL DEFAULT '',
+                    zone_location_key TEXT NOT NULL DEFAULT '',
                     zone_ids_json TEXT NOT NULL DEFAULT '[]',
+                    map_ids_json TEXT NOT NULL DEFAULT '[]',
                     role TEXT NOT NULL DEFAULT 'default',
                     story_reach TEXT NOT NULL DEFAULT 'one_off',
                     inference_json TEXT NOT NULL DEFAULT '{}',
@@ -488,6 +505,7 @@ class AlphaStore:
                     role TEXT NOT NULL DEFAULT '',
                     faction TEXT NOT NULL DEFAULT '',
                     zone TEXT NOT NULL DEFAULT '',
+                    zone_location_key TEXT NOT NULL DEFAULT '',
                     context_summary TEXT NOT NULL DEFAULT '',
                     importance TEXT NOT NULL DEFAULT 'unassessed',
                     uniqueness TEXT NOT NULL DEFAULT 'unassessed',
@@ -743,6 +761,30 @@ class AlphaStore:
     def _ensure_columns(connection: sqlite3.Connection) -> None:
         """Apply additive migrations to Alpha databases created by earlier builds."""
         AlphaStore._migrate_speakers_to_expansion_scope(connection)
+        entity_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(corpus_entities)")
+        }
+        if "zone_location_key" not in entity_columns:
+            connection.execute(
+                "ALTER TABLE corpus_entities ADD COLUMN zone_location_key TEXT NOT NULL DEFAULT ''"
+            )
+        if "map_ids_json" not in entity_columns:
+            connection.execute(
+                "ALTER TABLE corpus_entities ADD COLUMN map_ids_json TEXT NOT NULL DEFAULT '[]'"
+            )
+        speaker_columns = {row["name"] for row in connection.execute("PRAGMA table_info(speakers)")}
+        if "zone_location_key" not in speaker_columns:
+            connection.execute(
+                "ALTER TABLE speakers ADD COLUMN zone_location_key TEXT NOT NULL DEFAULT ''"
+            )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS corpus_locations_active_idx ON corpus_locations("
+            "expansion, active, location_type, display_name)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS speakers_zone_location_idx ON speakers("
+            "expansion, zone_location_key)"
+        )
         voice_columns = {row["name"] for row in connection.execute("PRAGMA table_info(voices)")}
         if "candidate_sequence" not in voice_columns:
             connection.execute(
@@ -866,6 +908,7 @@ class AlphaStore:
                     role TEXT NOT NULL DEFAULT '',
                     faction TEXT NOT NULL DEFAULT '',
                     zone TEXT NOT NULL DEFAULT '',
+                    zone_location_key TEXT NOT NULL DEFAULT '',
                     context_summary TEXT NOT NULL DEFAULT '',
                     importance TEXT NOT NULL DEFAULT 'unassessed',
                     uniqueness TEXT NOT NULL DEFAULT 'unassessed',
@@ -877,11 +920,12 @@ class AlphaStore:
                 INSERT INTO speakers(
                     speaker_id, expansion, entity_type, entity_id, name, race_id, gender_id,
                     race_name, gender_name, voice_id, role, faction, zone, context_summary,
-                    importance, uniqueness, source_snapshot_id, created_at, updated_at
+                    zone_location_key, importance, uniqueness, source_snapshot_id, created_at,
+                    updated_at
                 )
                 SELECT speaker_id, '3.3.5', entity_type, entity_id, name, race_id, gender_id,
                     race_name, gender_name, voice_id, role, faction, zone, context_summary,
-                    importance, uniqueness, source_snapshot_id, created_at, updated_at
+                    '', importance, uniqueness, source_snapshot_id, created_at, updated_at
                 FROM speakers_unscoped;
                 DROP TABLE speakers_unscoped;
                 COMMIT;
@@ -1775,6 +1819,9 @@ class AlphaStore:
                 "UPDATE corpus_entities SET active=0 WHERE expansion=?", (expansion,)
             )
             connection.execute(
+                "UPDATE corpus_locations SET active=0 WHERE expansion=?", (expansion,)
+            )
+            connection.execute(
                 "UPDATE dialogue_bindings SET active=0 WHERE expansion=? AND locale=?",
                 (expansion, locale),
             )
@@ -1818,6 +1865,33 @@ class AlphaStore:
                     ),
                 )
 
+            for location in bundle.locations:
+                connection.execute(
+                    "INSERT INTO corpus_locations(location_key, expansion, location_type, "
+                    "source_id, map_id, parent_zone_id, name, display_name, "
+                    "source_snapshot_id, active, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?) "
+                    "ON CONFLICT(location_key) DO UPDATE SET "
+                    "location_type=excluded.location_type, source_id=excluded.source_id, "
+                    "map_id=excluded.map_id, parent_zone_id=excluded.parent_zone_id, "
+                    "name=excluded.name, display_name=excluded.display_name, "
+                    "source_snapshot_id=excluded.source_snapshot_id, active=1, "
+                    "updated_at=excluded.updated_at",
+                    (
+                        str(location["location_key"]),
+                        expansion,
+                        str(location["location_type"]),
+                        int(location["source_id"]),
+                        int(location["map_id"]),
+                        int(location["parent_zone_id"]),
+                        str(location["name"]),
+                        str(location["display_name"]),
+                        snapshot_id,
+                        now,
+                        now,
+                    ),
+                )
+
             speaker_by_entity: dict[str, str] = {}
             for entity in bundle.entities:
                 entity_key = str(entity["entity_key"])
@@ -1828,13 +1902,16 @@ class AlphaStore:
                 connection.execute(
                     "INSERT INTO corpus_entities(entity_key, expansion, entity_type, entity_id, "
                     "name, subname, race_id, gender_id, race_name, gender_name, faction, zone, "
-                    "zone_ids_json, role, story_reach, inference_json, source_snapshot_id, active, "
-                    "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                    "?, ?, 1, ?, ?) ON CONFLICT(entity_key) DO UPDATE SET name=excluded.name, "
+                    "zone_location_key, zone_ids_json, map_ids_json, role, story_reach, "
+                    "inference_json, source_snapshot_id, active, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?) "
+                    "ON CONFLICT(entity_key) DO UPDATE SET name=excluded.name, "
                     "subname=excluded.subname, race_id=excluded.race_id, "
                     "gender_id=excluded.gender_id, race_name=excluded.race_name, "
                     "gender_name=excluded.gender_name, faction=excluded.faction, zone=excluded.zone, "
-                    "zone_ids_json=excluded.zone_ids_json, role=excluded.role, "
+                    "zone_location_key=excluded.zone_location_key, "
+                    "zone_ids_json=excluded.zone_ids_json, map_ids_json=excluded.map_ids_json, "
+                    "role=excluded.role, "
                     "story_reach=excluded.story_reach, inference_json=excluded.inference_json, "
                     "source_snapshot_id=excluded.source_snapshot_id, active=1, "
                     "updated_at=excluded.updated_at",
@@ -1851,7 +1928,9 @@ class AlphaStore:
                         str(entity["gender_name"]),
                         faction,
                         str(entity["zone_name"]),
+                        str(entity["zone_location_key"]),
                         str(entity["zone_ids"]),
+                        str(entity["map_ids"]),
                         role,
                         str(entity["story_reach"]),
                         str(entity["inference_json"]),
@@ -1882,9 +1961,10 @@ class AlphaStore:
                     connection.execute(
                         "INSERT INTO speakers(speaker_id, expansion, entity_type, entity_id, name, race_id, "
                         "gender_id, race_name, gender_name, voice_id, role, faction, zone, "
-                        "context_summary, importance, uniqueness, source_snapshot_id, created_at, "
-                        "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                        "'unassessed', ?, ?, ?)",
+                        "zone_location_key, context_summary, importance, uniqueness, "
+                        "source_snapshot_id, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unassessed', "
+                        "?, ?, ?)",
                         (
                             speaker_id,
                             expansion,
@@ -1899,6 +1979,7 @@ class AlphaStore:
                             role,
                             faction,
                             str(entity["zone_name"]),
+                            str(entity["zone_location_key"]),
                             context,
                             str(entity["story_reach"]),
                             snapshot_id,
@@ -1933,6 +2014,17 @@ class AlphaStore:
                     resolved_gender_name = GENDER_DICT.get(
                         resolved_gender_id, f"gender-{resolved_gender_id}"
                     )
+                    location_is_manual = bool({"zone", "zone_location_key"} & manual_fields)
+                    resolved_zone = (
+                        str(existing_speaker["zone"])
+                        if location_is_manual
+                        else str(entity["zone_name"])
+                    )
+                    resolved_zone_location_key = (
+                        str(existing_speaker["zone_location_key"])
+                        if location_is_manual
+                        else str(entity["zone_location_key"])
+                    )
                     resolved_voice_id = existing_speaker["voice_id"]
                     current_scope = connection.execute(
                         "SELECT scope FROM voices WHERE voice_id=?", (resolved_voice_id,)
@@ -1954,7 +2046,8 @@ class AlphaStore:
                         )
                     connection.execute(
                         "UPDATE speakers SET name=?, race_id=?, gender_id=?, race_name=?, "
-                        "gender_name=?, voice_id=?, source_snapshot_id=?, updated_at=? "
+                        "gender_name=?, voice_id=?, zone=?, zone_location_key=?, "
+                        "source_snapshot_id=?, updated_at=? "
                         "WHERE speaker_id=?",
                         (
                             str(entity["name"]),
@@ -1963,6 +2056,8 @@ class AlphaStore:
                             resolved_race_name,
                             resolved_gender_name,
                             resolved_voice_id,
+                            resolved_zone,
+                            resolved_zone_location_key,
                             snapshot_id,
                             now,
                             speaker_id,
@@ -2466,6 +2561,7 @@ class AlphaStore:
         self,
         *,
         query: str = "",
+        zone_location_key: str = "",
         race_id: str = "",
         gender_id: str = "",
         role: str = "",
@@ -2486,6 +2582,13 @@ class AlphaStore:
             )
             term = f"%{query.strip()}%"
             parameters.extend([term, term, term, term, term, query.strip()])
+        if zone_location_key:
+            if zone_location_key.startswith("legacy:"):
+                conditions.append("zone = ?")
+                parameters.append(zone_location_key.removeprefix("legacy:"))
+            else:
+                conditions.append("zone_location_key = ?")
+                parameters.append(zone_location_key)
         if race_id:
             conditions.append("race_id = ?")
             parameters.append(int(race_id))
@@ -2550,6 +2653,15 @@ class AlphaStore:
         """
         where = " AND ".join(conditions)
         with self.connect() as connection:
+            if (
+                zone_location_key
+                and not zone_location_key.startswith("legacy:")
+                and not connection.execute(
+                    "SELECT 1 FROM corpus_locations WHERE location_key=? AND active=1",
+                    (zone_location_key,),
+                ).fetchone()
+            ):
+                raise AlphaError("Unknown NPC zone filter.")
             total = connection.execute(
                 f"SELECT COUNT(*) FROM ({base}) WHERE {where}", parameters
             ).fetchone()[0]
@@ -2573,7 +2685,39 @@ class AlphaStore:
             "page_size": page_size,
             "page_count": max(1, (total + page_size - 1) // page_size),
             "races": [dict(row) for row in races],
+            "locations": self.list_locations(),
         }
+
+    def list_locations(self, expansion: str = "3.3.5") -> list[dict[str, Any]]:
+        """Return the authoritative outdoor-zone and instance location catalog."""
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT location_key, expansion, location_type, source_id, map_id, "
+                "parent_zone_id, name, display_name FROM corpus_locations "
+                "WHERE expansion=? AND active=1 ORDER BY CASE location_type "
+                "WHEN 'zone' THEN 0 WHEN 'dungeon' THEN 1 ELSE 2 END, display_name",
+                (expansion,),
+            ).fetchall()
+            if rows:
+                return [dict(row) for row in rows]
+            # Keep pre-corpus/demo databases editable until an authoritative bundle is imported.
+            legacy_rows = connection.execute(
+                "SELECT DISTINCT zone FROM speakers WHERE expansion=? AND zone<>'' ORDER BY zone",
+                (expansion,),
+            ).fetchall()
+        return [
+            {
+                "location_key": f"legacy:{row['zone']}",
+                "expansion": expansion,
+                "location_type": "zone",
+                "source_id": 0,
+                "map_id": -1,
+                "parent_zone_id": 0,
+                "name": str(row["zone"]),
+                "display_name": str(row["zone"]),
+            }
+            for row in legacy_rows
+        ]
 
     @staticmethod
     def prepare_text(original_text: str) -> tuple[str, list[str], list[str]]:
@@ -2792,6 +2936,31 @@ class AlphaStore:
         )
         voice_id = str(payload.get("voice_id", existing["voice_id"] or "")).strip() or None
         with self.connect() as connection:
+            zone = str(payload.get("zone", existing["zone"]))[:200].strip()
+            zone_location_key = str(
+                payload.get("zone_location_key", existing["zone_location_key"])
+            ).strip()
+            if "zone_location_key" in payload:
+                location = connection.execute(
+                    "SELECT display_name FROM corpus_locations WHERE location_key=? "
+                    "AND expansion=? AND active=1",
+                    (zone_location_key, existing["expansion"]),
+                ).fetchone()
+                if location:
+                    zone = str(location["display_name"])
+                elif zone_location_key.startswith("legacy:"):
+                    zone = zone_location_key.removeprefix("legacy:")[:200].strip()
+                    if not zone:
+                        raise AlphaError("Unknown NPC zone.")
+                else:
+                    raise AlphaError("Unknown NPC zone.")
+            elif "zone" in payload:
+                location = connection.execute(
+                    "SELECT location_key, display_name FROM corpus_locations "
+                    "WHERE expansion=? AND active=1 AND display_name=? ORDER BY location_type LIMIT 1",
+                    (existing["expansion"], zone),
+                ).fetchone()
+                zone_location_key = str(location["location_key"]) if location else ""
             current_voice = (
                 connection.execute(
                     "SELECT scope FROM voices WHERE voice_id=?", (existing["voice_id"],)
@@ -2821,7 +2990,8 @@ class AlphaStore:
                 raise AlphaError("Selected voice was not found.")
             cursor = connection.execute(
                 "UPDATE speakers SET race_id=?, gender_id=?, race_name=?, gender_name=?, role=?, "
-                "faction=?, zone=?, context_summary=?, importance=?, uniqueness=?, voice_id=?, "
+                "faction=?, zone=?, zone_location_key=?, context_summary=?, importance=?, "
+                "uniqueness=?, voice_id=?, "
                 "updated_at=? WHERE speaker_id=?",
                 (
                     race_id,
@@ -2830,7 +3000,8 @@ class AlphaStore:
                     gender_name,
                     role,
                     faction,
-                    str(payload.get("zone", existing["zone"]))[:200].strip(),
+                    zone,
+                    zone_location_key,
                     str(payload.get("context_summary", existing["context_summary"]))[:4000].strip(),
                     importance,
                     uniqueness,
@@ -2848,7 +3019,8 @@ class AlphaStore:
                 "gender_name": gender_name,
                 "role": role,
                 "faction": faction,
-                "zone": str(payload.get("zone", existing["zone"]))[:200].strip(),
+                "zone": zone,
+                "zone_location_key": zone_location_key,
                 "context_summary": str(payload.get("context_summary", existing["context_summary"]))[
                     :4000
                 ].strip(),
@@ -2861,6 +3033,8 @@ class AlphaStore:
                 changed_fields.add("race_name")
             if "gender_id" in payload:
                 changed_fields.add("gender_name")
+            if "zone_location_key" in payload:
+                changed_fields.add("zone")
             for field_name in changed_fields:
                 connection.execute(
                     "INSERT INTO speaker_manual_overrides(speaker_id, field_name, value_json, "

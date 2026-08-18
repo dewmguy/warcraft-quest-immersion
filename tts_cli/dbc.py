@@ -63,7 +63,46 @@ DBC_DEFINITIONS = (
         "AreaTable.dbc",
         "db_AreaTable",
         36,
-        (("ID", "integer", 0), ("AreaName_Lang_enUS", "string", 11)),
+        (
+            ("ID", "integer", 0),
+            ("ContinentID", "integer", 1),
+            ("ParentAreaID", "integer", 2),
+            ("Flags", "integer", 4),
+            ("AreaName_Lang_enUS", "string", 11),
+        ),
+    ),
+    DBCDefinition(
+        "Map.dbc",
+        "db_Map",
+        66,
+        (
+            ("ID", "integer", 0),
+            ("InternalName", "string", 1),
+            ("MapType", "integer", 2),
+            ("Flags", "integer", 3),
+            ("MapName_Lang_enUS", "string", 5),
+            ("LinkedZone", "integer", 22),
+            ("EntranceMap", "signed", 59),
+            ("EntranceX", "float", 60),
+            ("EntranceY", "float", 61),
+            ("ExpansionID", "integer", 63),
+            ("MaxPlayers", "integer", 65),
+        ),
+    ),
+    DBCDefinition(
+        "WorldMapArea.dbc",
+        "db_WorldMapArea",
+        11,
+        (
+            ("ID", "integer", 0),
+            ("MapID", "integer", 1),
+            ("AreaID", "integer", 2),
+            ("Y1", "float", 4),
+            ("Y2", "float", 5),
+            ("X1", "float", 6),
+            ("X2", "float", 7),
+            ("VirtualMapID", "signed", 8),
+        ),
     ),
 )
 
@@ -160,7 +199,14 @@ def load_dbc_tables(directory: Path) -> tuple[dict[str, list[dict[str, Any]]], d
             row: dict[str, Any] = {}
             for name, field_type, field_index in definition.columns:
                 raw_value = values[field_index]
-                row[name] = dbc.string(raw_value) if field_type == "string" else raw_value
+                if field_type == "string":
+                    row[name] = dbc.string(raw_value)
+                elif field_type == "float":
+                    row[name] = struct.unpack("<f", struct.pack("<I", raw_value))[0]
+                elif field_type == "signed":
+                    row[name] = struct.unpack("<i", struct.pack("<I", raw_value))[0]
+                else:
+                    row[name] = raw_value
             row_id = int(row["ID"])
             if row_id in seen_ids:
                 raise DBCError(f"{definition.filename} contains duplicate ID {row_id}.")
@@ -197,7 +243,14 @@ def _sql_string(value: str) -> str:
 def _table_sql(definition: DBCDefinition, rows: list[dict[str, Any]]) -> list[str]:
     column_sql = []
     for name, field_type, _ in definition.columns:
-        sql_type = "TEXT NOT NULL" if field_type == "string" else "INT UNSIGNED NOT NULL"
+        if field_type == "string":
+            sql_type = "TEXT NOT NULL"
+        elif field_type == "float":
+            sql_type = "DOUBLE NOT NULL"
+        elif field_type == "signed":
+            sql_type = "INT NOT NULL"
+        else:
+            sql_type = "INT UNSIGNED NOT NULL"
         column_sql.append(f"  `{name}` {sql_type}")
     column_sql.append("  PRIMARY KEY (`ID`)")
     statements = [
@@ -210,7 +263,11 @@ def _table_sql(definition: DBCDefinition, rows: list[dict[str, Any]]) -> list[st
         values = []
         for row in rows[start : start + 1000]:
             encoded = [
-                _sql_string(str(row[name])) if field_type == "string" else str(int(row[name]))
+                _sql_string(str(row[name]))
+                if field_type == "string"
+                else repr(float(row[name]))
+                if field_type == "float"
+                else str(int(row[name]))
                 for name, field_type, _ in definition.columns
             ]
             values.append("(" + ", ".join(encoded) + ")")

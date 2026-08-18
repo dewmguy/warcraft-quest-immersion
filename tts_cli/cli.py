@@ -114,7 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     extract_parser.add_argument("--locale", default="enUS")
     extract_parser.add_argument("--output", type=Path, required=True)
     dbc_parser = corpus_commands.add_parser(
-        "dbc-to-sql", help="Convert the six raw build-12340 DBC files into enrichment SQL"
+        "dbc-to-sql", help="Convert the eight raw build-12340 DBC files into enrichment SQL"
     )
     dbc_parser.add_argument("dbc_directory", type=Path)
     dbc_parser.add_argument("--output", type=Path, required=True)

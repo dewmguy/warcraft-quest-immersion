@@ -64,7 +64,9 @@ def test_convert_raw_335a_dbc_files_to_minimal_enrichment_sql(dbc_directory: Pat
     assert report["build"] == 12340
     assert report["locale"] == "enUS"
     assert report["tables"]["db_AreaTable"] == 1
-    assert len(report["artifacts"]) == 6
+    assert report["tables"]["db_Map"] == 1
+    assert report["tables"]["db_WorldMapArea"] == 1
+    assert len(report["artifacts"]) == 8
     saved_manifest = json.loads(Path(report["manifest"]).read_text(encoding="utf-8"))
     assert saved_manifest["output_sha256"] == report["output_sha256"]
 

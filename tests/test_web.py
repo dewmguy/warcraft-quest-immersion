@@ -414,6 +414,7 @@ def test_import_export_prioritizes_certified_bundle_and_retains_legacy_csv(monke
         artifact in page.text
         for artifact in (
             "manifest.json",
+            "locations.csv",
             "entities.csv",
             "texts.csv",
             "bindings.csv",
@@ -1429,6 +1430,8 @@ def test_quest_gossip_and_npc_indexes_are_exclusive_and_filterable(monkeypatch):
     assert "Marshal Rowan" in npcs.text
     assert "Sentinel Amara" in npcs.text
     assert "Weathered Tablet" not in npcs.text
+    assert '<select name="zone">' in npcs.text
+    assert "data-instant-filters" in npcs.text
     assert "1 matching NPC" in amara.text
     assert "Sentinel Amara" in amara.text
     assert "Marshal Rowan" not in amara.text
@@ -1489,6 +1492,8 @@ def test_npc_profile_uses_star_toggle_and_normalized_form_layout(monkeypatch):
     assert "Affiliation" not in page.text
     assert '<select name="race_id">' in page.text
     assert '<select name="gender_id">' in page.text
+    assert '<select name="zone_location_key">' in page.text
+    assert '<optgroup label="Zones">' in page.text
     assert "Inferred from the client model and source database." in page.text
     assert 'class="form-grid npc-form-grid"' in page.text
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")

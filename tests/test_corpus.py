@@ -58,7 +58,11 @@ def test_extractor_reconciles_shared_quest_givers_and_nested_gossip(azerothcore_
     assert rowan["race_name"] == "human"
     assert rowan["gender_name"] == "male"
     assert rowan["zone_name"] == "Elwynn Forest"
+    assert rowan["zone_location_key"] == "3.3.5:zone:12"
     assert rowan["faction_name"] == "Stormwind"
+    deadmines = next(row for row in bundle.locations if row["source_id"] == 36)
+    assert deadmines["location_type"] == "dungeon"
+    assert deadmines["display_name"] == "Westfall - Deadmines"
     assert bundle.manifest["source"]["database_version_rows"] == [
         {"required_rev": "2026_08_10_00", "sql_rev": "2026_08_11_00"}
     ]
@@ -138,6 +142,7 @@ def test_stable_ids_ignore_source_row_order(azerothcore_tables):
     second = extract(reversed_tables)
 
     for attribute, key in (
+        ("locations", "location_key"),
         ("entities", "entity_key"),
         ("texts", "content_id"),
         ("bindings", "binding_id"),
@@ -147,6 +152,41 @@ def test_stable_ids_ignore_source_row_order(azerothcore_tables):
         assert [row[key] for row in getattr(first, attribute)] == [
             row[key] for row in getattr(second, attribute)
         ]
+
+
+def test_extractor_labels_npcs_found_exclusively_in_a_dungeon(azerothcore_tables):
+    tables = copy.deepcopy(azerothcore_tables)
+    tables["creature_template"].append(
+        {
+            "entry": 3,
+            "name": "Defias Evoker",
+            "subname": "",
+            "faction": 11,
+            "npcflag": 2,
+            "gossip_menu_id": 0,
+        }
+    )
+    tables["creature_template_model"].append({"CreatureID": 3, "CreatureDisplayID": 1003})
+    tables["creature_model_info"].append({"DisplayID": 1003, "Gender": 0})
+    tables["db_CreatureDisplayInfo"].append(
+        {"ID": 1003, "ModelID": 3003, "ExtendedDisplayInfoID": 2003}
+    )
+    tables["db_CreatureDisplayInfoExtra"].append(
+        {"ID": 2003, "DisplayRaceID": 1, "DisplaySexID": 0}
+    )
+    tables["db_CreatureModelData"].append(
+        {"ID": 3003, "ModelPath": "Creature\\Human\\HumanMale.mdx"}
+    )
+    tables["creature"].append({"guid": 4, "id1": 3, "map": 36, "zoneId": 1581})
+    tables["creature_queststarter"].append({"id": 3, "quest": 100})
+
+    bundle = extract(tables)
+    npc = next(row for row in bundle.entities if row["entity_key"] == "3.3.5:creature:3")
+
+    assert npc["zone_name"] == "Westfall - Deadmines"
+    assert npc["zone_location_key"] == "3.3.5:instance:36"
+    assert json.loads(npc["map_ids"]) == [36]
+    assert json.loads(npc["inference_json"])["location_basis"] == "exclusive instance map"
 
 
 def test_extractor_fails_closed_without_enrichment_or_recognized_npc_text(azerothcore_tables):
@@ -246,6 +286,14 @@ def test_atomic_import_preserves_overrides_and_shares_spoken_text(
     applied = store.import_corpus_bundle(corpus_bundle_path)
     assert applied["applied"] is True
     assert store.dashboard()["counts"]["dialogue"] == applied["counts"]["active_bindings"]
+    locations = store.list_locations()
+    assert any(
+        row["location_key"] == "3.3.5:instance:36" and row["display_name"] == "Westfall - Deadmines"
+        for row in locations
+    )
+    assert store.list_npcs(zone_location_key="3.3.5:zone:12")["total"] == 1
+    with pytest.raises(AlphaError, match="Unknown NPC zone filter"):
+        store.list_npcs(zone_location_key="3.3.5:zone:999999")
     repeated_gossip = [
         row
         for row in store.list_dialogue(source="gossip", page_size=50)["rows"]
@@ -257,6 +305,10 @@ def test_atomic_import_preserves_overrides_and_shares_spoken_text(
 
     rowan = store.get_speaker("creature-1")["speaker"]
     assert rowan["faction"] == "alliance"
+    store.update_speaker(rowan["speaker_id"], {"zone_location_key": "3.3.5:instance:36"})
+    selected_location = store.get_speaker(rowan["speaker_id"])["speaker"]
+    assert selected_location["zone"] == "Westfall - Deadmines"
+    assert selected_location["zone_location_key"] == "3.3.5:instance:36"
     store.update_speaker(rowan["speaker_id"], {"zone": "Manual Testing Zone"})
     accept_rows = [
         row

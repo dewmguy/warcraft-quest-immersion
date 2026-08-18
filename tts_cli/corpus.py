@@ -18,14 +18,26 @@ import pymysql
 from tts_cli.consts import GENDER_DICT, RACE_DICT
 from tts_cli.npc_identity import infer_creature_identity
 
-CORPUS_SCHEMA_VERSION = 1
-EXTRACTOR_VERSION = "1.0"
+CORPUS_SCHEMA_VERSION = 2
+EXTRACTOR_VERSION = "1.1"
 CORPUS_FILES = (
+    "locations.csv",
     "entities.csv",
     "texts.csv",
     "bindings.csv",
     "triggers.csv",
     "quarantine.csv",
+)
+
+LOCATION_FIELDS = (
+    "location_key",
+    "expansion",
+    "location_type",
+    "source_id",
+    "map_id",
+    "parent_zone_id",
+    "name",
+    "display_name",
 )
 
 ENTITY_FIELDS = (
@@ -46,7 +58,9 @@ ENTITY_FIELDS = (
     "faction_name",
     "zone_id",
     "zone_name",
+    "zone_location_key",
     "zone_ids",
+    "map_ids",
     "role",
     "story_reach",
     "inference_json",
@@ -100,11 +114,92 @@ QUARANTINE_FIELDS = (
     "severity",
 )
 FIELD_MAP = {
+    "locations.csv": LOCATION_FIELDS,
     "entities.csv": ENTITY_FIELDS,
     "texts.csv": TEXT_FIELDS,
     "bindings.csv": BINDING_FIELDS,
     "triggers.csv": TRIGGER_FIELDS,
     "quarantine.csv": QUARANTINE_FIELDS,
+}
+
+# Map.dbc entrance coordinates are insufficient for a few overlapping or zero-coordinate
+# instances. These build-12340 corrections anchor each shipped dungeon/raid to the outdoor
+# zone containing its entrance. Unknown custom maps still use coordinate inference.
+INSTANCE_PARENT_ZONE_IDS = {
+    33: 130,
+    34: 1519,
+    36: 40,
+    43: 17,
+    47: 17,
+    48: 331,
+    70: 3,
+    90: 1,
+    109: 8,
+    129: 17,
+    189: 85,
+    209: 440,
+    229: 25,
+    230: 25,
+    249: 15,
+    269: 440,
+    289: 28,
+    309: 33,
+    329: 139,
+    349: 405,
+    389: 1637,
+    409: 25,
+    429: 357,
+    469: 25,
+    509: 1377,
+    531: 1377,
+    532: 41,
+    533: 65,
+    534: 440,
+    540: 3483,
+    542: 3483,
+    543: 3483,
+    544: 3483,
+    545: 3521,
+    546: 3521,
+    547: 3521,
+    548: 3521,
+    550: 3523,
+    552: 3523,
+    553: 3523,
+    554: 3523,
+    555: 3519,
+    556: 3519,
+    557: 3519,
+    558: 3519,
+    560: 440,
+    564: 3520,
+    565: 3522,
+    568: 3433,
+    574: 495,
+    575: 495,
+    576: 3537,
+    578: 3537,
+    580: 4080,
+    585: 4080,
+    595: 440,
+    599: 67,
+    600: 66,
+    601: 65,
+    602: 67,
+    603: 67,
+    604: 66,
+    608: 4395,
+    615: 65,
+    616: 3537,
+    619: 65,
+    624: 4197,
+    631: 210,
+    632: 210,
+    649: 210,
+    650: 210,
+    658: 210,
+    668: 210,
+    724: 65,
 }
 
 
@@ -152,6 +247,20 @@ def _integer(value: Any, default: int = 0) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return default
+
+
+def _float(value: Any, default: float = 0.0) -> float:
+    if value in (None, ""):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _location_key(expansion: str, location_type: str, source_id: int) -> str:
+    family = "instance" if location_type in {"dungeon", "raid"} else "zone"
+    return f"{expansion}:{family}:{source_id}"
 
 
 def _csv_bytes(rows: list[dict[str, Any]], fields: tuple[str, ...]) -> bytes:
@@ -242,6 +351,7 @@ class MySQLCorpusSource:
 @dataclass
 class CorpusBundle:
     manifest: dict[str, Any]
+    locations: list[dict[str, Any]]
     entities: list[dict[str, Any]]
     texts: list[dict[str, Any]]
     bindings: list[dict[str, Any]]
@@ -250,6 +360,7 @@ class CorpusBundle:
 
     def as_files(self) -> dict[str, list[dict[str, Any]]]:
         return {
+            "locations.csv": self.locations,
             "entities.csv": self.entities,
             "texts.csv": self.texts,
             "bindings.csv": self.bindings,
@@ -273,6 +384,7 @@ class AzerothCoreCorpusExtractor:
         "gossip_menu",
         "gossip_menu_option",
         "npc_text",
+        "instance_template",
     }
     REQUIRED_TABLE_VARIANTS = {
         "creature display DBC": ("db_CreatureDisplayInfo", "creaturedisplayinfo_dbc"),
@@ -284,6 +396,8 @@ class AzerothCoreCorpusExtractor:
         "faction-template DBC": ("db_FactionTemplate", "factiontemplate_dbc"),
         "faction DBC": ("db_Faction", "faction_dbc"),
         "area-table DBC": ("db_AreaTable", "areatable_dbc"),
+        "map DBC": ("db_Map", "map_dbc"),
+        "world-map-area DBC": ("db_WorldMapArea", "worldmaparea_dbc"),
     }
 
     def __init__(
@@ -353,6 +467,7 @@ class AzerothCoreCorpusExtractor:
                 ("OptionID", "OptionIndex", "option_id", "option_index"),
             ),
             "npc_text": (("ID",),),
+            "instance_template": (("map", "Map"), ("script", "ScriptName")),
         }
         for table, groups in base_columns.items():
             require_columns(table, *groups)
@@ -378,7 +493,11 @@ class AzerothCoreCorpusExtractor:
                 ("CreatureDisplayID", "DisplayID", "displayid"),
             ),
             "creature_model_info": (("DisplayID", "modelid"), ("Gender", "gender")),
-            "creature": (("id1", "id", "entry"), ("zoneId", "zoneid", "areaId", "areaid")),
+            "creature": (
+                ("id1", "id", "entry"),
+                ("zoneId", "zoneid", "areaId", "areaid"),
+                ("map", "mapId", "mapid"),
+            ),
             "conditions": (
                 ("SourceTypeOrReferenceId", "source_type"),
                 ("SourceGroup", "source_group"),
@@ -405,6 +524,16 @@ class AzerothCoreCorpusExtractor:
                 "area-table DBC": (
                     ("ID", "AreaID"),
                     ("AreaName_Lang_enUS", "Name_Lang_enUS", "Name", "name"),
+                ),
+                "map DBC": (
+                    ("ID",),
+                    ("MapType",),
+                    ("MapName_Lang_enUS", "MapName", "Name", "name"),
+                ),
+                "world-map-area DBC": (
+                    ("ID",),
+                    ("MapID",),
+                    ("AreaID",),
                 ),
             }[label]
             require_columns(table, *groups)
@@ -490,17 +619,29 @@ class AzerothCoreCorpusExtractor:
         faction_template_rows = self._optional_rows("db_FactionTemplate", "factiontemplate_dbc")
         faction_rows = self._optional_rows("db_Faction", "faction_dbc")
         area_rows = self._optional_rows("db_AreaTable", "areatable_dbc")
+        map_rows = self._optional_rows("db_Map", "map_dbc")
+        world_map_area_rows = self._optional_rows("db_WorldMapArea", "worldmaparea_dbc")
         faction_templates = {_integer(_row_value(row, "ID")): row for row in faction_template_rows}
         factions = {_integer(_row_value(row, "ID")): row for row in faction_rows}
         areas = {_integer(_row_value(row, "ID", "AreaID")): row for row in area_rows}
 
         zone_counts: dict[int, Counter[int]] = defaultdict(Counter)
+        map_counts: dict[int, Counter[int]] = defaultdict(Counter)
         if self.source.has_table("creature"):
             for row in self._rows("creature"):
                 creature_id = _integer(_row_value(row, "id1", "id", "entry"))
                 zone_id = _integer(_row_value(row, "zoneId", "zoneid", "areaId", "areaid"))
+                map_id = _integer(_row_value(row, "map", "mapId", "mapid"), -1)
                 if creature_id and zone_id:
                     zone_counts[creature_id][zone_id] += 1
+                if creature_id and map_id >= 0:
+                    map_counts[creature_id][map_id] += 1
+        locations, zones_by_id, instances_by_map = self._build_locations(
+            area_rows,
+            map_rows,
+            world_map_area_rows,
+            {zone_id for counts in zone_counts.values() for zone_id in counts},
+        )
 
         def add_finding(
             reason: str,
@@ -585,8 +726,22 @@ class AzerothCoreCorpusExtractor:
             race_id = identity.race_id if identity else -1
             gender_id = identity.gender_id if identity else 0
             zones = zone_counts.get(entity_id, Counter())
+            maps_for_entity = map_counts.get(entity_id, Counter())
             primary_zone = (
                 sorted(zones.items(), key=lambda item: (-item[1], item[0]))[0][0] if zones else 0
+            )
+            primary_map = (
+                sorted(maps_for_entity.items(), key=lambda item: (-item[1], item[0]))[0][0]
+                if maps_for_entity
+                else -1
+            )
+            exclusive_instance = bool(maps_for_entity) and set(maps_for_entity).issubset(
+                instances_by_map
+            )
+            location = (
+                instances_by_map.get(primary_map)
+                if exclusive_instance
+                else zones_by_id.get(primary_zone)
             )
             faction_template_id = _integer(_row_value(template, "faction"))
             faction_template = faction_templates.get(faction_template_id, {})
@@ -605,8 +760,12 @@ class AzerothCoreCorpusExtractor:
                 )
             )
             area = areas.get(primary_zone, {})
-            zone_name = _clean_text(
-                _row_value(area, "AreaName_Lang_enUS", "Name_Lang_enUS", "Name", "name")
+            zone_name = (
+                str(location["display_name"])
+                if location
+                else _clean_text(
+                    _row_value(area, "AreaName_Lang_enUS", "Name_Lang_enUS", "Name", "name")
+                )
             )
             role = self._infer_role(name, subname, template, entity_type)
             status = (
@@ -636,7 +795,9 @@ class AzerothCoreCorpusExtractor:
                 "faction_name": faction_name,
                 "zone_id": primary_zone,
                 "zone_name": zone_name or (str(primary_zone) if primary_zone else ""),
+                "zone_location_key": str(location["location_key"]) if location else "",
                 "zone_ids": _json(sorted(zones)),
+                "map_ids": _json(sorted(maps_for_entity)),
                 "role": role,
                 "story_reach": "one_off",
                 "inference_json": _json(
@@ -648,6 +809,14 @@ class AzerothCoreCorpusExtractor:
                         "model_genders": sorted(model_genders),
                         "creature_type": _integer(_row_value(template, "type")),
                         "zone_spawn_counts": dict(sorted(zones.items())),
+                        "map_spawn_counts": dict(sorted(maps_for_entity.items())),
+                        "location_basis": (
+                            "exclusive instance map"
+                            if exclusive_instance
+                            else "most common spawn zone"
+                            if zones
+                            else "no spawn location"
+                        ),
                     }
                 ),
                 "status": status,
@@ -1161,6 +1330,7 @@ class AzerothCoreCorpusExtractor:
             "extracted_at": _utc_now(),
             "tables": self._table_manifest(),
             "counts": {
+                "locations": len(locations),
                 "entities": len(entities),
                 "texts": len(texts),
                 "bindings": len(bindings),
@@ -1175,6 +1345,7 @@ class AzerothCoreCorpusExtractor:
         }
         return CorpusBundle(
             manifest=manifest,
+            locations=locations,
             entities=sorted(entities.values(), key=lambda row: str(row["entity_key"])),
             texts=sorted(texts.values(), key=lambda row: str(row["content_id"])),
             bindings=sorted(bindings.values(), key=lambda row: str(row["binding_id"])),
@@ -1187,6 +1358,127 @@ class AzerothCoreCorpusExtractor:
             if self.source.has_table(table):
                 return self._rows(table)
         return []
+
+    def _build_locations(
+        self,
+        area_rows: list[dict[str, Any]],
+        map_rows: list[dict[str, Any]],
+        world_map_area_rows: list[dict[str, Any]],
+        spawn_zone_ids: set[int],
+    ) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]], dict[int, dict[str, Any]]]:
+        areas = {_integer(_row_value(row, "ID", "AreaID")): row for row in area_rows}
+        maps = {_integer(_row_value(row, "ID")): row for row in map_rows}
+        world_zone_ids = {
+            _integer(_row_value(row, "AreaID"))
+            for row in world_map_area_rows
+            if _integer(_row_value(row, "AreaID"))
+        }
+        instance_template_maps = {
+            _integer(_row_value(row, "map"))
+            for row in self._rows("instance_template")
+            if _clean_text(_row_value(row, "script"))
+        }
+        instance_maps = {
+            map_id
+            for map_id, row in maps.items()
+            if map_id in instance_template_maps
+            and _integer(_row_value(row, "MapType", "InstanceType")) in {1, 2}
+        }
+
+        outdoor_map_ids = {
+            map_id
+            for map_id, row in maps.items()
+            if _integer(_row_value(row, "MapType", "InstanceType")) == 0
+        }
+        for zone_id in spawn_zone_ids:
+            area = areas.get(zone_id, {})
+            if _integer(_row_value(area, "ContinentID", "MapID")) in outdoor_map_ids:
+                world_zone_ids.add(zone_id)
+        world_zone_ids.update(INSTANCE_PARENT_ZONE_IDS.get(map_id, 0) for map_id in instance_maps)
+        world_zone_ids.discard(0)
+
+        locations: list[dict[str, Any]] = []
+        zones_by_id: dict[int, dict[str, Any]] = {}
+        for zone_id in sorted(world_zone_ids):
+            area = areas.get(zone_id, {})
+            name = _clean_text(
+                _row_value(area, "AreaName_Lang_enUS", "Name_Lang_enUS", "Name", "name")
+            )
+            if not name:
+                continue
+            location = {
+                "location_key": _location_key(self.expansion, "zone", zone_id),
+                "expansion": self.expansion,
+                "location_type": "zone",
+                "source_id": zone_id,
+                "map_id": _integer(_row_value(area, "ContinentID", "MapID")),
+                "parent_zone_id": 0,
+                "name": name,
+                "display_name": name,
+            }
+            locations.append(location)
+            zones_by_id[zone_id] = location
+
+        boxes = []
+        for row in world_map_area_rows:
+            boxes.append(
+                {
+                    "map_id": _integer(_row_value(row, "MapID")),
+                    "area_id": _integer(_row_value(row, "AreaID")),
+                    "y1": _float(_row_value(row, "Y1")),
+                    "y2": _float(_row_value(row, "Y2")),
+                    "x1": _float(_row_value(row, "X1")),
+                    "x2": _float(_row_value(row, "X2")),
+                }
+            )
+
+        instances_by_map: dict[int, dict[str, Any]] = {}
+        for map_id in sorted(instance_maps):
+            row = maps[map_id]
+            map_type = _integer(_row_value(row, "MapType", "InstanceType"))
+            location_type = "raid" if map_type == 2 else "dungeon"
+            name = _clean_text(
+                _row_value(row, "MapName_Lang_enUS", "Name_Lang_enUS", "Name", "name")
+            )
+            if not name:
+                continue
+            parent_zone_id = INSTANCE_PARENT_ZONE_IDS.get(map_id, 0)
+            if not parent_zone_id:
+                entrance_map = _integer(_row_value(row, "EntranceMap"), -1)
+                entrance_x = _float(_row_value(row, "EntranceX"))
+                entrance_y = _float(_row_value(row, "EntranceY"))
+                candidates = []
+                if entrance_map >= 0 and (entrance_x or entrance_y):
+                    for box in boxes:
+                        if box["map_id"] != entrance_map:
+                            continue
+                        if min(box["y1"], box["y2"]) <= entrance_y <= max(
+                            box["y1"], box["y2"]
+                        ) and min(box["x1"], box["x2"]) <= entrance_x <= max(box["x1"], box["x2"]):
+                            size = abs((box["y1"] - box["y2"]) * (box["x1"] - box["x2"]))
+                            candidates.append((size, box["area_id"]))
+                if candidates:
+                    parent_zone_id = min(candidates)[1]
+            parent = zones_by_id.get(parent_zone_id)
+            display_name = f"{parent['name']} - {name}" if parent else name
+            location = {
+                "location_key": _location_key(self.expansion, location_type, map_id),
+                "expansion": self.expansion,
+                "location_type": location_type,
+                "source_id": map_id,
+                "map_id": map_id,
+                "parent_zone_id": parent_zone_id,
+                "name": name,
+                "display_name": display_name,
+            }
+            locations.append(location)
+            instances_by_map[map_id] = location
+
+        return (
+            sorted(locations, key=lambda row: (str(row["display_name"]), str(row["location_key"]))),
+            zones_by_id,
+            instances_by_map,
+        )
 
     def _quest_relations(self, relation: str) -> dict[int, set[tuple[str, int, str]]]:
         relationships: dict[int, set[tuple[str, int, str]]] = defaultdict(set)
@@ -1365,6 +1657,7 @@ def load_corpus_bundle(path: Path) -> CorpusBundle:
     _validate_relationships(parsed)
     counts = manifest.get("counts", {})
     expected_counts = {
+        "locations": len(parsed["locations.csv"]),
         "entities": len(parsed["entities.csv"]),
         "texts": len(parsed["texts.csv"]),
         "bindings": len(parsed["bindings.csv"]),
@@ -1376,6 +1669,7 @@ def load_corpus_bundle(path: Path) -> CorpusBundle:
             raise CorpusError(f"Manifest count does not match {key}.")
     return CorpusBundle(
         manifest=manifest,
+        locations=parsed["locations.csv"],
         entities=parsed["entities.csv"],
         texts=parsed["texts.csv"],
         bindings=parsed["bindings.csv"],
@@ -1393,6 +1687,22 @@ def _validate_relationships(files: dict[str, list[dict[str, str]]]) -> None:
             raise CorpusError(f"{label} contains duplicate {field} values.")
         return set(values)
 
+    location_ids = unique(files["locations.csv"], "location_key", "locations.csv")
+    zone_source_ids = {
+        (row["expansion"], row["source_id"])
+        for row in files["locations.csv"]
+        if row["location_type"] == "zone"
+    }
+    for row in files["locations.csv"]:
+        if row["location_type"] not in {"zone", "dungeon", "raid"}:
+            raise CorpusError(f"Location {row['location_key']} has an invalid type.")
+        if not row["display_name"]:
+            raise CorpusError(f"Location {row['location_key']} has no display name.")
+        if (
+            row["parent_zone_id"] != "0"
+            and (row["expansion"], row["parent_zone_id"]) not in zone_source_ids
+        ):
+            raise CorpusError(f"Location {row['location_key']} has a missing parent zone.")
     entity_ids = unique(files["entities.csv"], "entity_key", "entities.csv")
     content_ids = unique(files["texts.csv"], "content_id", "texts.csv")
     binding_ids = unique(files["bindings.csv"], "binding_id", "bindings.csv")
@@ -1415,6 +1725,9 @@ def _validate_relationships(files: dict[str, list[dict[str, str]]]) -> None:
             raise CorpusError(f"Binding {row['binding_id']} has an invalid active value.")
         if row["active"] == "0" and row["binding_id"] not in finding_binding_ids:
             raise CorpusError(f"Quarantined binding {row['binding_id']} has no documented finding.")
+    for row in files["entities.csv"]:
+        if row["zone_location_key"] and row["zone_location_key"] not in location_ids:
+            raise CorpusError(f"Entity {row['entity_key']} references a missing corpus location.")
     for row in files["triggers.csv"]:
         if row["binding_id"] not in binding_ids:
             raise CorpusError(f"Trigger {row['trigger_id']} references missing binding.")

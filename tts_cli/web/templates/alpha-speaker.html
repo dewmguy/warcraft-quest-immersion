@@ -33,7 +33,15 @@
           <label><span>Sex</span><select name="gender_id">{% for option in gender_options %}<option value="{{ option.gender_id }}" {% if npc.gender_id == option.gender_id %}selected{% endif %}>{{ option.gender_name }}</option>{% endfor %}</select><small>{% if 'gender_id' in record.manual_override_fields %}Manual override; preserved on corpus import.{% else %}Inferred from model metadata when available.{% endif %}</small></label>
           <label><span>Role or Occupation</span><select name="role">{% for value in role_options %}<option value="{{ value }}" {% if npc.role == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select><small>Character function or social position.</small></label>
           <label><span>Faction</span><select name="faction">{% for value in affiliation_options %}<option value="{{ value }}" {% if npc.faction == value %}selected{% endif %}>{{ value | replace('_',' ') | title }}</option>{% endfor %}</select><small>Political or organizational alignment.</small></label>
-          <label><span>Zone</span><input name="zone" value="{{ npc.zone }}" placeholder="Inferred when source area data exists"><small>Primary location associated with this NPC.</small></label>
+          {% set known_zone_keys = zone_options | map(attribute='location_key') | list %}
+          <label><span>Zone</span><select name="zone_location_key">
+            {% if npc.zone and npc.zone_location_key not in known_zone_keys %}<option value="" selected disabled>{{ npc.zone }} · Manual value</option>{% endif %}
+            {% for group, label in [('zone', 'Zones'), ('dungeon', 'Dungeons'), ('raid', 'Raids')] %}
+              <optgroup label="{{ label }}">
+                {% for option in zone_options if option.location_type == group %}<option value="{{ option.location_key }}" {% if npc.zone_location_key == option.location_key %}selected{% endif %}>{{ option.display_name }}</option>{% endfor %}
+              </optgroup>
+            {% endfor %}
+          </select><small>{% if 'zone_location_key' in record.manual_override_fields or 'zone' in record.manual_override_fields %}Manual override; preserved on corpus import.{% else %}Primary source location; instance-only NPCs include the outdoor zone and dungeon.{% endif %}</small></label>
           <label><span>Story Reach</span><select name="importance">{% for value,score in importance_scores.items() %}<option value="{{ value }}" {% if npc.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select><small>Qualitative reach mapped to an internal 10–100 score.</small></label>
         </div>
         <label><span>Character Context</span><textarea name="context_summary" rows="6">{{ npc.context_summary }}</textarea><small>Useful characterization and story context for a unique voice direction.</small></label>
