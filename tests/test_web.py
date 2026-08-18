@@ -168,27 +168,37 @@ def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bun
     assert "A Call to Adventure" not in restarted.text
 
 
-def test_quest_gossip_and_npc_filters_apply_immediately_and_use_one_clear_button(
+def test_quest_gossip_and_npc_filters_apply_immediately_and_show_contextual_clear_button(
     monkeypatch,
 ):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
         pages = [client.get(path) for path in ("/alpha", "/alpha/gossip", "/alpha/npcs")]
+        filtered_pages = [
+            client.get(path)
+            for path in ("/alpha?q=Marshal", "/alpha/gossip?q=Marshal", "/alpha/npcs?q=Marshal")
+        ]
 
     for page in pages:
         assert page.status_code == 200
         assert page.text.count("data-instant-filters") == 1
-        assert page.text.count("data-filter-clear") == 1
+        assert page.text.count("data-filter-clear") == 0
         assert 'type="search" name="q"' in page.text
         assert ">Filter</button>" not in page.text
         assert 'class="text-link"' not in page.text
+
+    for page in filtered_pages:
+        assert page.status_code == 200
+        assert page.text.count("data-filter-clear") == 1
         assert "fa-filter-circle-xmark" in page.text
+        assert page.text.index("data-filter-clear") < page.text.index("data-instant-filters")
 
     assert "<th>Status</th>" in pages[2].text
     assert "<th>Readiness</th>" not in pages[2].text
 
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
     assert 'document.querySelectorAll("[data-instant-filters]")' in script
+    assert '`[data-filter-clear][data-filter-form="${form.id}"]`' in script
     assert 'select.addEventListener("change", applyFilters)' in script
     assert 'search.addEventListener("input"' in script
     assert "window.setTimeout(applyFilters, 300)" in script

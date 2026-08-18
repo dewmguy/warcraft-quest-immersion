@@ -8,8 +8,9 @@
   </section>
 
   <section class="alpha-panel">
-    <div class="panel-heading"><div><h2>NPC Directory</h2><p>{{ "{:,}".format(listing.total) }} matching NPC{{ '' if listing.total == 1 else 's' }}</p></div></div>
-    <form class="filter-bar npc-filter-bar" method="get" action="/alpha/npcs" data-instant-filters>
+    {% set has_filters = filters.q or filters.zone or filters.race_id or filters.gender_id or filters.role or filters.faction or filters.importance or filters.voice_approach or filters.voice_state %}
+    <div class="panel-heading"><div><h2>NPC Directory</h2><p>{{ "{:,}".format(listing.total) }} matching NPC{{ '' if listing.total == 1 else 's' }}</p></div>{% if has_filters %}<button type="button" class="secondary filter-clear-button" data-filter-clear data-filter-form="npc-filters"><i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Clear</span></button>{% endif %}</div>
+    <form id="npc-filters" class="filter-bar npc-filter-bar" method="get" action="/alpha/npcs" data-instant-filters>
       <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ filters.q }}" placeholder="Name, ID, role, faction, zone, or context"></label>
       <label><span>Zone</span><select name="zone"><option value="">All</option>{% for group, label in [('zone', 'Zones'), ('dungeon', 'Dungeons'), ('raid', 'Raids')] %}<optgroup label="{{ label }}">{% for option in listing.locations if option.location_type == group %}<option value="{{ option.location_key }}" {% if filters.zone == option.location_key %}selected{% endif %}>{{ option.display_name }}</option>{% endfor %}</optgroup>{% endfor %}</select></label>
       <label><span>Race</span><select name="race_id"><option value="">All</option>{% for race in listing.races %}<option value="{{ race.race_id }}" {% if filters.race_id == race.race_id|string %}selected{% endif %}>{{ race.race_name | replace('nightelf','Night Elf') | title }}</option>{% endfor %}</select></label>
@@ -19,7 +20,6 @@
       <label><span>Story reach</span><select name="importance"><option value="">All</option>{% for value, score in importance_scores.items() %}<option value="{{ value }}" {% if filters.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select></label>
       <label><span>Voice approach</span><select name="voice_approach"><option value="">All</option>{% for value, label in [('baseline','Baseline'),('unique','Active unique'),('dormant','Dormant unique'),('unassigned','Unassigned')] %}<option value="{{ value }}" {% if filters.voice_approach == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
       <label><span>Voice readiness</span><select name="voice_state"><option value="">All</option><option value="needs_voice" {% if filters.voice_state == 'needs_voice' %}selected{% endif %}>Needs Voice</option><option value="ready" {% if filters.voice_state == 'ready' %}selected{% endif %}>Voice Ready</option></select></label>
-      <button type="button" class="secondary" data-filter-clear><i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Clear</span></button>
     </form>
 
     <div class="alpha-table-wrap">

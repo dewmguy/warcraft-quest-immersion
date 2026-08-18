@@ -16,7 +16,9 @@ let alphaMessageDismissed = false;
 
 for (const form of document.querySelectorAll("[data-instant-filters]")) {
   const search = form.querySelector('input[name="q"]');
-  const clearButton = form.querySelector("[data-filter-clear]");
+  const clearButton = document.querySelector(
+    `[data-filter-clear][data-filter-form="${form.id}"]`,
+  );
   let searchTimer = null;
 
   const filteredUrl = () => {
