@@ -53,6 +53,10 @@ def azerothcore_tables() -> dict[str, list[dict]]:
             {"CreatureID": 1, "CreatureDisplayID": 1001},
             {"CreatureID": 2, "CreatureDisplayID": 1002},
         ],
+        "creature_model_info": [
+            {"DisplayID": 1001, "Gender": 0},
+            {"DisplayID": 1002, "Gender": 1},
+        ],
         "creature": [
             {"guid": 1, "id1": 1, "zoneId": 12},
             {"guid": 2, "id1": 1, "zoneId": 12},
@@ -105,12 +109,16 @@ def azerothcore_tables() -> dict[str, list[dict]]:
             }
         ],
         "db_CreatureDisplayInfo": [
-            {"ID": 1001, "ExtendedDisplayInfoID": 2001},
-            {"ID": 1002, "ExtendedDisplayInfoID": 2002},
+            {"ID": 1001, "ModelID": 3001, "ExtendedDisplayInfoID": 2001},
+            {"ID": 1002, "ModelID": 3002, "ExtendedDisplayInfoID": 2002},
         ],
         "db_CreatureDisplayInfoExtra": [
             {"ID": 2001, "DisplayRaceID": 1, "DisplaySexID": 0},
             {"ID": 2002, "DisplayRaceID": 1, "DisplaySexID": 1},
+        ],
+        "db_CreatureModelData": [
+            {"ID": 3001, "ModelPath": "Creature\\Human\\HumanMale.mdx"},
+            {"ID": 3002, "ModelPath": "Creature\\Human\\HumanFemale.mdx"},
         ],
         "db_FactionTemplate": [{"ID": 11, "Faction": 72}],
         "db_Faction": [{"ID": 72, "Name_Lang_enUS": "Stormwind"}],

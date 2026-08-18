@@ -25,26 +25,27 @@ def test_baseline_builder_is_deterministic_and_complete():
 
     assert build_baseline_voice_profiles.build() == (profile_count, preview_count)
     assert [_digest(path) for path in paths] == first_hashes
-    assert (profile_count, preview_count) == (46, 230)
+    assert (profile_count, preview_count) == (98, 490)
 
 
 def test_profile_matrix_covers_every_legacy_race_and_gender():
     review = load_phase2_review()
     combinations = {(profile["race_id"], profile["gender_id"]) for profile in review["profiles"]}
 
+    race_payload = json.loads((PROFILE_DIR / "race-archetypes.json").read_text(encoding="utf-8"))
     assert combinations == {
-        (race_id, gender_id) for race_id in [-1, *range(1, 23)] for gender_id in [0, 1]
+        (race["race_id"], gender_id) for race in race_payload["archetypes"] for gender_id in [0, 1]
     }
     assert review["manifest"]["observed_profile_count"] == 33
-    assert review["manifest"]["planned_fallback_count"] == 11
+    assert review["manifest"]["planned_fallback_count"] == 63
     assert review["manifest"]["system_profile_count"] == 2
-    assert review["preview_states"] == {"ungenerated": 230}
+    assert review["preview_states"] == {"ungenerated": 490}
 
 
 def test_every_race_has_an_explicit_auditable_accent_contract():
     payload = json.loads((PROFILE_DIR / "race-archetypes.json").read_text(encoding="utf-8"))
 
-    assert len(payload["archetypes"]) == 23
+    assert len(payload["archetypes"]) == 49
     for race in payload["archetypes"]:
         assert race["accent_target"].startswith("Native English")
         assert len(race["accent_avoid"]) >= 40

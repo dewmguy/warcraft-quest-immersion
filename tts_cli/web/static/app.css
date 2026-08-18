@@ -541,6 +541,14 @@ dialog .actions { justify-content: flex-end; }
 .reference-upload > summary > .fa-chevron-down { color: #8f8793; font-size: .7rem; transition: transform .16s ease; }
 .reference-upload[open] > summary > .fa-chevron-down { transform: rotate(180deg); }
 .reference-upload > form { border-top: 1px solid #302c33; padding: 12px; }
+.reference-dropzone { position: relative; display: grid; justify-items: center; gap: 5px; border: 1px dashed #655b68; border-radius: 7px; padding: 18px 14px; background: #111014; color: #d9d0db; text-align: center; cursor: pointer; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+.reference-dropzone:hover, .reference-dropzone:focus-within { border-color: var(--gold-bright); background: #18151a; }
+.reference-dropzone.is-dragging { border-color: var(--success); background: #142019; box-shadow: inset 0 0 0 1px var(--success); }
+.reference-dropzone input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.reference-dropzone-icon { color: var(--gold-bright); font-size: 1.25rem; }
+.reference-dropzone strong { font-size: .84rem; }
+.reference-dropzone small { max-width: 620px; color: #aaa0ad; font-size: .7rem; line-height: 1.45; }
+.reference-upload form[aria-busy="true"] .reference-dropzone { opacity: .7; pointer-events: none; }
 .prompt-history { overflow: hidden; margin-top: -4px; border: 1px solid #39343d; border-radius: 6px; background: #111014; }
 .prompt-history > summary { display: grid; grid-template-columns: 1fr auto 16px; align-items: center; gap: 8px; padding: 8px 10px; color: #dec274; cursor: pointer; font-size: .76rem; font-weight: 800; list-style: none; }
 .prompt-history > summary::-webkit-details-marker { display: none; }

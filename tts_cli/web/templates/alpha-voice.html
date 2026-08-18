@@ -84,9 +84,9 @@
       <div class="panel-heading"><div><h2>Reference Library</h2><p>Source clips for voice creation.</p></div><span>{{ voice.clips|length }} clips</span></div>
       <details class="reference-upload">
         <summary><span><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i> Add Reference Clips</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
-        <form data-upload-form data-url="/api/alpha/voices/{{ voice.voice_id }}/reference-clips">
-          <label><span>Audio Files</span><input type="file" name="file" accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac" multiple required><small>Select up to 20 MP3, WAV, M4A, OGG, or FLAC files. Use clean recordings containing one voice; MP3 should be 192 kbps or higher.</small></label>
-          <label><span>Description</span><textarea name="provenance" rows="3" placeholder="Source, NPC or voice, scene, and why these clips are representative" required></textarea><small>Applied to every file in this batch.</small></label>
+        <form data-upload-form data-reference-upload data-url="/api/alpha/voices/{{ voice.voice_id }}/reference-clips">
+          <label class="reference-dropzone" data-reference-dropzone><input type="file" name="file" data-reference-file-input accept=".mp3,.wav,.m4a,.ogg,.flac,audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac" multiple required><span class="reference-dropzone-icon"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i></span><strong>Drop audio files here or choose files</strong><small data-reference-drop-status>Up to 20 MP3, WAV, M4A, OGG, or FLAC files. Use clean recordings containing one voice; MP3 should be 192 kbps or higher.</small></label>
+          <label><span>Description (Optional)</span><textarea name="provenance" rows="3" placeholder="Source, NPC or voice, scene, and why these clips are representative"></textarea><small>Applied to every file in this batch.</small></label>
           <button type="submit"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><span>Store Clips</span></button>
         </form>
       </details>

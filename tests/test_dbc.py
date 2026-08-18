@@ -16,8 +16,13 @@ def _write_dbc(path: Path, field_count: int, *, name_field: int | None = None) -
     strings = b"\0"
     if name_field is not None:
         values[name_field] = len(strings)
-        strings += b"Explorer's League\0"
+        strings += (
+            b"Creature\\Human\\HumanMale.m2\0"
+            if path.name == "CreatureModelData.dbc"
+            else b"Explorer's League\0"
+        )
     if path.name == "CreatureDisplayInfo.dbc":
+        values[1] = 60
         values[3] = 70
     elif path.name == "CreatureDisplayInfoExtra.dbc":
         values[1:3] = [3, 1]
@@ -52,13 +57,14 @@ def test_convert_raw_335a_dbc_files_to_minimal_enrichment_sql(dbc_directory: Pat
 
     sql = output.read_text(encoding="utf-8")
     assert "CREATE TABLE `db_CreatureDisplayInfo`" in sql
-    assert "(7, 70)" in sql
+    assert "(7, 60, 70)" in sql
     assert "(7, 3, 1)" in sql
+    assert "Creature\\\\Human\\\\HumanMale.m2" in sql
     assert "Explorer\\'s League" in sql
     assert report["build"] == 12340
     assert report["locale"] == "enUS"
     assert report["tables"]["db_AreaTable"] == 1
-    assert len(report["artifacts"]) == 5
+    assert len(report["artifacts"]) == 6
     saved_manifest = json.loads(Path(report["manifest"]).read_text(encoding="utf-8"))
     assert saved_manifest["output_sha256"] == report["output_sha256"]
 

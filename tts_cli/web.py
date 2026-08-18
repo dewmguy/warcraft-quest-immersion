@@ -130,6 +130,34 @@ app = FastAPI(title="Warcraft Quest Immersion", version="0.1.0", lifespan=lifesp
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
 
+NPC_RACE_LABELS = {
+    "bloodelf": "Blood Elf",
+    "felorc": "Fel Orc",
+    "foresttroll": "Forest Troll",
+    "icetroll": "Ice Troll",
+    "nightelf": "Night Elf",
+    "northrendskeleton": "Northrend Skeleton",
+    "titanforged": "Titan-Forged",
+}
+NPC_RACE_OPTIONS = [
+    {"race_id": race_id, "race_name": NPC_RACE_LABELS.get(race_name, race_name.title())}
+    for race_id, race_name in sorted(
+        (
+            (race_id, race_name)
+            for race_id, race_name in RACE_DICT.items()
+            if race_id <= -1 or 1 <= race_id <= 22
+        ),
+        key=lambda item: NPC_RACE_LABELS.get(item[1], item[1]).lower(),
+    )
+]
+NPC_GENDER_OPTIONS = [
+    {
+        "gender_id": gender_id,
+        "gender_name": "Unspecified / Non-Gendered" if gender_id == 2 else name.title(),
+    }
+    for gender_id, name in sorted(GENDER_DICT.items())
+]
+
 
 def npc_profile_path(entity_type: str, entity_id: int, expansion: str = "3.3.5") -> str:
     if expansion == "3.3.5":
@@ -546,6 +574,8 @@ def alpha_npc(
                 role_options=ROLE_OPTIONS,
                 affiliation_options=AFFILIATION_OPTIONS,
                 importance_scores=IMPORTANCE_SCORES,
+                race_options=NPC_RACE_OPTIONS,
+                gender_options=NPC_GENDER_OPTIONS,
             ),
         )
     except AlphaError as error:
@@ -569,6 +599,8 @@ def alpha_npc_scoped(
                 role_options=ROLE_OPTIONS,
                 affiliation_options=AFFILIATION_OPTIONS,
                 importance_scores=IMPORTANCE_SCORES,
+                race_options=NPC_RACE_OPTIONS,
+                gender_options=NPC_GENDER_OPTIONS,
             ),
         )
     except AlphaError as error:

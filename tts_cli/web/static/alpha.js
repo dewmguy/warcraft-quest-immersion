@@ -655,21 +655,75 @@ if (deliveryBatchButton) {
   syncDeliveryBatchButton();
 }
 
+const uploadingForms = new WeakSet();
+
+async function uploadForm(form) {
+  if (uploadingForms.has(form)) return;
+  uploadingForms.add(form);
+  form.setAttribute("aria-busy", "true");
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.disabled = true;
+  try {
+    const payload = await runAlphaAction({
+      url: form.dataset.url,
+      method: "POST",
+      body: new FormData(form),
+    });
+    form.reset();
+    showAlphaMessage(payload.message || "Uploaded.", "complete");
+    window.setTimeout(() => window.location.reload(), 350);
+  } catch (error) {
+    showAlphaMessage(error.message, "failed");
+  } finally {
+    uploadingForms.delete(form);
+    form.removeAttribute("aria-busy");
+    if (submitButton) submitButton.disabled = false;
+  }
+}
+
 for (const form of document.querySelectorAll("[data-upload-form]")) {
-  form.addEventListener("submit", async (event) => {
+  form.addEventListener("submit", (event) => {
     event.preventDefault();
-    try {
-      const payload = await runAlphaAction({
-        url: form.dataset.url,
-        method: "POST",
-        body: new FormData(form),
-      });
-      form.reset();
-      showAlphaMessage(payload.message || "Uploaded.", "complete");
-      window.setTimeout(() => window.location.reload(), 350);
-    } catch (error) {
-      showAlphaMessage(error.message, "failed");
+    uploadForm(form);
+  });
+}
+
+for (const dropZone of document.querySelectorAll("[data-reference-dropzone]")) {
+  const form = dropZone.closest("[data-reference-upload]");
+  const input = form?.querySelector("[data-reference-file-input]");
+  const status = dropZone.querySelector("[data-reference-drop-status]");
+  if (!form || !input) continue;
+  let dragDepth = 0;
+  const setDragging = (active) => dropZone.classList.toggle("is-dragging", active);
+  dropZone.addEventListener("dragenter", (event) => {
+    event.preventDefault();
+    dragDepth += 1;
+    setDragging(true);
+  });
+  dropZone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  });
+  dropZone.addEventListener("dragleave", (event) => {
+    event.preventDefault();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) setDragging(false);
+  });
+  dropZone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    dragDepth = 0;
+    setDragging(false);
+    const files = [...(event.dataTransfer?.files || [])];
+    if (!files.length) return;
+    if (files.length > 20) {
+      showAlphaMessage("Drop no more than 20 reference files at once.", "failed");
+      return;
     }
+    const transfer = new DataTransfer();
+    for (const file of files) transfer.items.add(file);
+    input.files = transfer.files;
+    if (status) status.textContent = `${files.length} file${files.length === 1 ? "" : "s"} uploading…`;
+    form.requestSubmit();
   });
 }
 

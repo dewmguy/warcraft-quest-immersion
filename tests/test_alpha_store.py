@@ -188,7 +188,7 @@ def test_import_prepares_quest_spoken_text_but_leaves_gossip_for_review(store: A
     assert dashboard["counts"]["dialogue"] == 4
     assert dashboard["counts"]["speakers"] == 3
     assert dashboard["counts"]["npcs"] == 2
-    assert dashboard["counts"]["baseline_voices"] == 46
+    assert dashboard["counts"]["baseline_voices"] == 98
     assert dashboard["states"] == {"needs_text": 1, "needs_voice": 3}
     assert all(
         (row["revision_id"] is not None) == (row["source"] != "gossip") for row in listing["rows"]
@@ -203,7 +203,7 @@ def test_import_prepares_quest_spoken_text_but_leaves_gossip_for_review(store: A
         "voices": {
             "label": "Baseline deliveries",
             "complete": 0,
-            "total": 230,
+            "total": 490,
             "percent": 0.0,
             "href": "/alpha/races?completion=incomplete",
         },
@@ -769,7 +769,7 @@ def test_initialize_removes_legacy_brackets_from_saved_voice_actor_notes(store: 
 
 def test_incomplete_baseline_filter_requires_all_five_delivery_presets(store: AlphaStore):
     voice = store.get_voice(store.list_voices("baseline")[0]["voice_id"])
-    assert len(store.list_voices("baseline", "incomplete")) == 46
+    assert len(store.list_voices("baseline", "incomplete")) == 98
 
     for preset in voice["delivery_presets"]:
         store.update_delivery_preset(
@@ -783,7 +783,7 @@ def test_incomplete_baseline_filter_requires_all_five_delivery_presets(store: Al
             },
         )
 
-    assert len(store.list_voices("baseline", "incomplete")) == 45
+    assert len(store.list_voices("baseline", "incomplete")) == 97
     assert [item["voice_id"] for item in store.list_voices("baseline", "complete")] == [
         voice["voice_id"]
     ]

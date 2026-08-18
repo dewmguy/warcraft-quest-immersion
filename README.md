@@ -57,9 +57,9 @@ chosen ElevenLabs model.
 
 ## Voice baseline registry
 
-Phase 2 artifacts live in `voice_profiles/`. The registry contains 46 complete
-legacy race/gender profiles, five controlled delivery presets, locked comparison
-scripts, and a 230-row placeholder preview matrix. Rebuild and validate the
+Phase 2 artifacts live in `voice_profiles/`. The registry contains 98 complete
+legacy and model-derived race/gender profiles, five controlled delivery presets,
+locked comparison scripts, and a 490-row placeholder preview matrix. Rebuild and validate the
 generated CSV and manifest artifacts with:
 
 ```powershell

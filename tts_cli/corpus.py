@@ -16,6 +16,7 @@ from typing import Any, Protocol
 import pymysql
 
 from tts_cli.consts import GENDER_DICT, RACE_DICT
+from tts_cli.npc_identity import infer_creature_identity
 
 CORPUS_SCHEMA_VERSION = 1
 EXTRACTOR_VERSION = "1.0"
@@ -263,6 +264,7 @@ class AzerothCoreCorpusExtractor:
         "quest_request_items",
         "quest_offer_reward",
         "creature_template",
+        "creature_model_info",
         "creature_queststarter",
         "creature_questender",
         "gameobject_template",
@@ -278,6 +280,7 @@ class AzerothCoreCorpusExtractor:
             "db_CreatureDisplayInfoExtra",
             "creaturedisplayinfoextra_dbc",
         ),
+        "creature model-data DBC": ("db_CreatureModelData", "creaturemodeldata_dbc"),
         "faction-template DBC": ("db_FactionTemplate", "factiontemplate_dbc"),
         "faction DBC": ("db_Faction", "faction_dbc"),
         "area-table DBC": ("db_AreaTable", "areatable_dbc"),
@@ -374,6 +377,7 @@ class AzerothCoreCorpusExtractor:
                 ("CreatureID", "entry"),
                 ("CreatureDisplayID", "DisplayID", "displayid"),
             ),
+            "creature_model_info": (("DisplayID", "modelid"), ("Gender", "gender")),
             "creature": (("id1", "id", "entry"), ("zoneId", "zoneid", "areaId", "areaid")),
             "conditions": (
                 ("SourceTypeOrReferenceId", "source_type"),
@@ -395,6 +399,7 @@ class AzerothCoreCorpusExtractor:
                     ("DisplayRaceID",),
                     ("DisplaySexID",),
                 ),
+                "creature model-data DBC": (("ID",), ("ModelPath",)),
                 "faction-template DBC": (("ID",), ("Faction", "FactionID", "faction_id")),
                 "faction DBC": (("ID",), ("Name_Lang_enUS", "Name_enUS", "Name", "name")),
                 "area-table DBC": (
@@ -470,8 +475,18 @@ class AzerothCoreCorpusExtractor:
         extra_rows = self._optional_rows(
             "db_CreatureDisplayInfoExtra", "creaturedisplayinfoextra_dbc"
         )
+        model_data_rows = self._optional_rows("db_CreatureModelData", "creaturemodeldata_dbc")
+        model_info_rows = (
+            self._rows("creature_model_info")
+            if self.source.has_table("creature_model_info")
+            else []
+        )
         displays = {_integer(_row_value(row, "ID")): row for row in display_rows}
         extras = {_integer(_row_value(row, "ID")): row for row in extra_rows}
+        model_data = {_integer(_row_value(row, "ID")): row for row in model_data_rows}
+        model_info = {
+            _integer(_row_value(row, "DisplayID", "modelid")): row for row in model_info_rows
+        }
         faction_template_rows = self._optional_rows("db_FactionTemplate", "factiontemplate_dbc")
         faction_rows = self._optional_rows("db_Faction", "faction_dbc")
         area_rows = self._optional_rows("db_AreaTable", "areatable_dbc")
@@ -529,8 +544,21 @@ class AzerothCoreCorpusExtractor:
                         model_ids.add(model)
             race_candidates: set[int] = set()
             gender_candidates: set[int] = set()
+            model_genders: set[int] = set()
+            model_paths: set[str] = set()
             for model_id in model_ids:
                 display = displays.get(model_id, {})
+                model_data_id = _integer(_row_value(display, "ModelID", "model_id"))
+                model_path = _clean_text(
+                    _row_value(model_data.get(model_data_id, {}), "ModelPath", "model_path")
+                )
+                if model_path:
+                    model_paths.add(model_path)
+                model_gender = _integer(
+                    _row_value(model_info.get(model_id, {}), "Gender", "gender"), -1
+                )
+                if model_gender in GENDER_DICT:
+                    model_genders.add(model_gender)
                 extra_id = _integer(
                     _row_value(display, "ExtendedDisplayInfoID", "extendeddisplayinfoid")
                 )
@@ -540,14 +568,22 @@ class AzerothCoreCorpusExtractor:
                     gender_candidates.add(_integer(_row_value(extra, "DisplaySexID"), -1))
             race_candidates.discard(-1)
             gender_candidates.discard(-1)
-            ambiguous = len(race_candidates) > 1 or len(gender_candidates) > 1
-            missing_model = (
-                entity_type == "creature"
-                and (len(race_candidates) != 1 or len(gender_candidates) != 1)
-                and not ambiguous
+            identity = (
+                infer_creature_identity(
+                    name=name,
+                    creature_type=_integer(_row_value(template, "type")),
+                    race_candidates=race_candidates,
+                    gender_candidates=gender_candidates,
+                    model_paths=model_paths,
+                    model_genders=model_genders,
+                )
+                if entity_type == "creature"
+                else None
             )
-            race_id = min(race_candidates, default=-1)
-            gender_id = min(gender_candidates, default=0)
+            ambiguous = bool(identity and identity.ambiguous)
+            missing_model = entity_type == "creature" and not model_ids
+            race_id = identity.race_id if identity else -1
+            gender_id = identity.gender_id if identity else 0
             zones = zone_counts.get(entity_id, Counter())
             primary_zone = (
                 sorted(zones.items(), key=lambda item: (-item[1], item[0]))[0][0] if zones else 0
@@ -606,6 +642,11 @@ class AzerothCoreCorpusExtractor:
                 "inference_json": _json(
                     {
                         "role_basis": "name, subname, and NPC service flags",
+                        "race_basis": identity.race_basis if identity else "delivery endpoint",
+                        "gender_basis": identity.gender_basis if identity else "delivery endpoint",
+                        "model_paths": sorted(model_paths),
+                        "model_genders": sorted(model_genders),
+                        "creature_type": _integer(_row_value(template, "type")),
                         "zone_spawn_counts": dict(sorted(zones.items())),
                     }
                 ),

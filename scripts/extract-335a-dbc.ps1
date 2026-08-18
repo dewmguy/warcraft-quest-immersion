@@ -41,6 +41,7 @@ foreach ($Archive in $Archives) {
 $DBCNames = @(
     "CreatureDisplayInfo.dbc",
     "CreatureDisplayInfoExtra.dbc",
+    "CreatureModelData.dbc",
     "FactionTemplate.dbc",
     "Faction.dbc",
     "AreaTable.dbc"

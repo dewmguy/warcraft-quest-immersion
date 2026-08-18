@@ -1,6 +1,32 @@
 # https://wowpedia.fandom.com/wiki/RaceId
 RACE_DICT = {
     -1: "narrator",
+    -100: "beast",
+    -101: "dragonkin",
+    -102: "demon",
+    -103: "elemental",
+    -104: "giant",
+    -105: "mechanical",
+    -106: "humanoid",
+    -107: "ethereal",
+    -108: "furbolg",
+    -109: "earthen",
+    -110: "ogre",
+    -111: "wolvar",
+    -112: "gorloc",
+    -113: "dryad",
+    -114: "keeper",
+    -115: "arakkoa",
+    -116: "murloc",
+    -117: "sporeling",
+    -118: "naaru",
+    -119: "centaur",
+    -120: "satyr",
+    -121: "gnoll",
+    -122: "quillboar",
+    -123: "trogg",
+    -124: "titanforged",
+    -125: "spirit",
     1: "human",
     2: "orc",
     3: "dwarf",
@@ -43,7 +69,7 @@ RACE_DICT = {
 }
 
 
-GENDER_DICT = {0: "male", 1: "female"}
+GENDER_DICT = {0: "male", 1: "female", 2: "unspecified"}
 
 RACE_DICT_INV = {v: k for k, v in RACE_DICT.items()}
 GENDER_DICT_INV = {v: k for k, v in GENDER_DICT.items()}

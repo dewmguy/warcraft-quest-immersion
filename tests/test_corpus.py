@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import zipfile
 
@@ -71,6 +72,43 @@ def test_extractor_reconciles_shared_quest_givers_and_nested_gossip(azerothcore_
     )
     disabled = next(row for row in bundle.bindings if row["quest_id"] == 200)
     assert disabled["active"] == 0
+
+
+def test_extractor_uses_model_path_and_model_info_when_display_extra_is_absent(
+    azerothcore_tables,
+):
+    tables = copy.deepcopy(azerothcore_tables)
+    tables["creature_template"].append(
+        {
+            "entry": 3,
+            "name": "Billy Maclure",
+            "subname": "",
+            "faction": 11,
+            "npcflag": 2,
+            "gossip_menu_id": 0,
+            "type": 7,
+        }
+    )
+    tables["creature_template_model"].append({"CreatureID": 3, "CreatureDisplayID": 1003})
+    tables["creature_model_info"].append({"DisplayID": 1003, "Gender": 0})
+    tables["db_CreatureDisplayInfo"].append(
+        {"ID": 1003, "ModelID": 3003, "ExtendedDisplayInfoID": 0}
+    )
+    tables["db_CreatureModelData"].append(
+        {"ID": 3003, "ModelPath": r"Creature\HumanMaleKid\HumanMaleKid.mdx"}
+    )
+    tables["creature_queststarter"].append({"id": 3, "quest": 100})
+
+    bundle = extract(tables)
+    billy = next(row for row in bundle.entities if row["entity_key"] == "3.3.5:creature:3")
+
+    assert billy["race_name"] == "human"
+    assert billy["gender_name"] == "male"
+    assert billy["status"] == "active"
+    assert "CreatureModelData.ModelPath" in billy["inference_json"]
+    assert any(
+        row["entity_key"] == billy["entity_key"] and row["active"] == 1 for row in bundle.bindings
+    )
 
 
 def test_current_azerothcore_version_table_is_recorded(azerothcore_tables):
@@ -232,6 +270,14 @@ def test_atomic_import_preserves_overrides_and_shares_spoken_text(
 
     assert store.import_corpus_bundle(corpus_bundle_path)["counts"]["added"] == 0
     assert store.get_speaker(rowan["speaker_id"])["speaker"]["zone"] == "Manual Testing Zone"
+
+    store.update_speaker(rowan["speaker_id"], {"race_id": 3, "gender_id": 1})
+    assert store.import_corpus_bundle(corpus_bundle_path)["counts"]["added"] == 0
+    manually_corrected = store.get_speaker(rowan["speaker_id"])
+    assert manually_corrected["speaker"]["race_name"] == "dwarf"
+    assert manually_corrected["speaker"]["gender_name"] == "female"
+    assert manually_corrected["speaker"]["voice_id"] == "baseline--dwarf-female"
+    assert {"race_id", "gender_id"}.issubset(manually_corrected["manual_override_fields"])
 
     changed_tables = {
         name: [dict(row) for row in rows] for name, rows in azerothcore_tables.items()

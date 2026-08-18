@@ -125,9 +125,11 @@ def build() -> tuple[int, int]:
 
     if set(genders) != {0, 1}:
         raise ValueError("Phase 2 requires male and female presentation records")
-    expected_races = set(range(-1, 23)) - {0}
-    if set(races) != expected_races:
-        raise ValueError(f"Legacy race registry must contain IDs -1 and 1-22; got {sorted(races)}")
+    required_legacy_races = set(range(-1, 23)) - {0}
+    if not required_legacy_races.issubset(races):
+        raise ValueError(
+            f"Race registry must retain narrator and legacy IDs 1-22; got {sorted(races)}"
+        )
     if set(presets) != set(scripts):
         raise ValueError("Every delivery preset must have exactly one evaluation script")
     if preset_payload.get("approval_order") != [

@@ -490,6 +490,9 @@ def test_voice_page_hides_missing_provider_id_and_explains_creation_paths(monkey
     assert "Stored Reference Clips" in page.text
     assert '<details class="reference-upload">' in page.text
     assert "Add Reference Clips" in page.text
+    assert "data-reference-dropzone" in page.text
+    assert "Drop audio files here or choose files" in page.text
+    assert "Description (Optional)" in page.text
     assert "https://kit.fontawesome.com/666b0b7246.js" in page.text
     assert "MP3 should be 192 kbps or higher" in page.text
     assert "candidate-generation-note" not in page.text
@@ -1343,6 +1346,17 @@ def test_reference_library_accepts_several_audio_files_at_once(monkeypatch):
     assert len(web.alpha_store.get_voice(voice_id)["clips"]) == 1
 
 
+def test_reference_library_dropzone_uploads_immediately():
+    script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
+    stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
+
+    assert 'document.querySelectorAll("[data-reference-dropzone]")' in script
+    assert 'dropZone.addEventListener("drop"' in script
+    assert "input.files = transfer.files" in script
+    assert "form.requestSubmit()" in script
+    assert ".reference-dropzone.is-dragging" in stylesheet
+
+
 def test_audio_disclosures_play_on_expand_and_collapse_the_previous_item():
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
 
@@ -1397,7 +1411,7 @@ def test_progress_cards_open_prefiltered_content_and_voice_queues(monkeypatch):
     assert '<option value="gossip"' not in quests.text
     assert "1 matching lines" in gossip.text
     assert "Incomplete race / gender profiles" in baselines.text
-    assert "46 profiles" in baselines.text
+    assert "98 profiles" in baselines.text
 
 
 def test_quest_gossip_and_npc_indexes_are_exclusive_and_filterable(monkeypatch):
@@ -1473,6 +1487,9 @@ def test_npc_profile_uses_star_toggle_and_normalized_form_layout(monkeypatch):
     assert "Voice Approach" not in page.text
     assert "Faction" in page.text
     assert "Affiliation" not in page.text
+    assert '<select name="race_id">' in page.text
+    assert '<select name="gender_id">' in page.text
+    assert "Inferred from the client model and source database." in page.text
     assert 'class="form-grid npc-form-grid"' in page.text
     stylesheet = (web.WEB_DIR / "static" / "app.css").read_text(encoding="utf-8")
     assert ".npc-title-row h1 { margin-right: 2px; font-size: 1em; }" in stylesheet
@@ -1481,6 +1498,23 @@ def test_npc_profile_uses_star_toggle_and_normalized_form_layout(monkeypatch):
     assert "font-size: 1em;" in stylesheet
     assert ".npc-form-grid label { grid-template-rows:" in stylesheet
     assert ".npc-form-grid select, .npc-form-grid input { min-height: 42px;" in stylesheet
+
+
+def test_npc_race_and_sex_can_be_manually_corrected(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        saved = client.patch(
+            "/api/alpha/npcs/creature-90001",
+            headers={"X-WQI-Action": "confirmed"},
+            json={"race_id": 3, "gender_id": 1},
+        )
+        page = client.get("/alpha/npcs/creature/90001")
+
+    assert saved.status_code == 200
+    assert saved.json()["npc"]["npc"]["race_name"] == "dwarf"
+    assert saved.json()["npc"]["npc"]["gender_name"] == "female"
+    assert saved.json()["npc"]["npc"]["voice_id"] == "baseline--dwarf-female"
+    assert page.text.count("Manual override; preserved on corpus import.") == 2
 
 
 def test_settings_owns_provider_model_selection(monkeypatch):
@@ -1603,8 +1637,8 @@ def test_phase2_source_artifact_remains_available(monkeypatch):
         payload = client.get("/api/phase2")
 
     assert payload.status_code == 200
-    assert payload.json()["manifest"]["profile_count"] == 46
-    assert payload.json()["preview_states"] == {"ungenerated": 230}
+    assert payload.json()["manifest"]["profile_count"] == 98
+    assert payload.json()["preview_states"] == {"ungenerated": 490}
 
 
 def test_dashboard_requires_authentication(monkeypatch):

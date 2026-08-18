@@ -25,7 +25,11 @@ DBC_DEFINITIONS = (
         "CreatureDisplayInfo.dbc",
         "db_CreatureDisplayInfo",
         16,
-        (("ID", "integer", 0), ("ExtendedDisplayInfoID", "integer", 3)),
+        (
+            ("ID", "integer", 0),
+            ("ModelID", "integer", 1),
+            ("ExtendedDisplayInfoID", "integer", 3),
+        ),
     ),
     DBCDefinition(
         "CreatureDisplayInfoExtra.dbc",
@@ -36,6 +40,12 @@ DBC_DEFINITIONS = (
             ("DisplayRaceID", "integer", 1),
             ("DisplaySexID", "integer", 2),
         ),
+    ),
+    DBCDefinition(
+        "CreatureModelData.dbc",
+        "db_CreatureModelData",
+        28,
+        (("ID", "integer", 0), ("ModelPath", "string", 2)),
     ),
     DBCDefinition(
         "FactionTemplate.dbc",

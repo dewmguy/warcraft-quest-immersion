@@ -39,7 +39,7 @@ language instead of a clear content-production workflow. It has been retired.
 The replacement Alpha works across the entire imported source and organizes the
 real production records: dialogue, speakers, spoken-text revisions, baseline and
 unique voices, reference clips, provider attempts, audio candidates, approvals,
-and later addon-ready exports. Each workspace displays progress for 230 baseline
+and later addon-ready exports. Each workspace displays progress for 490 baseline
 race/gender/delivery presets, quest audio, and gossip audio.
 
 The certified 3.3.5 enUS extractor, corpus bundle contract, validate/dry-run/

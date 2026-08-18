@@ -4,7 +4,7 @@
 
 These are production defaults for reusable race/gender voices, not claims that every member of a Warcraft race speaks identically. NPC-specific voices may override them when recorded dialogue, birthplace, social class, or story context provides better evidence.
 
-Gender presentation changes pitch and resonance only. It does not change the accent target, so the 23 reviewed race contracts cover all 46 male/female baseline profiles.
+Gender presentation changes pitch and resonance only. It does not change the accent target, so the 49 reviewed race and model-family contracts cover all 98 male/female baseline profiles.
 
 ## Research method
 

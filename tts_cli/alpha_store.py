@@ -1907,16 +1907,79 @@ class AlphaStore:
                         ),
                     )
                 else:
+                    existing_speaker = connection.execute(
+                        "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
+                    ).fetchone()
+                    manual_fields = {
+                        str(row["field_name"])
+                        for row in connection.execute(
+                            "SELECT field_name FROM speaker_manual_overrides WHERE speaker_id=?",
+                            (speaker_id,),
+                        )
+                    }
+                    imported_race_id = int(entity["race_id"])
+                    imported_gender_id = int(entity["gender_id"])
+                    resolved_race_id = (
+                        int(existing_speaker["race_id"])
+                        if "race_id" in manual_fields
+                        else imported_race_id
+                    )
+                    resolved_gender_id = (
+                        int(existing_speaker["gender_id"])
+                        if "gender_id" in manual_fields
+                        else imported_gender_id
+                    )
+                    resolved_race_name = RACE_DICT.get(resolved_race_id, f"race-{resolved_race_id}")
+                    resolved_gender_name = GENDER_DICT.get(
+                        resolved_gender_id, f"gender-{resolved_gender_id}"
+                    )
+                    resolved_voice_id = existing_speaker["voice_id"]
+                    current_scope = connection.execute(
+                        "SELECT scope FROM voices WHERE voice_id=?", (resolved_voice_id,)
+                    ).fetchone()
+                    if "voice_id" not in manual_fields and (
+                        resolved_voice_id is None
+                        or (current_scope and current_scope["scope"] == "baseline")
+                    ):
+                        matching_baseline_id = (
+                            f"baseline--{resolved_race_name}-{resolved_gender_name}"
+                        )
+                        resolved_voice_id = (
+                            matching_baseline_id
+                            if connection.execute(
+                                "SELECT 1 FROM voices WHERE voice_id=?",
+                                (matching_baseline_id,),
+                            ).fetchone()
+                            else None
+                        )
                     connection.execute(
                         "UPDATE speakers SET name=?, race_id=?, gender_id=?, race_name=?, "
-                        "gender_name=?, source_snapshot_id=?, updated_at=? WHERE speaker_id=?",
+                        "gender_name=?, voice_id=?, source_snapshot_id=?, updated_at=? "
+                        "WHERE speaker_id=?",
                         (
                             str(entity["name"]),
-                            int(entity["race_id"]),
-                            int(entity["gender_id"]),
-                            str(entity["race_name"]),
-                            str(entity["gender_name"]),
+                            resolved_race_id,
+                            resolved_gender_id,
+                            resolved_race_name,
+                            resolved_gender_name,
+                            resolved_voice_id,
                             snapshot_id,
+                            now,
+                            speaker_id,
+                        ),
+                    )
+                    parent_voice_id = f"baseline--{resolved_race_name}-{resolved_gender_name}"
+                    if not connection.execute(
+                        "SELECT 1 FROM voices WHERE voice_id=?", (parent_voice_id,)
+                    ).fetchone():
+                        parent_voice_id = None
+                    connection.execute(
+                        "UPDATE voices SET race_id=?, gender_id=?, parent_voice_id=?, updated_at=? "
+                        "WHERE scope='unique' AND npc_speaker_id=?",
+                        (
+                            resolved_race_id,
+                            resolved_gender_id,
+                            parent_voice_id,
                             now,
                             speaker_id,
                         ),
@@ -2705,6 +2768,17 @@ class AlphaStore:
         uniqueness = str(payload.get("uniqueness", existing["uniqueness"]))
         role = str(payload.get("role", existing["role"]))
         faction = str(payload.get("faction", existing["faction"]))
+        try:
+            race_id = int(payload.get("race_id", existing["race_id"]))
+            gender_id = int(payload.get("gender_id", existing["gender_id"]))
+        except (TypeError, ValueError) as error:
+            raise AlphaError("Race and sex must use a listed value.") from error
+        if race_id not in RACE_DICT:
+            raise AlphaError("Unknown NPC race.")
+        if gender_id not in GENDER_DICT:
+            raise AlphaError("Unknown NPC sex.")
+        race_name = RACE_DICT[race_id]
+        gender_name = GENDER_DICT[gender_id]
         if importance not in IMPORTANCE_SCORES:
             raise AlphaError("Unknown story importance.")
         if uniqueness not in {"unassessed", "baseline", "unique_candidate", "unique"}:
@@ -2713,8 +2787,31 @@ class AlphaStore:
             raise AlphaError("Unknown role or occupation.")
         if faction not in AFFILIATION_OPTIONS:
             raise AlphaError("Unknown faction.")
+        identity_changed = race_id != int(existing["race_id"]) or gender_id != int(
+            existing["gender_id"]
+        )
         voice_id = str(payload.get("voice_id", existing["voice_id"] or "")).strip() or None
         with self.connect() as connection:
+            current_voice = (
+                connection.execute(
+                    "SELECT scope FROM voices WHERE voice_id=?", (existing["voice_id"],)
+                ).fetchone()
+                if existing["voice_id"]
+                else None
+            )
+            if (
+                identity_changed
+                and "voice_id" not in payload
+                and (current_voice is None or current_voice["scope"] == "baseline")
+            ):
+                matching_baseline_id = f"baseline--{race_name}-{gender_name}"
+                voice_id = (
+                    matching_baseline_id
+                    if connection.execute(
+                        "SELECT 1 FROM voices WHERE voice_id=?", (matching_baseline_id,)
+                    ).fetchone()
+                    else None
+                )
             if (
                 voice_id
                 and not connection.execute(
@@ -2723,9 +2820,14 @@ class AlphaStore:
             ):
                 raise AlphaError("Selected voice was not found.")
             cursor = connection.execute(
-                "UPDATE speakers SET role=?, faction=?, zone=?, context_summary=?, importance=?, "
-                "uniqueness=?, voice_id=?, updated_at=? WHERE speaker_id=?",
+                "UPDATE speakers SET race_id=?, gender_id=?, race_name=?, gender_name=?, role=?, "
+                "faction=?, zone=?, context_summary=?, importance=?, uniqueness=?, voice_id=?, "
+                "updated_at=? WHERE speaker_id=?",
                 (
+                    race_id,
+                    gender_id,
+                    race_name,
+                    gender_name,
                     role,
                     faction,
                     str(payload.get("zone", existing["zone"]))[:200].strip(),
@@ -2740,6 +2842,10 @@ class AlphaStore:
             if not cursor.rowcount:
                 raise AlphaError("NPC was not found.")
             override_values = {
+                "race_id": race_id,
+                "race_name": race_name,
+                "gender_id": gender_id,
+                "gender_name": gender_name,
                 "role": role,
                 "faction": faction,
                 "zone": str(payload.get("zone", existing["zone"]))[:200].strip(),
@@ -2751,12 +2857,27 @@ class AlphaStore:
                 "voice_id": voice_id,
             }
             changed_fields = set(payload) & set(override_values)
+            if "race_id" in payload:
+                changed_fields.add("race_name")
+            if "gender_id" in payload:
+                changed_fields.add("gender_name")
             for field_name in changed_fields:
                 connection.execute(
                     "INSERT INTO speaker_manual_overrides(speaker_id, field_name, value_json, "
                     "updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(speaker_id, field_name) DO "
                     "UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
                     (speaker_id, field_name, _json(override_values[field_name]), utc_now()),
+                )
+            if identity_changed:
+                parent_voice_id = f"baseline--{race_name}-{gender_name}"
+                if not connection.execute(
+                    "SELECT 1 FROM voices WHERE voice_id=?", (parent_voice_id,)
+                ).fetchone():
+                    parent_voice_id = None
+                connection.execute(
+                    "UPDATE voices SET race_id=?, gender_id=?, parent_voice_id=?, updated_at=? "
+                    "WHERE scope='unique' AND npc_speaker_id=?",
+                    (race_id, gender_id, parent_voice_id, utc_now(), speaker_id),
                 )
         return self.get_speaker(speaker_id)
 
@@ -2799,6 +2920,13 @@ class AlphaStore:
                 "AND v.npc_speaker_id=?",
                 (speaker_id,),
             ).fetchone()
+            manual_override_fields = {
+                str(row["field_name"])
+                for row in connection.execute(
+                    "SELECT field_name FROM speaker_manual_overrides WHERE speaker_id=?",
+                    (speaker_id,),
+                )
+            }
         speaker_payload = dict(speaker)
         speaker_payload["importance_score"] = IMPORTANCE_SCORES.get(
             speaker_payload["importance"], 0
@@ -2836,6 +2964,7 @@ class AlphaStore:
             "voices": [dict(row) for row in voices],
             "baseline_voice": dict(baseline_voice) if baseline_voice else None,
             "unique_voice": unique_payload,
+            "manual_override_fields": sorted(manual_override_fields),
         }
         return record
 
