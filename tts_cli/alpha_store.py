@@ -2932,26 +2932,12 @@ class AlphaStore:
             speaker_payload["importance"], 0
         )
         if speaker_payload.get("voice_id"):
-            voice_summary = next(
-                (
-                    voice
-                    for voice in self.list_voices(include_retired=True)
-                    if voice["voice_id"] == speaker_payload["voice_id"]
-                ),
-                None,
-            )
+            voice_summary = self._voice_lifecycle_summary(speaker_payload["voice_id"])
             if voice_summary:
                 speaker_payload["voice_status"] = voice_summary["status"]
         unique_payload = dict(unique_voice) if unique_voice else None
         if unique_payload:
-            unique_summary = next(
-                (
-                    voice
-                    for voice in self.list_voices(include_retired=True)
-                    if voice["voice_id"] == unique_payload["voice_id"]
-                ),
-                None,
-            )
+            unique_summary = self._voice_lifecycle_summary(unique_payload["voice_id"])
             if unique_summary:
                 unique_payload["status"] = unique_summary["status"]
             unique_payload["is_active"] = (
@@ -3518,6 +3504,33 @@ class AlphaStore:
             ).fetchall()
         return [_with_voice_lifecycle(dict(row)) for row in rows]
 
+    def _voice_lifecycle_summary(self, voice_id: str) -> dict[str, Any] | None:
+        """Calculate lifecycle fields for one voice without scanning every voice profile."""
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT v.voice_id, v.scope, vv.status AS stored_status, "
+                "(SELECT COUNT(*) FROM speakers ms WHERE "
+                "ms.entity_type='creature' AND ((v.scope='baseline' AND ms.race_id=v.race_id "
+                "AND ms.gender_id=v.gender_id) OR "
+                "(v.scope='unique' AND ms.voice_id=v.voice_id))) AS matching_speaker_count, "
+                "(SELECT COUNT(*) FROM dialogue_entries md JOIN speakers ms "
+                "ON ms.speaker_id=md.speaker_id WHERE md.active=1 AND ms.voice_id=v.voice_id) "
+                "AS dialogue_count, "
+                "(SELECT COUNT(*) FROM dialogue_entries md JOIN speakers ms "
+                "ON ms.speaker_id=md.speaker_id LEFT JOIN production_assets mpa "
+                "ON mpa.dialogue_id=md.dialogue_id WHERE md.active=1 "
+                "AND mpa.dialogue_id IS NULL AND ms.voice_id=v.voice_id) "
+                "AS missing_dialogue_count, "
+                "(SELECT COUNT(*) FROM voice_delivery_presets vdp WHERE "
+                "vdp.voice_id=v.voice_id AND vdp.status='approved') AS approved_delivery_count, "
+                "(SELECT COUNT(*) FROM voice_id_candidates vic WHERE "
+                "vic.voice_id=v.voice_id) AS voice_id_candidate_count "
+                "FROM voices v JOIN voice_versions vv "
+                "ON vv.voice_id=v.voice_id AND vv.is_current=1 WHERE v.voice_id=?",
+                (voice_id,),
+            ).fetchone()
+        return _with_voice_lifecycle(dict(row)) if row else None
+
     def get_voice(self, voice_id: str) -> dict[str, Any]:
         with self.connect() as connection:
             voice = connection.execute(
@@ -3635,9 +3648,9 @@ class AlphaStore:
                 preview for preview in preview_payloads if preview["delivery"] == preset["delivery"]
             ]
             payload["delivery_presets"].append(preset)
-        summary = next(
-            item for item in self.list_voices(include_retired=True) if item["voice_id"] == voice_id
-        )
+        summary = self._voice_lifecycle_summary(voice_id)
+        if not summary:
+            raise AlphaError("Voice was not found.")
         payload.update(
             {
                 key: summary[key]
