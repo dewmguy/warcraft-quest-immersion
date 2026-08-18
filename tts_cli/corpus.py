@@ -725,8 +725,12 @@ class AzerothCoreCorpusExtractor:
             missing_model = entity_type == "creature" and not model_ids
             race_id = identity.race_id if identity else -1
             gender_id = identity.gender_id if identity else 0
-            zones = zone_counts.get(entity_id, Counter())
-            maps_for_entity = map_counts.get(entity_id, Counter())
+            zones = (
+                zone_counts.get(entity_id, Counter()) if entity_type == "creature" else Counter()
+            )
+            maps_for_entity = (
+                map_counts.get(entity_id, Counter()) if entity_type == "creature" else Counter()
+            )
             primary_zone = (
                 sorted(zones.items(), key=lambda item: (-item[1], item[0]))[0][0] if zones else 0
             )

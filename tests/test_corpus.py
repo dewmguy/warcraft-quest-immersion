@@ -60,6 +60,11 @@ def test_extractor_reconciles_shared_quest_givers_and_nested_gossip(azerothcore_
     assert rowan["zone_name"] == "Elwynn Forest"
     assert rowan["zone_location_key"] == "3.3.5:zone:12"
     assert rowan["faction_name"] == "Stormwind"
+    assert all(
+        not row["zone_location_key"]
+        for row in bundle.entities
+        if row["entity_type"] in {"gameobject", "item"}
+    )
     deadmines = next(row for row in bundle.locations if row["source_id"] == 36)
     assert deadmines["location_type"] == "dungeon"
     assert deadmines["display_name"] == "Westfall - Deadmines"
