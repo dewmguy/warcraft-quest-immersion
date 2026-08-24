@@ -2830,6 +2830,24 @@ class AlphaStore:
             END
         """
 
+    @staticmethod
+    def _audio_status_expression() -> str:
+        return """
+            CASE
+                WHEN das.candidate_origin = 'preproduced' THEN 'preproduced_selected'
+                WHEN das.candidate_origin = 'elevenlabs' THEN 'approved'
+                WHEN EXISTS (
+                    SELECT 1 FROM preproduced_candidates pc
+                    WHERE pc.dialogue_id = d.dialogue_id
+                ) THEN 'preproduced_available'
+                WHEN EXISTS (
+                    SELECT 1 FROM audio_candidates ac
+                    WHERE ac.dialogue_id = d.dialogue_id
+                ) THEN 'audio_to_review'
+                ELSE 'needs_voice'
+            END
+        """
+
     def _dialogue_select(self) -> str:
         return f"""
             SELECT d.*, s.name AS speaker_name, s.entity_type, s.entity_id, s.race_id,
@@ -2850,6 +2868,7 @@ class AlphaStore:
                     WHERE pc.dialogue_id=d.dialogue_id) AS preproduced_candidate_count,
                 (SELECT COUNT(*) FROM audio_candidates ac
                     WHERE ac.dialogue_id=d.dialogue_id) AS elevenlabs_candidate_count,
+                {self._audio_status_expression()} AS audio_status,
                 {self._status_expression()} AS production_state
             FROM dialogue_entries d
             JOIN speakers s ON s.speaker_id = d.speaker_id
@@ -2924,7 +2943,16 @@ class AlphaStore:
         if state:
             if state not in PRODUCTION_STATES:
                 raise AlphaError("Unknown production state filter.")
-            conditions.append("production_state = ?")
+            if state in {
+                "preproduced_selected",
+                "preproduced_available",
+                "needs_voice",
+                "audio_to_review",
+                "approved",
+            }:
+                conditions.append("audio_status = ?")
+            else:
+                conditions.append("production_state = ?")
             parameters.append(state)
         if source:
             if source == "quest":

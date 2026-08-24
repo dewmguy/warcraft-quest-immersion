@@ -129,12 +129,15 @@ def test_datapack_import_selects_highest_priority_and_keeps_versions_comparable(
     )
     accept_record = store.get_dialogue(accept["dialogue_id"])
     complete_record = store.get_dialogue(complete["dialogue_id"])
+    gossip_record = store.get_dialogue(gossip["dialogue_id"])
 
     assert dry_run["applied"] is False
     assert dry_run["counts"]["audio_assets"] == 8
     assert dry_run["counts"]["unmatched_assets"] == 0
     assert applied["applied"] is True
     assert accept_record["production_state"] == "preproduced_selected"
+    assert accept_record["audio_status"] == "preproduced_selected"
+    assert gossip_record["audio_status"] == "preproduced_selected"
     assert accept_record["preproduced_candidate_count"] == 2
     assert len(accept_record["candidates"]) == 2
     selected = next(
@@ -186,3 +189,7 @@ def test_datapack_import_selects_highest_priority_and_keeps_versions_comparable(
         == store.progress()["quests"]["complete"] + store.progress()["gossip"]["complete"]
     )
     assert all(asset["candidate_origin"] == "preproduced" for asset in manifest["assets"])
+
+    missing_audio = store.list_dialogue(state="needs_voice", page_size=100)
+    assert missing_audio["total"] > 0
+    assert all(row["audio_status"] == "needs_voice" for row in missing_audio["rows"])

@@ -1,10 +1,12 @@
 {% macro dialogue_status(row) -%}
-  {% set state = row.production_state %}
+  {% set state = row.audio_status|default(row.production_state) %}
   {% set label = state | replace('_',' ') | title %}
   {% if state in ['preproduced_selected', 'preproduced_available'] %}
     <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#audio-review" aria-label="Review pre-produced audio">{{ 'Pre-Produced Selected' if state == 'preproduced_selected' else 'Pre-Produced Available' }} &rarr;</a>
-  {% elif state == 'needs_text' %}
-    <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
+  {% elif state == 'needs_voice' and row.production_state == 'needs_text' %}
+    <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text" aria-label="Prepare text before producing audio">{{ label }} &rarr;</a>
+  {% elif state == 'needs_voice' and row.production_state in ['ready_to_generate', 'generation_failed'] %}
+    <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#generation" aria-label="Produce the missing audio">{{ label }} &rarr;</a>
   {% elif row.can_generate_audio is defined and not row.can_generate_audio and state != 'approved' %}
     <a class="work-status status-needs_voice status-action" href="#voice-assignment" aria-label="Review audio availability">Audio Unavailable &rarr;</a>
   {% elif state == 'needs_voice' and row.voice_id %}

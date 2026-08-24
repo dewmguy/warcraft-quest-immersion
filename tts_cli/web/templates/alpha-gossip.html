@@ -25,9 +25,9 @@
     <div class="panel-heading"><div><h2>Gossip Work Queue</h2><p>{{ "{:,}".format(listing.total) }} matching lines</p></div>{% if has_filters %}<button type="button" class="secondary filter-clear-button" data-filter-clear data-filter-form="gossip-filters"><i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Clear</span></button>{% endif %}</div>
     <form id="gossip-filters" class="filter-bar content-filter-bar" method="get" action="/alpha/gossip" data-instant-filters>
       <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ filters.q }}" placeholder="NPC, text, or database ID"></label>
-      <label><span>Work status</span><select name="production_state">
+      <label><span>Audio status</span><select name="production_state">
         <option value="">All</option>
-        {% for value, label in [('preproduced_selected','Pre-Produced selected'),('preproduced_available','Pre-Produced available'),('needs_text','Needs text'),('needs_voice','Needs voice'),('ready_to_generate','Ready to generate'),('generation_failed','Generation failed'),('audio_to_review','Audio to review'),('approved','Approved')] %}
+        {% for value, label in [('preproduced_selected','Pre-Produced selected'),('preproduced_available','Pre-Produced available'),('needs_voice','Needs voice'),('audio_to_review','Audio to review'),('approved','Approved')] %}
         <option value="{{ value }}" {% if filters.production_state == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select></label>
