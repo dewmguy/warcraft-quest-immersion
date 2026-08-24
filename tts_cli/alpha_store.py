@@ -208,6 +208,11 @@ def _normalize_display_name(value: Any) -> str:
     return display_name
 
 
+def _normalize_datapack_gossip_text(value: Any) -> str:
+    text = re.sub(r"\$(?:B|b)|\|n", " ", str(value or ""))
+    return re.sub(r"\s+", " ", text).strip().casefold()
+
+
 def _delivery_request_text(notes: Any, spoken_text: str) -> str:
     direction = _normalize_voice_actor_notes(notes)
     text = spoken_text.strip()
@@ -2396,8 +2401,10 @@ class AlphaStore:
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         with self.connect() as connection:
             rows = connection.execute(
-                "SELECT dialogue_id, source, quest_id, addon_file_key FROM dialogue_entries "
-                "WHERE active=1 AND expansion=? AND locale=?",
+                "SELECT d.dialogue_id, d.source, d.quest_id, d.addon_file_key, "
+                "d.original_text, s.entity_type, s.entity_id, s.name AS entity_name "
+                "FROM dialogue_entries d JOIN speakers s ON s.speaker_id=d.speaker_id "
+                "WHERE d.active=1 AND d.expansion=? AND d.locale=?",
                 (expansion, locale),
             ).fetchall()
             selected_dialogues = {
@@ -2406,11 +2413,21 @@ class AlphaStore:
             }
 
         quest_index: dict[tuple[int, str], list[str]] = defaultdict(list)
-        gossip_index: dict[str, list[str]] = defaultdict(list)
+        gossip_addon_index: dict[str, list[str]] = defaultdict(list)
+        gossip_entity_index: dict[tuple[str, int, str], list[str]] = defaultdict(list)
+        gossip_name_index: dict[tuple[str, str, str], list[str]] = defaultdict(list)
+        gossip_text_index: dict[str, list[str]] = defaultdict(list)
         for row in rows:
             dialogue_id = str(row["dialogue_id"])
             if row["source"] == "gossip":
-                gossip_index[str(row["addon_file_key"]).lower()].append(dialogue_id)
+                normalized_text = _normalize_datapack_gossip_text(row["original_text"])
+                entity_type = str(row["entity_type"])
+                entity_id = int(row["entity_id"])
+                entity_name = re.sub(r"\s+", " ", str(row["entity_name"])).strip().casefold()
+                gossip_addon_index[str(row["addon_file_key"]).lower()].append(dialogue_id)
+                gossip_entity_index[(entity_type, entity_id, normalized_text)].append(dialogue_id)
+                gossip_name_index[(entity_type, entity_name, normalized_text)].append(dialogue_id)
+                gossip_text_index[normalized_text].append(dialogue_id)
             elif row["quest_id"] is not None:
                 quest_index[(int(row["quest_id"]), str(row["source"]))].append(dialogue_id)
 
@@ -2422,22 +2439,75 @@ class AlphaStore:
             grouped_assets: dict[str, list[Any]] = defaultdict(list)
             for asset in pack.assets:
                 grouped_assets[asset.logical_key].append(asset)
+            gossip_lookups: dict[str, list[Any]] = defaultdict(list)
+            for lookup in pack.gossip_lookups:
+                gossip_lookups[lookup.legacy_file_key].append(lookup)
             pack_candidate_records = 0
             pack_logical_candidates = 0
             pack_matched_assets = 0
             pack_unmatched_assets = 0
+            pack_matched_quest_assets = 0
+            pack_matched_gossip_assets = 0
+            pack_gossip_match_strategies: dict[str, int] = defaultdict(int)
             for logical_key, assets in sorted(grouped_assets.items()):
                 first = assets[0]
                 if first.source_kind == "quest" and first.quest_id is not None:
                     dialogue_ids = quest_index.get((first.quest_id, first.stage), [])
                 else:
-                    dialogue_ids = gossip_index.get(first.legacy_file_key.lower(), [])
+                    matched: set[str] = set(
+                        gossip_addon_index.get(first.legacy_file_key.lower(), [])
+                    )
+                    if matched:
+                        pack_gossip_match_strategies["addon_key"] += len(matched)
+                    lookups = gossip_lookups.get(first.legacy_file_key.lower(), [])
+                    for lookup in sorted(
+                        lookups,
+                        key=lambda item: (
+                            item.entity_id is None,
+                            item.entity_id or 0,
+                            item.entity_name.casefold(),
+                        ),
+                    ):
+                        normalized_text = _normalize_datapack_gossip_text(lookup.original_text)
+                        if lookup.entity_id is not None:
+                            coordinate_matches = gossip_entity_index.get(
+                                (lookup.entity_type, lookup.entity_id, normalized_text), []
+                            )
+                            strategy = "entity_id"
+                        else:
+                            normalized_name = (
+                                re.sub(r"\s+", " ", lookup.entity_name).strip().casefold()
+                            )
+                            coordinate_matches = gossip_name_index.get(
+                                (lookup.entity_type, normalized_name, normalized_text), []
+                            )
+                            strategy = "entity_name"
+                        new_matches = set(coordinate_matches) - matched
+                        if new_matches:
+                            pack_gossip_match_strategies[strategy] += len(new_matches)
+                            matched.update(new_matches)
+                    if not matched:
+                        unique_text_matches: set[str] = set()
+                        for lookup in lookups:
+                            text_matches = gossip_text_index.get(
+                                _normalize_datapack_gossip_text(lookup.original_text), []
+                            )
+                            if len(text_matches) == 1:
+                                unique_text_matches.update(text_matches)
+                        if unique_text_matches:
+                            pack_gossip_match_strategies["unique_text"] += len(unique_text_matches)
+                            matched.update(unique_text_matches)
+                    dialogue_ids = sorted(matched)
                 if not dialogue_ids:
                     pack_unmatched_assets += len(assets)
                     all_unmatched_assets.update(asset.asset_id for asset in assets)
                     continue
                 pack_logical_candidates += 1
                 pack_matched_assets += len(assets)
+                if first.source_kind == "quest":
+                    pack_matched_quest_assets += len(assets)
+                else:
+                    pack_matched_gossip_assets += len(assets)
                 pack_candidate_records += len(dialogue_ids)
                 matched_dialogues.update(dialogue_ids)
                 groups.append(
@@ -2452,9 +2522,12 @@ class AlphaStore:
             pack_report.update(
                 {
                     "matched_assets": pack_matched_assets,
+                    "matched_quest_assets": pack_matched_quest_assets,
+                    "matched_gossip_assets": pack_matched_gossip_assets,
                     "unmatched_assets": pack_unmatched_assets,
                     "logical_candidates": pack_logical_candidates,
                     "binding_candidates": pack_candidate_records,
+                    "gossip_match_strategies": dict(sorted(pack_gossip_match_strategies.items())),
                 }
             )
             pack_reports.append(pack_report)
@@ -2480,6 +2553,12 @@ class AlphaStore:
                     bool(asset.player_gender_variant) for pack in packs for asset in pack.assets
                 ),
                 "matched_assets": sum(report["matched_assets"] for report in pack_reports),
+                "matched_quest_assets": sum(
+                    report["matched_quest_assets"] for report in pack_reports
+                ),
+                "matched_gossip_assets": sum(
+                    report["matched_gossip_assets"] for report in pack_reports
+                ),
                 "unmatched_assets": len(all_unmatched_assets),
                 "logical_candidates": sum(report["logical_candidates"] for report in pack_reports),
                 "binding_candidates": sum(report["binding_candidates"] for report in pack_reports),

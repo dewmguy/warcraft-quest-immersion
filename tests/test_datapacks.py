@@ -17,6 +17,7 @@ def build_datapack(
     version: str,
     priority: int,
     gossip_key: str,
+    gossip_text: str = "Fixture line",
 ) -> Path:
     sounds = {
         "100-accept": b"generic-accept-audio",
@@ -43,7 +44,7 @@ def build_datapack(
         )
         archive.writestr(
             f"{module}/generated/npc_gossip_file_lookups.lua",
-            f'[1] = {{ ["Fixture line"] = "{gossip_key}" }},\n',
+            f'[1] = {{ ["{gossip_text}"] = "{gossip_key}" }},\n',
         )
         for stem, content in sounds.items():
             folder = "gossip" if stem == gossip_key else "quests"
@@ -92,7 +93,7 @@ def test_datapack_import_selects_highest_priority_and_keeps_versions_comparable(
     store.initialize()
     store.import_corpus_bundle(corpus_bundle_path)
     gossip = store.list_dialogue(source="gossip", page_size=100)["rows"][0]
-    gossip_key = gossip["addon_file_key"]
+    gossip_key = "b" * 32
     low_path = build_datapack(
         tmp_path / "LowData_v1.0.zip",
         module="LowData",
@@ -100,6 +101,7 @@ def test_datapack_import_selects_highest_priority_and_keeps_versions_comparable(
         version="1.0",
         priority=100,
         gossip_key=gossip_key,
+        gossip_text=gossip["original_text"],
     )
     high_path = build_datapack(
         tmp_path / "HighData_v2.0.zip",
@@ -108,6 +110,7 @@ def test_datapack_import_selects_highest_priority_and_keeps_versions_comparable(
         version="2.0",
         priority=110,
         gossip_key=gossip_key,
+        gossip_text=gossip["original_text"],
     )
     packs = [inspect_datapack_archive(low_path), inspect_datapack_archive(high_path)]
     typed_packs = [pack for pack in packs if pack is not None]

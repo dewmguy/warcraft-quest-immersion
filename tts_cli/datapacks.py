@@ -20,7 +20,9 @@ GOSSIP_AUDIO_PATTERN = re.compile(
     r"^(?:(?P<player_gender>[fm])-)?(?P<hash>[0-9a-f]{32})\.mp3$", re.IGNORECASE
 )
 LENGTH_PATTERN = re.compile(r'\["([^"\\]+)"\]\s*=\s*([0-9.]+)')
-GOSSIP_HASH_PATTERN = re.compile(r'=\s*"([0-9a-f]{32})"', re.IGNORECASE)
+GOSSIP_ENTITY_ID_PATTERN = re.compile(r"^\s*\[(\d+)\]\s*=\s*\{")
+GOSSIP_ENTITY_NAME_PATTERN = re.compile(r'^\s*\["((?:\\.|[^"\\])*)"\]\s*=\s*\{')
+GOSSIP_TEXT_PATTERN = re.compile(r'\["((?:\\.|[^"\\])*)"\]\s*=\s*"([0-9a-f]{32})"', re.IGNORECASE)
 ARCHIVE_VERSION_PATTERN = re.compile(r"[_-]v(?P<version>\d+(?:\.\d+)+)", re.IGNORECASE)
 
 
@@ -62,6 +64,67 @@ def _toc_fields(text: str) -> dict[str, str]:
     return fields
 
 
+def _lua_unescape(value: str) -> str:
+    replacements = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}
+    output: list[str] = []
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if character != "\\" or index + 1 >= len(value):
+            output.append(character)
+            index += 1
+            continue
+        escaped = value[index + 1]
+        output.append(replacements.get(escaped, escaped))
+        index += 2
+    return "".join(output)
+
+
+@dataclass(frozen=True)
+class DatapackGossipLookup:
+    legacy_file_key: str
+    entity_type: str
+    entity_id: int | None
+    entity_name: str
+    original_text: str
+
+
+def _parse_gossip_lookup(entry_path: str, text: str) -> list[DatapackGossipLookup]:
+    filename = PurePosixPath(entry_path.replace("\\", "/")).name.lower()
+    entity_type = "gameobject" if filename.startswith("object") else "creature"
+    keyed_by_name = "_name_" in filename
+    entity_id: int | None = None
+    entity_name = ""
+    lookups: list[DatapackGossipLookup] = []
+
+    for line in text.splitlines():
+        header = (
+            GOSSIP_ENTITY_NAME_PATTERN.match(line)
+            if keyed_by_name
+            else GOSSIP_ENTITY_ID_PATTERN.match(line)
+        )
+        if header:
+            if keyed_by_name:
+                entity_id = None
+                entity_name = _lua_unescape(header.group(1))
+            else:
+                entity_id = int(header.group(1))
+                entity_name = ""
+        if entity_id is None and not entity_name:
+            continue
+        for mapping in GOSSIP_TEXT_PATTERN.finditer(line):
+            lookups.append(
+                DatapackGossipLookup(
+                    legacy_file_key=mapping.group(2).lower(),
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    entity_name=entity_name,
+                    original_text=_lua_unescape(mapping.group(1)),
+                )
+            )
+    return lookups
+
+
 @dataclass(frozen=True)
 class DatapackAsset:
     asset_id: str
@@ -89,6 +152,7 @@ class DatapackArchive:
     archive_version: str
     priority: int
     assets: tuple[DatapackAsset, ...]
+    gossip_lookups: tuple[DatapackGossipLookup, ...]
 
     def summary(self) -> dict[str, object]:
         return {
@@ -108,6 +172,7 @@ class DatapackArchive:
                 bool(asset.player_gender_variant) for asset in self.assets
             ),
             "lookup_unreferenced_assets": sum(not asset.lookup_referenced for asset in self.assets),
+            "gossip_lookup_entries": len(self.gossip_lookups),
         }
 
 
@@ -171,14 +236,14 @@ def inspect_datapack_archive(path: Path) -> DatapackArchive | None:
             stem: float(duration)
             for stem, duration in LENGTH_PATTERN.findall(_decode_entry(package, length_entries[0]))
         }
-        gossip_hashes: set[str] = set()
+        gossip_lookups: list[DatapackGossipLookup] = []
         for entry in entries:
             normalized = entry.filename.replace("\\", "/").lower()
             if normalized.endswith("gossip_file_lookups.lua"):
-                gossip_hashes.update(
-                    value.lower()
-                    for value in GOSSIP_HASH_PATTERN.findall(_decode_entry(package, entry))
+                gossip_lookups.extend(
+                    _parse_gossip_lookup(entry.filename, _decode_entry(package, entry))
                 )
+        gossip_hashes = {lookup.legacy_file_key for lookup in gossip_lookups}
 
         assets: list[DatapackAsset] = []
         seen_variants: set[tuple[str, str]] = set()
@@ -257,6 +322,18 @@ def inspect_datapack_archive(path: Path) -> DatapackArchive | None:
         archive_version=archive_version,
         priority=priority,
         assets=tuple(sorted(assets, key=lambda asset: asset.entry_path)),
+        gossip_lookups=tuple(
+            sorted(
+                gossip_lookups,
+                key=lambda lookup: (
+                    lookup.legacy_file_key,
+                    lookup.entity_type,
+                    lookup.entity_id or 0,
+                    lookup.entity_name.casefold(),
+                    lookup.original_text,
+                ),
+            )
+        ),
     )
 
 
@@ -284,6 +361,7 @@ __all__ = [
     "DatapackArchive",
     "DatapackAsset",
     "DatapackError",
+    "DatapackGossipLookup",
     "inspect_datapack_archive",
     "inspect_datapack_directory",
 ]

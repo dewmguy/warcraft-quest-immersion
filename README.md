@@ -50,6 +50,10 @@ with the highest declared data-module priority is selected by default only when
 the line has no existing selection. Existing ElevenLabs selections are never
 overwritten. Required `f-` and `m-` player-text files are retained together as
 one publishable candidate with two playable assets.
+Quest assets reconcile by quest ID and stage. Gossip assets reconcile through
+the inherited lookup tables' creature/object ID or name plus source text; their
+legacy MP3 hashes are provenance keys and are not assumed to equal the current
+per-deliverer addon filename.
 
 The older single-archive audit scripts remain available for historical
 comparison. Archives used by that workflow belong in `imports/source-archives/`.
