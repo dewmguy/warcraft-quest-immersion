@@ -1,4 +1,5 @@
 import base64
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 from tts_cli import alpha_store as alpha_module
 from tts_cli import web
 from tts_cli.alpha_store import AlphaStore
+from tts_cli.datapacks import inspect_datapack_archive
 
 
 class UnconfiguredElevenLabs:
@@ -218,6 +220,60 @@ def test_quest_and_gossip_queues_omit_spoken_text_column(monkeypatch):
     assert "<th>Spoken text</th>" not in gossip.text
     assert '<td colspan="4" class="empty-cell">' in empty_quests.text
     assert '<td colspan="4" class="empty-cell">' in empty_gossip.text
+
+
+def test_preproduced_candidates_share_the_review_player_and_work_status(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        row = web.alpha_store.list_dialogue(source="quest", page_size=10)["rows"][0]
+        archives = []
+        for priority, version in ((100, "1.0"), (105, "2.0")):
+            path = tmp_path / f"FixtureData_v{version}.zip"
+            module = f"FixtureData{priority}"
+            stem = f"{row['quest_id']}-{row['source']}"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr(
+                    f"{module}/{module}.toc",
+                    "\n".join(
+                        (
+                            "## Interface: 30300",
+                            "## Title: VoiceOver Data - Fixture",
+                            f"## Version: {version}",
+                            f"## X-VoiceOver-DataModule-Priority: {priority}",
+                        )
+                    ),
+                )
+                archive.writestr(
+                    f"{module}/generated/sound_length_table.lua",
+                    f'["{stem}"] = 1.25,\n',
+                )
+                archive.writestr(
+                    f"{module}/generated/sounds/quests/{stem}.mp3",
+                    f"fixture-{version}".encode(),
+                )
+            inspected = inspect_datapack_archive(path)
+            assert inspected is not None
+            archives.append(inspected)
+        web.alpha_store.import_datapacks(archives)
+
+        page = client.get(f"/alpha/dialogue/{row['dialogue_id']}")
+        queue = client.get("/alpha?production_state=preproduced_selected")
+
+    assert page.status_code == 200
+    assert queue.status_code == 200
+    assert "Pre-Produced Selected" in page.text
+    assert "Pre-Produced Selected" in queue.text
+    assert page.text.count('class="delivery-preview dialogue-audio-candidate') == 2
+    assert page.text.count("fa-box-archive") == 2
+    assert page.text.count('class="reference-player candidate-player"') == 2
+    assert "Selected for Publishing" in page.text
+    assert "Selected for publishing" in page.text
+    assert page.text.count('/select" data-method="POST"') == 1
+    assert "is-selected" in page.text
+    assert "<audio controls" not in page.text
+    assert page.text.count('<audio hidden preload="metadata"') == 2
 
 
 def test_quest_gossip_and_npc_queues_share_voice_cell_treatment(monkeypatch):

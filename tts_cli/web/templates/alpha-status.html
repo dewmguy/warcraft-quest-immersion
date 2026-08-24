@@ -1,7 +1,9 @@
 {% macro dialogue_status(row) -%}
   {% set state = row.production_state %}
   {% set label = state | replace('_',' ') | title %}
-  {% if state == 'needs_text' %}
+  {% if state in ['preproduced_selected', 'preproduced_available'] %}
+    <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#audio-review" aria-label="Review pre-produced audio">{{ 'Pre-Produced Selected' if state == 'preproduced_selected' else 'Pre-Produced Available' }} &rarr;</a>
+  {% elif state == 'needs_text' %}
     <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text" aria-label="Resolve {{ label }}">{{ label }} &rarr;</a>
   {% elif row.can_generate_audio is defined and not row.can_generate_audio and state != 'approved' %}
     <a class="work-status status-needs_voice status-action" href="#voice-assignment" aria-label="Review audio availability">Audio Unavailable &rarr;</a>
@@ -15,5 +17,8 @@
     <a class="work-status status-{{ state }} status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#audio-review" aria-label="Open {{ label }}">{{ label }} &rarr;</a>
   {% else %}
     <span class="work-status status-{{ state }}">{{ label }}</span>
+  {% endif %}
+  {% if row.preproduced_candidate_count|default(0) and state not in ['preproduced_selected', 'preproduced_available'] %}
+    <a class="work-status status-preproduced_available status-action" href="/alpha/dialogue/{{ row.dialogue_id }}#audio-review" aria-label="Review pre-produced audio">Pre-Produced Available &rarr;</a>
   {% endif %}
 {%- endmacro %}

@@ -13,6 +13,7 @@ assets/sql/db_dump
 generated
 data/*
 !data/.gitkeep
+datapacks/
 .vscode/settings.json
 .DS_Store
 AI_VoiceOver/AI_VoiceOver.toc

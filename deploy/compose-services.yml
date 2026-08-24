@@ -15,6 +15,7 @@ services:
       - "8090:8080"
     volumes:
       - /opt/warcraft-quest-immersion/data:/app/data
+      - /opt/warcraft-quest-immersion/datapacks:/app/datapacks:ro
       - /opt/warcraft-quest-immersion/AI_VoiceOverData_Vanilla/generated:/app/AI_VoiceOverData_Vanilla/generated
     security_opt:
       - no-new-privileges:true

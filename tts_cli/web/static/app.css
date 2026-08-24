@@ -297,6 +297,8 @@ dialog .actions { justify-content: flex-end; }
 .status-needs_text, .status-needs_voice, .status-generation_failed { border-color: #81514a; color: #e49586; }
 .status-ready_to_generate, .status-audio_to_review { border-color: #80692e; color: #e3be5f; }
 .status-approved { border-color: #3e775c; color: #78c99c; }
+.status-preproduced_available { border-color: #536f88; color: #93c3e6; }
+.status-preproduced_selected { border-color: #3e775c; background: #16251d; color: #8fd1aa; }
 .lifecycle-draft { border-color: #80692e; color: #e3be5f; }
 .lifecycle-candidate { border-color: #476b85; color: #8ec7e9; }
 .lifecycle-active { border-color: #3e775c; color: #78c99c; }
@@ -534,6 +536,23 @@ dialog .actions { justify-content: flex-end; }
 .alpha-body .delivery-sample-approve, .alpha-body .delivery-preview-delete.secondary { flex: 0 0 30px; border-color: #66542e; background: #100f12; color: var(--gold-bright); }
 .alpha-body .delivery-sample-approve:hover, .alpha-body .delivery-sample-approve:focus-visible { border-color: var(--success); background: var(--success); color: #100f12; filter: none; }
 .alpha-body .delivery-preview-delete:hover, .alpha-body .delivery-preview-delete:focus-visible { border-color: var(--danger); background: var(--danger); color: #100f12; filter: none; }
+.candidate-section-intro { max-width: 780px; color: #aaa3ad; }
+.dialogue-candidate-list { display: grid; gap: 10px; }
+.dialogue-audio-candidate { background: #111014; }
+.dialogue-audio-candidate.is-selected { border-color: var(--success); box-shadow: 0 0 0 1px rgb(112 201 148 / 18%); }
+.dialogue-candidate-icon { color: #93c3e6; }
+.dialogue-audio-candidate.is-selected .dialogue-candidate-icon { background: #193326; color: var(--success); }
+.dialogue-candidate-body { gap: 10px; }
+.dialogue-candidate-metadata { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dialogue-candidate-assets { display: grid; gap: 8px; }
+.dialogue-candidate-asset { display: grid; grid-template-columns: minmax(130px, 220px) minmax(260px, 1fr); align-items: center; gap: 12px; border: 1px solid #2c2830; border-radius: 6px; padding: 8px 10px; background: #0d0c0f; }
+.dialogue-candidate-asset > div:first-child { display: grid; min-width: 0; gap: 2px; }
+.dialogue-candidate-asset > div:first-child strong { color: #ddd3c0; font-size: .76rem; }
+.dialogue-candidate-asset > div:first-child span { overflow: hidden; color: #8f8793; font-size: .66rem; text-overflow: ellipsis; white-space: nowrap; }
+.dialogue-candidate-footer { display: flex; min-height: 30px; align-items: center; justify-content: flex-end; }
+.candidate-selected-state { display: inline-flex; align-items: center; gap: 7px; color: var(--success); font-size: .74rem; font-weight: 800; }
+.alpha-body .dialogue-candidate-select { width: 30px; min-height: 30px; border-color: #66542e; padding: 0; background: #100f12; color: var(--gold-bright); }
+.alpha-body .dialogue-candidate-select:hover, .alpha-body .dialogue-candidate-select:focus-visible { border-color: var(--success); background: var(--success); color: #100f12; filter: none; }
 .reference-list { gap: 5px; }
 .reference-upload { overflow: hidden; border: 1px solid #39343d; border-radius: 7px; background: #151318; }
 .reference-upload > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; color: #dec274; cursor: pointer; font-size: .82rem; font-weight: 800; list-style: none; }
@@ -662,9 +681,10 @@ dialog .actions { justify-content: flex-end; }
   .alpha-header nav { overflow-x: auto; }
   .alpha-main { width: min(100% - 24px, 1480px); padding-top: 26px; }
   .source-banner, .alpha-page-heading, .panel-heading { align-items: flex-start; flex-direction: column; }
-  .alpha-metrics, .record-grid, .form-grid, .filter-bar, .record-facts, .export-summary, .corpus-progress, .provider-account .usage-facts, .cost-guide-grid, .metering-preview, .provider-advanced-grid, .corpus-report-grid { grid-template-columns: 1fr; }
+  .alpha-metrics, .record-grid, .form-grid, .filter-bar, .record-facts, .export-summary, .corpus-progress, .provider-account .usage-facts, .cost-guide-grid, .metering-preview, .provider-advanced-grid, .corpus-report-grid, .dialogue-candidate-metadata { grid-template-columns: 1fr; }
   .search-field { grid-column: auto; }
   .candidate-list article, .reference-list article { grid-template-columns: 1fr; }
+  .dialogue-candidate-asset { grid-template-columns: 1fr; }
   .compact-form { grid-template-columns: 1fr; }
   .delivery-preset-explainer { align-items: flex-start; flex-direction: column; }
   .delivery-preset-batch-actions { width: 100%; align-items: stretch; flex-direction: column; }

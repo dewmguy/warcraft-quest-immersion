@@ -5,10 +5,11 @@ import json
 import re
 import sqlite3
 import uuid
+import zipfile
 from collections import defaultdict, deque
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mutagen import File as MutagenFile
 
@@ -16,6 +17,9 @@ from tts_cli.consts import GENDER_DICT, RACE_DICT
 from tts_cli.corpus import CorpusBundle, CorpusError, corpus_bundle_summary, load_corpus_bundle
 from tts_cli.data_sources import REQUIRED_COLUMNS, VALID_SOURCES, load_dialogue_csv
 from tts_cli.voice_profiles import load_phase2_review
+
+if TYPE_CHECKING:
+    from tts_cli.datapacks import DatapackArchive
 
 DELIVERIES = ("neutral", "angry", "sorrowful", "joyful", "proclaiming")
 DELIVERY_DEFAULTS = {
@@ -87,6 +91,8 @@ PERFORMANCE_METHODS = {
 }
 PRODUCTION_STATES = (
     "source_changed",
+    "preproduced_selected",
+    "preproduced_available",
     "needs_text",
     "needs_voice",
     "ready_to_generate",
@@ -118,6 +124,11 @@ def utc_now() -> str:
 
 def sha256_bytes(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+def _stable_local_id(prefix: str, *parts: object) -> str:
+    payload = "\0".join(str(part) for part in parts).encode("utf-8")
+    return f"{prefix}-{hashlib.sha256(payload).hexdigest()[:24]}"
 
 
 def _json(value: Any) -> str:
@@ -743,9 +754,74 @@ class AlphaStore:
                     duration_seconds REAL NOT NULL,
                     approved_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS preproduced_packs (
+                    pack_id TEXT PRIMARY KEY,
+                    module_name TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    module_version TEXT NOT NULL,
+                    archive_version TEXT NOT NULL,
+                    priority INTEGER NOT NULL,
+                    archive_name TEXT NOT NULL,
+                    archive_sha256 TEXT NOT NULL UNIQUE,
+                    archive_bytes INTEGER NOT NULL,
+                    imported_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS preproduced_assets (
+                    asset_id TEXT PRIMARY KEY,
+                    pack_id TEXT NOT NULL REFERENCES preproduced_packs(pack_id) ON DELETE CASCADE,
+                    entry_path TEXT NOT NULL,
+                    source_kind TEXT NOT NULL CHECK(source_kind IN ('quest', 'gossip')),
+                    logical_key TEXT NOT NULL,
+                    quest_id INTEGER,
+                    stage TEXT NOT NULL,
+                    legacy_file_key TEXT NOT NULL,
+                    player_gender_variant TEXT NOT NULL DEFAULT '',
+                    storage_path TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    duration_seconds REAL NOT NULL,
+                    mime_type TEXT NOT NULL DEFAULT 'audio/mpeg',
+                    lookup_referenced INTEGER NOT NULL DEFAULT 1,
+                    imported_at TEXT NOT NULL,
+                    UNIQUE(pack_id, entry_path)
+                );
+                CREATE INDEX IF NOT EXISTS preproduced_assets_logical_idx
+                    ON preproduced_assets(pack_id, logical_key);
+                CREATE TABLE IF NOT EXISTS preproduced_candidates (
+                    candidate_id TEXT PRIMARY KEY,
+                    dialogue_id TEXT NOT NULL REFERENCES dialogue_entries(dialogue_id) ON DELETE CASCADE,
+                    pack_id TEXT NOT NULL REFERENCES preproduced_packs(pack_id) ON DELETE CASCADE,
+                    logical_key TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(dialogue_id, pack_id, logical_key)
+                );
+                CREATE INDEX IF NOT EXISTS preproduced_candidates_dialogue_idx
+                    ON preproduced_candidates(dialogue_id);
+                CREATE TABLE IF NOT EXISTS preproduced_candidate_assets (
+                    candidate_id TEXT NOT NULL REFERENCES preproduced_candidates(candidate_id)
+                        ON DELETE CASCADE,
+                    asset_id TEXT NOT NULL REFERENCES preproduced_assets(asset_id) ON DELETE CASCADE,
+                    player_gender_variant TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY(candidate_id, asset_id),
+                    UNIQUE(candidate_id, player_gender_variant)
+                );
+                CREATE TABLE IF NOT EXISTS preproduced_findings (
+                    pack_id TEXT NOT NULL REFERENCES preproduced_packs(pack_id) ON DELETE CASCADE,
+                    asset_id TEXT NOT NULL REFERENCES preproduced_assets(asset_id) ON DELETE CASCADE,
+                    reason TEXT NOT NULL,
+                    details TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(pack_id, asset_id, reason)
+                );
+                CREATE TABLE IF NOT EXISTS dialogue_audio_selections (
+                    dialogue_id TEXT PRIMARY KEY REFERENCES dialogue_entries(dialogue_id) ON DELETE CASCADE,
+                    candidate_id TEXT NOT NULL,
+                    candidate_origin TEXT NOT NULL CHECK(candidate_origin IN ('elevenlabs', 'preproduced')),
+                    selected_at TEXT NOT NULL
+                );
                 """
             )
             self._ensure_columns(connection)
+            self._backfill_dialogue_audio_selections(connection)
             self._seed_app_settings(connection)
             self._seed_baseline_voices(connection)
             self._normalize_delivery_prompt_tags(connection)
@@ -756,6 +832,14 @@ class AlphaStore:
             self._synchronize_candidate_sequences(connection)
             self._synchronize_delivery_sample_sequences(connection)
             self._pin_delivery_presets_to_current_voice(connection)
+
+    @staticmethod
+    def _backfill_dialogue_audio_selections(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            "INSERT OR IGNORE INTO dialogue_audio_selections(dialogue_id, candidate_id, "
+            "candidate_origin, selected_at) SELECT dialogue_id, candidate_id, 'elevenlabs', "
+            "approved_at FROM production_assets"
+        )
 
     @staticmethod
     def _ensure_columns(connection: sqlite3.Connection) -> None:
@@ -2300,6 +2384,300 @@ class AlphaStore:
         }
 
     @staticmethod
+    def _preproduced_candidate_id(dialogue_id: str, pack_id: str, logical_key: str) -> str:
+        return _stable_local_id("preproduced", dialogue_id, pack_id, logical_key)
+
+    def _datapack_import_plan(
+        self,
+        packs: list[DatapackArchive],
+        *,
+        expansion: str,
+        locale: str,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT dialogue_id, source, quest_id, addon_file_key FROM dialogue_entries "
+                "WHERE active=1 AND expansion=? AND locale=?",
+                (expansion, locale),
+            ).fetchall()
+            selected_dialogues = {
+                str(row["dialogue_id"])
+                for row in connection.execute("SELECT dialogue_id FROM dialogue_audio_selections")
+            }
+
+        quest_index: dict[tuple[int, str], list[str]] = defaultdict(list)
+        gossip_index: dict[str, list[str]] = defaultdict(list)
+        for row in rows:
+            dialogue_id = str(row["dialogue_id"])
+            if row["source"] == "gossip":
+                gossip_index[str(row["addon_file_key"]).lower()].append(dialogue_id)
+            elif row["quest_id"] is not None:
+                quest_index[(int(row["quest_id"]), str(row["source"]))].append(dialogue_id)
+
+        groups: list[dict[str, Any]] = []
+        pack_reports: list[dict[str, Any]] = []
+        matched_dialogues: set[str] = set()
+        all_unmatched_assets: set[str] = set()
+        for pack in packs:
+            grouped_assets: dict[str, list[Any]] = defaultdict(list)
+            for asset in pack.assets:
+                grouped_assets[asset.logical_key].append(asset)
+            pack_candidate_records = 0
+            pack_logical_candidates = 0
+            pack_matched_assets = 0
+            pack_unmatched_assets = 0
+            for logical_key, assets in sorted(grouped_assets.items()):
+                first = assets[0]
+                if first.source_kind == "quest" and first.quest_id is not None:
+                    dialogue_ids = quest_index.get((first.quest_id, first.stage), [])
+                else:
+                    dialogue_ids = gossip_index.get(first.legacy_file_key.lower(), [])
+                if not dialogue_ids:
+                    pack_unmatched_assets += len(assets)
+                    all_unmatched_assets.update(asset.asset_id for asset in assets)
+                    continue
+                pack_logical_candidates += 1
+                pack_matched_assets += len(assets)
+                pack_candidate_records += len(dialogue_ids)
+                matched_dialogues.update(dialogue_ids)
+                groups.append(
+                    {
+                        "pack": pack,
+                        "logical_key": logical_key,
+                        "assets": assets,
+                        "dialogue_ids": sorted(dialogue_ids),
+                    }
+                )
+            pack_report = pack.summary()
+            pack_report.update(
+                {
+                    "matched_assets": pack_matched_assets,
+                    "unmatched_assets": pack_unmatched_assets,
+                    "logical_candidates": pack_logical_candidates,
+                    "binding_candidates": pack_candidate_records,
+                }
+            )
+            pack_reports.append(pack_report)
+
+        default_selections = len(matched_dialogues - selected_dialogues)
+        report = {
+            "schema_version": 1,
+            "valid": True,
+            "applied": False,
+            "expansion": expansion,
+            "locale": locale,
+            "packs": pack_reports,
+            "counts": {
+                "archives": len(packs),
+                "audio_assets": sum(len(pack.assets) for pack in packs),
+                "quest_assets": sum(
+                    asset.source_kind == "quest" for pack in packs for asset in pack.assets
+                ),
+                "gossip_assets": sum(
+                    asset.source_kind == "gossip" for pack in packs for asset in pack.assets
+                ),
+                "gender_variant_assets": sum(
+                    bool(asset.player_gender_variant) for pack in packs for asset in pack.assets
+                ),
+                "matched_assets": sum(report["matched_assets"] for report in pack_reports),
+                "unmatched_assets": len(all_unmatched_assets),
+                "logical_candidates": sum(report["logical_candidates"] for report in pack_reports),
+                "binding_candidates": sum(report["binding_candidates"] for report in pack_reports),
+                "dialogues_with_candidates": len(matched_dialogues),
+                "default_selections": default_selections,
+                "existing_selections_preserved": len(matched_dialogues & selected_dialogues),
+                "lookup_unreferenced_assets": sum(
+                    not asset.lookup_referenced for pack in packs for asset in pack.assets
+                ),
+            },
+        }
+        return report, groups
+
+    def plan_datapack_import(
+        self,
+        packs: list[DatapackArchive],
+        *,
+        expansion: str = "3.3.5",
+        locale: str = "enUS",
+    ) -> dict[str, Any]:
+        report, _ = self._datapack_import_plan(packs, expansion=expansion, locale=locale)
+        return report
+
+    def import_datapacks(
+        self,
+        packs: list[DatapackArchive],
+        *,
+        expansion: str = "3.3.5",
+        locale: str = "enUS",
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        report, groups = self._datapack_import_plan(packs, expansion=expansion, locale=locale)
+        if dry_run:
+            return report
+
+        now = utc_now()
+        stored_assets: dict[str, dict[str, Any]] = {}
+        asset_root = self.storage_root / "preproduced" / "assets"
+        for pack in packs:
+            with zipfile.ZipFile(pack.path) as package:
+                for asset in pack.assets:
+                    content = package.read(asset.entry_path)
+                    digest = sha256_bytes(content)
+                    destination = asset_root / digest[:2] / f"{digest}.mp3"
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    if destination.exists():
+                        if sha256_bytes(destination.read_bytes()) != digest:
+                            raise AlphaError(
+                                f"Stored pre-produced audio failed its integrity check: {destination}"
+                            )
+                    else:
+                        temporary = destination.with_name(
+                            f".{destination.name}.{uuid.uuid4().hex}.tmp"
+                        )
+                        temporary.write_bytes(content)
+                        temporary.replace(destination)
+                    stored_assets[asset.asset_id] = {
+                        "storage_path": str(destination.resolve()),
+                        "sha256": digest,
+                    }
+
+        unmatched_asset_ids: set[str] = set()
+        matched_asset_ids = {asset.asset_id for group in groups for asset in group["assets"]}
+        for pack in packs:
+            unmatched_asset_ids.update(
+                asset.asset_id for asset in pack.assets if asset.asset_id not in matched_asset_ids
+            )
+
+        backup = self.backup_and_integrity_check()
+        with self.connect() as connection:
+            for pack in packs:
+                connection.execute(
+                    "INSERT INTO preproduced_packs(pack_id, module_name, title, module_version, "
+                    "archive_version, priority, archive_name, archive_sha256, archive_bytes, "
+                    "imported_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(pack_id) DO "
+                    "UPDATE SET module_name=excluded.module_name, title=excluded.title, "
+                    "module_version=excluded.module_version, archive_version=excluded.archive_version, "
+                    "priority=excluded.priority, archive_name=excluded.archive_name, "
+                    "archive_bytes=excluded.archive_bytes, imported_at=excluded.imported_at",
+                    (
+                        pack.pack_id,
+                        pack.module_name,
+                        pack.title,
+                        pack.module_version,
+                        pack.archive_version,
+                        pack.priority,
+                        pack.archive_name,
+                        pack.archive_sha256,
+                        pack.archive_bytes,
+                        now,
+                    ),
+                )
+                connection.execute(
+                    "DELETE FROM preproduced_findings WHERE pack_id=?", (pack.pack_id,)
+                )
+                for asset in pack.assets:
+                    stored = stored_assets[asset.asset_id]
+                    connection.execute(
+                        "INSERT INTO preproduced_assets(asset_id, pack_id, entry_path, source_kind, "
+                        "logical_key, quest_id, stage, legacy_file_key, player_gender_variant, "
+                        "storage_path, sha256, duration_seconds, mime_type, lookup_referenced, "
+                        "imported_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'audio/mpeg', ?, ?) "
+                        "ON CONFLICT(asset_id) DO UPDATE SET storage_path=excluded.storage_path, "
+                        "sha256=excluded.sha256, duration_seconds=excluded.duration_seconds, "
+                        "lookup_referenced=excluded.lookup_referenced, imported_at=excluded.imported_at",
+                        (
+                            asset.asset_id,
+                            pack.pack_id,
+                            asset.entry_path,
+                            asset.source_kind,
+                            asset.logical_key,
+                            asset.quest_id,
+                            asset.stage,
+                            asset.legacy_file_key,
+                            asset.player_gender_variant,
+                            stored["storage_path"],
+                            stored["sha256"],
+                            asset.duration_seconds,
+                            int(asset.lookup_referenced),
+                            now,
+                        ),
+                    )
+                    if asset.asset_id in unmatched_asset_ids:
+                        connection.execute(
+                            "INSERT INTO preproduced_findings(pack_id, asset_id, reason, details, "
+                            "created_at) VALUES (?, ?, 'no_active_corpus_binding', ?, ?)",
+                            (
+                                pack.pack_id,
+                                asset.asset_id,
+                                f"No active {expansion} {locale} dialogue binding matched "
+                                f"{asset.logical_key}.",
+                                now,
+                            ),
+                        )
+                    if not asset.lookup_referenced:
+                        connection.execute(
+                            "INSERT INTO preproduced_findings(pack_id, asset_id, reason, details, "
+                            "created_at) VALUES (?, ?, 'missing_pack_lookup', ?, ?)",
+                            (
+                                pack.pack_id,
+                                asset.asset_id,
+                                "The MP3 is present but no gossip lookup references its hash.",
+                                now,
+                            ),
+                        )
+
+            for group in groups:
+                pack = group["pack"]
+                for dialogue_id in group["dialogue_ids"]:
+                    candidate_id = self._preproduced_candidate_id(
+                        dialogue_id, pack.pack_id, group["logical_key"]
+                    )
+                    connection.execute(
+                        "INSERT INTO preproduced_candidates(candidate_id, dialogue_id, pack_id, "
+                        "logical_key, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(candidate_id) "
+                        "DO UPDATE SET created_at=preproduced_candidates.created_at",
+                        (candidate_id, dialogue_id, pack.pack_id, group["logical_key"], now),
+                    )
+                    for asset in group["assets"]:
+                        connection.execute(
+                            "INSERT OR IGNORE INTO preproduced_candidate_assets(candidate_id, "
+                            "asset_id, player_gender_variant) VALUES (?, ?, ?)",
+                            (candidate_id, asset.asset_id, asset.player_gender_variant),
+                        )
+
+            candidate_dialogues = sorted(
+                {dialogue_id for group in groups for dialogue_id in group["dialogue_ids"]}
+            )
+            selected_count = 0
+            for dialogue_id in candidate_dialogues:
+                existing = connection.execute(
+                    "SELECT candidate_id FROM dialogue_audio_selections WHERE dialogue_id=?",
+                    (dialogue_id,),
+                ).fetchone()
+                if existing:
+                    continue
+                preferred = connection.execute(
+                    "SELECT pc.candidate_id FROM preproduced_candidates pc "
+                    "JOIN preproduced_packs pp ON pp.pack_id=pc.pack_id "
+                    "WHERE pc.dialogue_id=? ORDER BY pp.priority DESC, pp.archive_version DESC, "
+                    "pc.candidate_id LIMIT 1",
+                    (dialogue_id,),
+                ).fetchone()
+                if preferred:
+                    connection.execute(
+                        "INSERT INTO dialogue_audio_selections(dialogue_id, candidate_id, "
+                        "candidate_origin, selected_at) VALUES (?, ?, 'preproduced', ?)",
+                        (dialogue_id, preferred["candidate_id"], now),
+                    )
+                    selected_count += 1
+
+        report["applied"] = True
+        report["counts"]["default_selections"] = selected_count
+        report["storage_root"] = str(asset_root.resolve())
+        report["backup"] = backup
+        return report
+
+    @staticmethod
     def _refresh_speaker_inference(connection: sqlite3.Connection, speaker_id: str) -> None:
         speaker = connection.execute(
             "SELECT * FROM speakers WHERE speaker_id=?", (speaker_id,)
@@ -2350,7 +2728,12 @@ class AlphaStore:
         return """
             CASE
                 WHEN d.source_changed = 1 THEN 'source_changed'
-                WHEN pa.dialogue_id IS NOT NULL THEN 'approved'
+                WHEN das.candidate_origin = 'preproduced' THEN 'preproduced_selected'
+                WHEN das.candidate_origin = 'elevenlabs' THEN 'approved'
+                WHEN EXISTS (
+                    SELECT 1 FROM preproduced_candidates pc
+                    WHERE pc.dialogue_id = d.dialogue_id
+                ) THEN 'preproduced_available'
                 WHEN EXISTS (
                     SELECT 1 FROM audio_candidates ac
                     WHERE ac.dialogue_id = d.dialogue_id AND ac.status = 'pending_review'
@@ -2382,6 +2765,12 @@ class AlphaStore:
                 tr.warnings_json, pa.candidate_id AS production_candidate_id,
                 pa.addon_filename, pa.sha256 AS production_sha256,
                 pa.duration_seconds AS production_duration,
+                das.candidate_id AS selected_candidate_id,
+                das.candidate_origin AS selected_candidate_origin,
+                (SELECT COUNT(*) FROM preproduced_candidates pc
+                    WHERE pc.dialogue_id=d.dialogue_id) AS preproduced_candidate_count,
+                (SELECT COUNT(*) FROM audio_candidates ac
+                    WHERE ac.dialogue_id=d.dialogue_id) AS elevenlabs_candidate_count,
                 {self._status_expression()} AS production_state
             FROM dialogue_entries d
             JOIN speakers s ON s.speaker_id = d.speaker_id
@@ -2391,6 +2780,7 @@ class AlphaStore:
                 AND vdp.delivery=d.delivery
             LEFT JOIN spoken_text_revisions tr ON tr.dialogue_id = d.dialogue_id AND tr.is_current = 1
             LEFT JOIN production_assets pa ON pa.dialogue_id = d.dialogue_id
+            LEFT JOIN dialogue_audio_selections das ON das.dialogue_id = d.dialogue_id
         """
 
     def dashboard(self) -> dict[str, Any]:
@@ -2509,11 +2899,25 @@ class AlphaStore:
                 "ORDER BY revision_number DESC",
                 (dialogue_id,),
             ).fetchall()
-            candidates = connection.execute(
+            generated_candidates = connection.execute(
                 "SELECT ac.*, g.delivery, g.model_id, g.character_count, g.provider_request_id, "
                 "g.created_at AS generated_at FROM audio_candidates ac "
                 "JOIN generations g ON g.generation_id=ac.generation_id "
-                "WHERE ac.dialogue_id=? ORDER BY ac.created_at DESC",
+                "WHERE ac.dialogue_id=? ORDER BY ac.created_at, ac.candidate_id",
+                (dialogue_id,),
+            ).fetchall()
+            preproduced_rows = connection.execute(
+                "SELECT pc.candidate_id, pc.dialogue_id, pc.logical_key, pc.created_at, "
+                "pp.pack_id, pp.title AS pack_title, pp.module_name, pp.module_version, "
+                "pp.archive_version, pp.priority, pp.archive_name, pp.archive_sha256, "
+                "pa.asset_id, pa.entry_path, pa.player_gender_variant, pa.storage_path, "
+                "pa.sha256, pa.duration_seconds, pa.mime_type, pa.lookup_referenced "
+                "FROM preproduced_candidates pc "
+                "JOIN preproduced_packs pp ON pp.pack_id=pc.pack_id "
+                "JOIN preproduced_candidate_assets pca ON pca.candidate_id=pc.candidate_id "
+                "JOIN preproduced_assets pa ON pa.asset_id=pca.asset_id "
+                "WHERE pc.dialogue_id=? ORDER BY pp.priority DESC, pp.archive_version DESC, "
+                "pc.candidate_id, pa.player_gender_variant",
                 (dialogue_id,),
             ).fetchall()
             generations = connection.execute(
@@ -2546,7 +2950,121 @@ class AlphaStore:
         payload["warnings"] = _loads(payload.get("warnings_json"), [])
         payload["voice_settings"] = _loads(payload.get("settings_json"), {})
         payload["revisions"] = [dict(item) for item in revisions]
-        payload["candidates"] = [dict(item) for item in candidates]
+        selected_candidate_id = str(payload.get("selected_candidate_id") or "")
+        candidates: list[dict[str, Any]] = []
+        for generation_number, item in enumerate(generated_candidates, start=1):
+            candidate = dict(item)
+            candidate.update(
+                {
+                    "candidate_origin": "elevenlabs",
+                    "candidate_title": f"ElevenLabs Sample #{generation_number}",
+                    "generation_number": generation_number,
+                    "source_label": "ElevenLabs",
+                    "is_selected": candidate["candidate_id"] == selected_candidate_id,
+                    "assets": [
+                        {
+                            "asset_id": candidate["candidate_id"],
+                            "label": "Audio sample",
+                            "duration_seconds": candidate["duration_seconds"],
+                            "sha256": candidate["sha256"],
+                            "mime_type": candidate["mime_type"],
+                            "player_gender_variant": "",
+                        }
+                    ],
+                }
+            )
+            candidates.append(candidate)
+
+        preproduced: dict[str, dict[str, Any]] = {}
+        for item in preproduced_rows:
+            row_payload = dict(item)
+            candidate_id = str(row_payload["candidate_id"])
+            candidate = preproduced.setdefault(
+                candidate_id,
+                {
+                    "candidate_id": candidate_id,
+                    "dialogue_id": row_payload["dialogue_id"],
+                    "candidate_origin": "preproduced",
+                    "candidate_title": (
+                        f"{row_payload['pack_title']} v{row_payload['archive_version']}"
+                    ),
+                    "source_label": "Pre-produced",
+                    "logical_key": row_payload["logical_key"],
+                    "created_at": row_payload["created_at"],
+                    "pack_id": row_payload["pack_id"],
+                    "pack_title": row_payload["pack_title"],
+                    "module_name": row_payload["module_name"],
+                    "module_version": row_payload["module_version"],
+                    "archive_version": row_payload["archive_version"],
+                    "archive_name": row_payload["archive_name"],
+                    "archive_sha256": row_payload["archive_sha256"],
+                    "priority": row_payload["priority"],
+                    "status": "candidate",
+                    "is_selected": candidate_id == selected_candidate_id,
+                    "assets": [],
+                },
+            )
+            variant = str(row_payload["player_gender_variant"] or "")
+            candidate["assets"].append(
+                {
+                    "asset_id": row_payload["asset_id"],
+                    "entry_path": row_payload["entry_path"],
+                    "label": (
+                        f"{'Female' if variant == 'f' else 'Male'} player text"
+                        if variant
+                        else "Audio sample"
+                    ),
+                    "player_gender_variant": variant,
+                    "duration_seconds": row_payload["duration_seconds"],
+                    "sha256": row_payload["sha256"],
+                    "mime_type": row_payload["mime_type"],
+                    "lookup_referenced": bool(row_payload["lookup_referenced"]),
+                }
+            )
+        candidates.extend(preproduced.values())
+        candidates.sort(
+            key=lambda item: (
+                0 if item["is_selected"] else 1,
+                0 if item["candidate_origin"] == "preproduced" else 1,
+                -int(item.get("priority") or 0),
+                str(item.get("created_at") or ""),
+            )
+        )
+        payload["candidates"] = candidates
+        payload["candidate_count"] = len(candidates)
+        payload["production_files"] = []
+        if payload.get("selected_candidate_origin") == "preproduced":
+            selected = next((item for item in candidates if item["is_selected"]), None)
+            if selected:
+                folder = "gossip" if payload["source"] == "gossip" else "quests"
+                for asset in selected["assets"]:
+                    prefix = (
+                        f"{asset['player_gender_variant']}-"
+                        if asset["player_gender_variant"]
+                        else ""
+                    )
+                    payload["production_files"].append(
+                        {
+                            "filename": (
+                                f"generated/sounds/{folder}/{prefix}{payload['addon_file_key']}.mp3"
+                            ),
+                            "duration_seconds": asset["duration_seconds"],
+                            "sha256": asset["sha256"],
+                        }
+                    )
+                if len(payload["production_files"]) == 1:
+                    output = payload["production_files"][0]
+                    payload["addon_filename"] = output["filename"]
+                    payload["production_duration"] = output["duration_seconds"]
+                    payload["production_sha256"] = output["sha256"]
+        elif payload.get("addon_filename"):
+            payload["production_files"] = [
+                {
+                    "filename": payload["addon_filename"],
+                    "duration_seconds": payload["production_duration"],
+                    "sha256": payload["production_sha256"],
+                }
+            ]
         payload["quest_phases"] = [dict(item) for item in quest_phases]
         payload["generations"] = []
         for item in generations:
@@ -3351,9 +3869,10 @@ class AlphaStore:
                 ("gossip", "d.source='gossip'"),
             ):
                 dialogue[key] = connection.execute(
-                    "SELECT COUNT(*) AS total, SUM(CASE WHEN pa.dialogue_id IS NOT NULL THEN 1 ELSE 0 "
-                    f"END) AS complete FROM dialogue_entries d LEFT JOIN production_assets pa "
-                    f"ON pa.dialogue_id=d.dialogue_id WHERE d.active=1 AND {condition}"
+                    "SELECT COUNT(*) AS total, SUM(CASE WHEN das.dialogue_id IS NOT NULL THEN 1 "
+                    f"ELSE 0 END) AS complete FROM dialogue_entries d LEFT JOIN "
+                    "dialogue_audio_selections das ON das.dialogue_id=d.dialogue_id "
+                    f"WHERE d.active=1 AND {condition}"
                 ).fetchone()
 
         def item(label: str, row: sqlite3.Row, href: str) -> dict[str, int | float | str]:
@@ -4597,16 +5116,43 @@ class AlphaStore:
             )
         return {"candidate_id": candidate_id, "duration_seconds": duration}
 
-    def candidate_path(self, candidate_id: str) -> Path:
+    def candidate_path(self, candidate_id: str, asset_id: str = "") -> Path:
         with self.connect() as connection:
             row = connection.execute(
                 "SELECT storage_path FROM audio_candidates WHERE candidate_id=?", (candidate_id,)
             ).fetchone()
+            if not row:
+                parameters: list[Any] = [candidate_id]
+                asset_condition = ""
+                if asset_id:
+                    asset_condition = " AND pa.asset_id=?"
+                    parameters.append(asset_id)
+                rows = connection.execute(
+                    "SELECT pa.asset_id, pa.storage_path FROM preproduced_candidates pc "
+                    "JOIN preproduced_candidate_assets pca ON pca.candidate_id=pc.candidate_id "
+                    "JOIN preproduced_assets pa ON pa.asset_id=pca.asset_id "
+                    f"WHERE pc.candidate_id=?{asset_condition} "
+                    "ORDER BY CASE WHEN pa.player_gender_variant='' THEN 0 ELSE 1 END, "
+                    "pa.player_gender_variant",
+                    parameters,
+                ).fetchall()
+                if (asset_id and rows) or len(rows) == 1:
+                    row = rows[0]
+                elif len(rows) > 1:
+                    raise AlphaError("Choose a player-text variant for this audio candidate.")
         if not row:
             raise AlphaError("Audio candidate was not found.")
         path = Path(row["storage_path"]).resolve()
         if self.storage_root not in path.parents or not path.is_file():
             raise AlphaError("Audio candidate file is unavailable.")
+        return path
+
+    def export_asset_path(self, asset: dict[str, Any]) -> Path:
+        path = Path(str(asset.get("storage_path") or "")).resolve()
+        if self.storage_root not in path.parents or not path.is_file():
+            raise AlphaError("Selected production audio is unavailable.")
+        if sha256_bytes(path.read_bytes()) != str(asset.get("sha256") or ""):
+            raise AlphaError("Selected production audio failed its integrity check.")
         return path
 
     def preview_path(self, preview_id: str) -> Path:
@@ -4616,7 +5162,7 @@ class AlphaStore:
             raise AlphaError("Voice preview file is unavailable.")
         return path
 
-    def approve_candidate(self, candidate_id: str) -> dict[str, Any]:
+    def select_candidate(self, candidate_id: str) -> dict[str, Any]:
         now = utc_now()
         with self.connect() as connection:
             row = connection.execute(
@@ -4625,35 +5171,66 @@ class AlphaStore:
                 "WHERE ac.candidate_id=?",
                 (candidate_id,),
             ).fetchone()
-            if not row:
-                raise AlphaError("Audio candidate was not found.")
+            if row:
+                dialogue_id = str(row["dialogue_id"])
+                connection.execute(
+                    "UPDATE audio_candidates SET status='pending_review', reviewed_at=NULL "
+                    "WHERE dialogue_id=? AND candidate_id<>? AND status='approved'",
+                    (dialogue_id, candidate_id),
+                )
+                connection.execute(
+                    "UPDATE audio_candidates SET status='approved', reviewed_at=? "
+                    "WHERE candidate_id=?",
+                    (now, candidate_id),
+                )
+                folder = "quests" if row["source"] != "gossip" else "gossip"
+                addon_filename = f"generated/sounds/{folder}/{row['addon_file_key']}.mp3"
+                connection.execute(
+                    "INSERT INTO production_assets(dialogue_id, candidate_id, addon_filename, "
+                    "sha256, duration_seconds, approved_at) VALUES (?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(dialogue_id) DO UPDATE SET candidate_id=excluded.candidate_id, "
+                    "addon_filename=excluded.addon_filename, sha256=excluded.sha256, "
+                    "duration_seconds=excluded.duration_seconds, approved_at=excluded.approved_at",
+                    (
+                        dialogue_id,
+                        candidate_id,
+                        addon_filename,
+                        row["sha256"],
+                        row["duration_seconds"],
+                        now,
+                    ),
+                )
+                candidate_origin = "elevenlabs"
+            else:
+                imported = connection.execute(
+                    "SELECT pc.dialogue_id FROM preproduced_candidates pc WHERE pc.candidate_id=?",
+                    (candidate_id,),
+                ).fetchone()
+                if not imported:
+                    raise AlphaError("Audio candidate was not found.")
+                dialogue_id = str(imported["dialogue_id"])
+                candidate_origin = "preproduced"
+                connection.execute(
+                    "UPDATE audio_candidates SET status='pending_review', reviewed_at=NULL "
+                    "WHERE dialogue_id=? AND status='approved'",
+                    (dialogue_id,),
+                )
+                connection.execute(
+                    "DELETE FROM production_assets WHERE dialogue_id=?", (dialogue_id,)
+                )
+
             connection.execute(
-                "UPDATE audio_candidates SET status='rejected', reviewed_at=? "
-                "WHERE dialogue_id=? AND candidate_id<>? AND status='pending_review'",
-                (now, row["dialogue_id"], candidate_id),
+                "INSERT INTO dialogue_audio_selections(dialogue_id, candidate_id, "
+                "candidate_origin, selected_at) VALUES (?, ?, ?, ?) ON CONFLICT(dialogue_id) "
+                "DO UPDATE SET candidate_id=excluded.candidate_id, "
+                "candidate_origin=excluded.candidate_origin, selected_at=excluded.selected_at",
+                (dialogue_id, candidate_id, candidate_origin, now),
             )
-            connection.execute(
-                "UPDATE audio_candidates SET status='approved', reviewed_at=? WHERE candidate_id=?",
-                (now, candidate_id),
-            )
-            folder = "quests" if row["source"] != "gossip" else "gossip"
-            addon_filename = f"generated/sounds/{folder}/{row['addon_file_key']}.mp3"
-            connection.execute(
-                "INSERT INTO production_assets(dialogue_id, candidate_id, addon_filename, sha256, "
-                "duration_seconds, approved_at) VALUES (?, ?, ?, ?, ?, ?) "
-                "ON CONFLICT(dialogue_id) DO UPDATE SET candidate_id=excluded.candidate_id, "
-                "addon_filename=excluded.addon_filename, sha256=excluded.sha256, "
-                "duration_seconds=excluded.duration_seconds, approved_at=excluded.approved_at",
-                (
-                    row["dialogue_id"],
-                    candidate_id,
-                    addon_filename,
-                    row["sha256"],
-                    row["duration_seconds"],
-                    now,
-                ),
-            )
-        return self.get_dialogue(row["dialogue_id"])
+        return self.get_dialogue(dialogue_id)
+
+    def approve_candidate(self, candidate_id: str) -> dict[str, Any]:
+        """Backward-compatible alias for selecting a line candidate for publication."""
+        return self.select_candidate(candidate_id)
 
     def export_manifest(self) -> dict[str, Any]:
         with self.connect() as connection:
@@ -4661,29 +5238,67 @@ class AlphaStore:
                 "SELECT * FROM source_snapshots WHERE is_active=1 "
                 "ORDER BY imported_at DESC, expansion, locale"
             ).fetchall()
-            rows = connection.execute(
-                "SELECT pa.*, pa.addon_filename AS filename, d.expansion, d.locale, d.source, "
-                "d.source AS stage, d.quest_id, d.quest_title, "
-                "d.original_text, d.speaker_id, d.binding_id, d.content_id, "
-                "s.name AS speaker_name, s.entity_type, s.entity_id, ac.storage_path "
-                "FROM production_assets pa "
-                "JOIN dialogue_entries d ON d.dialogue_id=pa.dialogue_id "
+            selections = connection.execute(
+                "SELECT das.*, d.expansion, d.locale, d.source, d.quest_id, d.quest_title, "
+                "d.original_text, d.speaker_id, d.binding_id, d.content_id, d.addon_file_key, "
+                "s.name AS speaker_name, s.entity_type, s.entity_id "
+                "FROM dialogue_audio_selections das "
+                "JOIN dialogue_entries d ON d.dialogue_id=das.dialogue_id "
                 "JOIN speakers s ON s.speaker_id=d.speaker_id "
-                "JOIN audio_candidates ac ON ac.candidate_id=pa.candidate_id "
                 "WHERE d.active=1 AND d.source_changed=0 "
-                "ORDER BY pa.addon_filename"
+                "ORDER BY d.expansion, d.locale, d.source, d.addon_file_key"
             ).fetchall()
-        assets = [dict(row) for row in rows]
-        for asset in assets:
-            asset["package_path"] = (
-                f"{asset['expansion']}/{asset['locale']}/{asset['addon_filename']}"
-            )
+            assets: list[dict[str, Any]] = []
+            for selection_row in selections:
+                selection = dict(selection_row)
+                folder = "gossip" if selection["source"] == "gossip" else "quests"
+                if selection["candidate_origin"] == "elevenlabs":
+                    rows = connection.execute(
+                        "SELECT candidate_id, candidate_id AS source_asset_id, storage_path, "
+                        "sha256, duration_seconds, mime_type, '' AS player_gender_variant, "
+                        "NULL AS pack_id, NULL AS pack_title, NULL AS archive_version "
+                        "FROM audio_candidates WHERE candidate_id=?",
+                        (selection["candidate_id"],),
+                    ).fetchall()
+                else:
+                    rows = connection.execute(
+                        "SELECT pc.candidate_id, pa.asset_id AS source_asset_id, pa.storage_path, "
+                        "pa.sha256, pa.duration_seconds, pa.mime_type, pa.player_gender_variant, "
+                        "pp.pack_id, pp.title AS pack_title, pp.archive_version "
+                        "FROM preproduced_candidates pc "
+                        "JOIN preproduced_candidate_assets pca "
+                        "ON pca.candidate_id=pc.candidate_id "
+                        "JOIN preproduced_assets pa ON pa.asset_id=pca.asset_id "
+                        "JOIN preproduced_packs pp ON pp.pack_id=pc.pack_id "
+                        "WHERE pc.candidate_id=? ORDER BY pa.player_gender_variant",
+                        (selection["candidate_id"],),
+                    ).fetchall()
+                for row in rows:
+                    audio = dict(row)
+                    variant = str(audio.get("player_gender_variant") or "")
+                    prefix = f"{variant}-" if variant else ""
+                    addon_filename = (
+                        f"generated/sounds/{folder}/{prefix}{selection['addon_file_key']}.mp3"
+                    )
+                    asset = {
+                        **selection,
+                        **audio,
+                        "filename": addon_filename,
+                        "addon_filename": addon_filename,
+                        "stage": selection["source"],
+                        "approved_at": selection["selected_at"],
+                    }
+                    asset["package_path"] = (
+                        f"{asset['expansion']}/{asset['locale']}/{addon_filename}"
+                    )
+                    assets.append(asset)
         return {
-            "schema_version": 2,
+            "schema_version": 3,
             "generated_at": utc_now(),
             "source_snapshot": dict(snapshots[0]) if snapshots else None,
             "source_snapshots": [dict(snapshot) for snapshot in snapshots],
-            "asset_count": len(rows),
+            "selection_count": len(selections),
+            "asset_count": len(assets),
             "assets": assets,
         }
 
@@ -4693,13 +5308,13 @@ class AlphaStore:
             rows = connection.execute(
                 "SELECT d.source, COALESCE(CAST(d.quest_id AS TEXT), '') AS quest, "
                 "d.quest_title, d.original_text AS text, d.original_text, d.addon_file_key, "
-                "CASE WHEN pa.dialogue_id IS NOT NULL AND d.source_changed=0 THEN 1 ELSE 0 END "
+                "CASE WHEN das.dialogue_id IS NOT NULL AND d.source_changed=0 THEN 1 ELSE 0 END "
                 "AS per_entity_audio_ready, "
                 "s.race_id AS DisplayRaceID, s.gender_id AS DisplaySexID, s.name, "
                 "s.entity_type AS type, s.entity_id AS id FROM dialogue_entries d "
                 "JOIN speakers s ON s.speaker_id=d.speaker_id "
                 "JOIN dialogue_bindings db ON db.binding_id=d.binding_id AND db.active=1 "
-                "LEFT JOIN production_assets pa ON pa.dialogue_id=d.dialogue_id "
+                "LEFT JOIN dialogue_audio_selections das ON das.dialogue_id=d.dialogue_id "
                 "WHERE d.active=1 ORDER BY d.quest_id, d.source, s.entity_type, s.entity_id"
             ).fetchall()
         return [dict(row) for row in rows]

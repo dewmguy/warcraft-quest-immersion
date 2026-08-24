@@ -25,9 +25,34 @@ the application, addon source, provenance manifests, lookup metadata,
 pronunciation dictionary, tests, and deployment tooling. Audio remains in
 ignored persistent storage and is reattached by a verified import step.
 
-User-supplied archives belong in `imports/source-archives/`. The archive files
-are ignored; their names, sizes, SHA-256 hashes, and inventory facts are tracked
-in `imports/source-archives/manifest.json`.
+Current inherited VoiceOver addon data archives belong in the ignored
+`datapacks/` directory. They are mounted read-only at `/app/datapacks`; neither
+the archives nor extracted audio are copied into the image or committed to Git.
+The importer records each archive's SHA-256, module name, version, declared load
+priority, asset path, duration, and matching corpus bindings in SQLite.
+
+Inspect all packs and report their 3.3.5 enUS coverage without extracting audio:
+
+```powershell
+.\.venv\Scripts\python.exe -m tts_cli datapacks import .\datapacks --dry-run
+```
+
+Apply the verified import locally:
+
+```powershell
+.\.venv\Scripts\python.exe -m tts_cli datapacks import .\datapacks --yes
+```
+
+In Docker, use `/app/datapacks` as the directory. Identical MP3 payloads are
+stored once by SHA-256 beneath `data/alpha/preproduced/assets/`. Every matching
+quest or gossip binding receives a separately selectable candidate. The pack
+with the highest declared data-module priority is selected by default only when
+the line has no existing selection. Existing ElevenLabs selections are never
+overwritten. Required `f-` and `m-` player-text files are retained together as
+one publishable candidate with two playable assets.
+
+The older single-archive audit scripts remain available for historical
+comparison. Archives used by that workflow belong in `imports/source-archives/`.
 
 Verify, inventory, import, and validate a supplied legacy pack:
 

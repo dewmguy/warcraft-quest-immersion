@@ -335,6 +335,8 @@ def _dialogue_generation_availability(dialogue: dict) -> tuple[bool, str]:
         "ready_to_generate",
         "generation_failed",
         "audio_to_review",
+        "preproduced_selected",
+        "preproduced_available",
     }:
         return False, "Audio sample generation is unavailable for this quest's current state."
     return True, ""
@@ -1710,22 +1712,34 @@ def api_approve_candidate(
     __: Annotated[None, Depends(require_action_header)],
 ) -> dict:
     try:
-        dialogue = alpha_store.approve_candidate(candidate_id)
+        dialogue = alpha_store.select_candidate(candidate_id)
         return {
-            "message": f"Approved {dialogue['addon_filename']} for production.",
+            "message": "Selected this audio candidate for publishing.",
             "dialogue": dialogue,
         }
     except AlphaError as error:
         raise _alpha_error(error) from error
 
 
+@app.post("/api/alpha/candidates/{candidate_id}/select")
+def api_select_candidate(
+    candidate_id: str,
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    return api_approve_candidate(candidate_id, _, __)
+
+
 @app.get("/api/alpha/candidates/{candidate_id}/audio")
 def api_candidate_audio(
     candidate_id: str,
     _: Annotated[str, Depends(require_auth)],
+    asset_id: str = "",
 ) -> FileResponse:
     try:
-        return FileResponse(alpha_store.candidate_path(candidate_id), media_type="audio/mpeg")
+        return FileResponse(
+            alpha_store.candidate_path(candidate_id, asset_id), media_type="audio/mpeg"
+        )
     except AlphaError as error:
         raise _alpha_error(error, 404) from error
 
@@ -1769,7 +1783,7 @@ def api_alpha_export_zip(_: Annotated[str, Depends(require_auth)]) -> Response:
             "production-manifest.json", json.dumps(public, indent=2, ensure_ascii=False)
         )
         for asset in internal["assets"]:
-            path = alpha_store.candidate_path(asset["candidate_id"])
+            path = alpha_store.export_asset_path(asset)
             output.write(path, arcname=asset["package_path"])
     return Response(
         content=archive.getvalue(),

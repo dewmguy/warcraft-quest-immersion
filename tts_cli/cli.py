@@ -21,6 +21,7 @@ from tts_cli.corpus import (
     write_corpus_bundle,
 )
 from tts_cli.data_sources import DataSourceError, load_dialogue_csv, write_dialogue_csv
+from tts_cli.datapacks import DatapackError, inspect_datapack_directory
 from tts_cli.dbc import convert_dbc_directory_to_sql
 from tts_cli.init_db import download_and_extract_latest_db_dump, import_sql_files_to_database
 from tts_cli.paths import PROJECT_ROOT, SAMPLE_DATA_PATH
@@ -130,6 +131,21 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument(
         "--yes", action="store_true", help="confirm the production snapshot replacement"
     )
+
+    datapacks_parser = subparsers.add_parser(
+        "datapacks", help="Inspect and import inherited VoiceOver audio packs"
+    )
+    datapack_commands = datapacks_parser.add_subparsers(dest="datapacks_command", required=True)
+    datapack_import = datapack_commands.add_parser(
+        "import", help="Import pre-produced quest and gossip audio as review candidates"
+    )
+    datapack_import.add_argument("directory", type=Path)
+    datapack_import.add_argument("--expansion", default="3.3.5")
+    datapack_import.add_argument("--locale", default="enUS")
+    datapack_import.add_argument("--dry-run", action="store_true")
+    datapack_import.add_argument(
+        "--yes", action="store_true", help="confirm the pre-produced audio import"
+    )
     return parser
 
 
@@ -212,6 +228,38 @@ def corpus_command(args: argparse.Namespace) -> int:
         print(json.dumps(applied, indent=2))
         return 0
     raise AlphaError("Unknown corpus command.")
+
+
+def datapacks_command(args: argparse.Namespace) -> int:
+    if args.datapacks_command != "import":
+        raise AlphaError("Unknown datapack command.")
+    packs, ignored = inspect_datapack_directory(args.directory)
+    store = _alpha_store()
+    report = store.import_datapacks(
+        packs,
+        expansion=args.expansion,
+        locale=args.locale,
+        dry_run=True,
+    )
+    report["ignored_archives"] = ignored
+    print(json.dumps(report, indent=2))
+    if args.dry_run:
+        return 0
+    if not args.yes:
+        confirmation = input(
+            "Type IMPORT to store the audio candidates and create default selections: "
+        )
+        if confirmation.strip() != "IMPORT":
+            print("Import cancelled.")
+            return 2
+    applied = store.import_datapacks(
+        packs,
+        expansion=args.expansion,
+        locale=args.locale,
+    )
+    applied["ignored_archives"] = ignored
+    print(json.dumps(applied, indent=2))
+    return 0
 
 
 def _select_database_area():
@@ -389,9 +437,12 @@ def main(argv: list[str] | None = None) -> int:
             write_model_data()
         elif args.command == "corpus":
             return corpus_command(args)
+        elif args.command == "datapacks":
+            return datapacks_command(args)
     except (
         AlphaError,
         ConfigurationError,
+        DatapackError,
         DataSourceError,
         FileNotFoundError,
         ValueError,

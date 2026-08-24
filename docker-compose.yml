@@ -13,6 +13,7 @@ services:
       - "${WQI_WEB_PORT:-8090}:8080"
     volumes:
       - ./data:/app/data
+      - ./datapacks:/app/datapacks:ro
       - ./AI_VoiceOverData_Vanilla/generated:/app/AI_VoiceOverData_Vanilla/generated
     security_opt:
       - no-new-privileges:true
