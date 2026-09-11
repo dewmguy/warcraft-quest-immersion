@@ -483,6 +483,26 @@ def test_speaker_context_is_inferred_but_remains_editable(store: AlphaStore):
     assert updated["speaker"]["importance_score"] == 55
 
 
+def test_npc_profile_lists_other_database_records_with_the_exact_name(store: AlphaStore):
+    with store.connect() as connection:
+        connection.execute(
+            "INSERT INTO speakers(speaker_id, expansion, entity_type, entity_id, name, race_id, "
+            "gender_id, race_name, gender_name, voice_id, role, faction, zone, zone_location_key, "
+            "context_summary, importance, uniqueness, source_snapshot_id, created_at, updated_at) "
+            "SELECT 'creature-90004', expansion, entity_type, 90004, name, race_id, gender_id, "
+            "race_name, gender_name, voice_id, role, faction, 'Stormwind City', zone_location_key, "
+            "context_summary, importance, uniqueness, source_snapshot_id, created_at, updated_at "
+            "FROM speakers WHERE speaker_id='creature-90001'"
+        )
+
+    record = store.get_speaker("creature-90001")
+
+    assert len(record["alternate_ids"]) == 1
+    assert record["alternate_ids"][0]["entity_id"] == 90004
+    assert record["alternate_ids"][0]["quest_count"] == 0
+    assert record["alternate_ids"][0]["gossip_count"] == 0
+
+
 def test_npc_directory_excludes_objects_and_filters_voice_approach(store: AlphaStore):
     directory = store.list_npcs(page_size=10)
 

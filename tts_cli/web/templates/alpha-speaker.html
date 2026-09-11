@@ -1,5 +1,6 @@
 {% extends "alpha-base.html" %}
 {% from "alpha-status.html" import dialogue_status %}
+{% from "alpha-voice-cell.html" import voice_cell %}
 {% set active_nav = "npcs" %}
 {% set npc = record.npc %}
 {% block title %}{{ npc.name }}{% endblock %}
@@ -98,4 +99,21 @@
     <div class="panel-heading"><div><h2>Quest and Gossip Lines Delivered by {{ npc.name }}</h2></div><span>{{ record.dialogue|length }} line{{ '' if record.dialogue|length == 1 else 's' }}</span></div>
     <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Quest or Gossip</th><th>Type</th><th>Spoken Text</th><th>Status</th></tr></thead><tbody>{% for row in record.dialogue %}<tr><td><a href="/alpha/dialogue/{{ row.dialogue_id }}">{{ row.quest_title or row.original_text[:100] }}</a>{% if row.quest_id %}<span class="cell-detail">Quest {{ row.quest_id }}</span>{% endif %}</td><td>{{ row.source | title }}</td><td>{% if row.revision_id %}Prepared{% else %}<a class="cell-action" href="/alpha/dialogue/{{ row.dialogue_id }}#spoken-text">Not prepared &rarr;</a>{% endif %}</td><td>{{ dialogue_status(row) }}</td></tr>{% endfor %}</tbody></table></div>
   </section>
+
+  {% if record.alternate_ids %}
+  <section class="alpha-panel">
+    <div class="panel-heading"><div><h2>Alternate NPC IDs</h2><p>Other {{ npc.expansion }} database records using the exact name {{ npc.name }}.</p></div><span>{{ record.alternate_ids|length }} alternate{{ '' if record.alternate_ids|length == 1 else 's' }}</span></div>
+    <div class="alpha-table-wrap"><table class="alpha-table"><thead><tr><th>Database ID</th><th>Quest Lines</th><th>Gossip Lines</th><th>Voice</th><th>Status</th></tr></thead><tbody>
+      {% for alternate in record.alternate_ids %}
+      <tr>
+        <td><a class="record-link" href="{{ npc_profile_path(alternate.entity_type, alternate.entity_id, alternate.expansion) }}"><strong>NPC {{ alternate.entity_id }}</strong><span>{{ alternate.race_name | title }} · {{ alternate.gender_name | title }}{% if alternate.zone %} · {{ alternate.zone }}{% endif %}</span></a></td>
+        <td>{{ alternate.quest_count }}</td>
+        <td>{{ alternate.gossip_count }}</td>
+        <td>{{ voice_cell(alternate) }}</td>
+        <td>{% if alternate.provider_voice_id %}<span class="work-status status-approved">Voice Ready</span>{% elif alternate.voice_id %}<a class="work-status status-needs_voice status-action" href="{{ '/alpha/races/' if alternate.voice_scope == 'baseline' else '/alpha/voices/' }}{{ alternate.voice_id }}#provider-creation">Needs Voice &rarr;</a>{% else %}<a class="work-status status-needs_voice status-action" href="{{ npc_profile_path(alternate.entity_type, alternate.entity_id, alternate.expansion) }}#voice-approach">Needs Voice &rarr;</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody></table></div>
+  </section>
+  {% endif %}
 {% endblock %}

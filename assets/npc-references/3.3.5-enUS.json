@@ -1,10 +1,11 @@
 {
   "schema_version": 1,
   "catalog_id": "wqi-3.3.5-enUS-cultural-references",
-  "catalog_version": 1,
+  "catalog_version": 2,
   "expansion": "3.3.5",
   "locale": "enUS",
   "researched_at": "2026-09-10",
+  "matched_voice_scope": "unique",
   "method": "Exact NPC-name matches were checked against the active quest and gossip corpus. Direct name, role, and dialogue parallels were retained; weak or incidental leads were omitted.",
   "sources": {
     "stonefield": {

@@ -45,6 +45,7 @@ class NPCReferenceCatalog:
     locale: str
     researched_at: str
     entries: tuple[NPCReferenceEntry, ...]
+    matched_voice_scope: str = "unchanged"
 
 
 def _required_text(payload: dict[str, Any], field: str, *, maximum: int) -> str:
@@ -72,6 +73,11 @@ def load_npc_reference_catalog(path: Path) -> NPCReferenceCatalog:
     raw_entries = payload.get("entries")
     if not isinstance(raw_entries, list) or not raw_entries:
         raise NPCReferenceCatalogError("NPC reference catalog must contain entries.")
+    matched_voice_scope = str(payload.get("matched_voice_scope") or "unchanged").strip()
+    if matched_voice_scope not in {"unchanged", "unique"}:
+        raise NPCReferenceCatalogError(
+            "NPC reference catalog matched_voice_scope must be 'unchanged' or 'unique'."
+        )
 
     entries: list[NPCReferenceEntry] = []
     seen_keys: set[str] = set()
@@ -137,4 +143,5 @@ def load_npc_reference_catalog(path: Path) -> NPCReferenceCatalog:
         locale=_required_text(payload, "locale", maximum=10),
         researched_at=_required_text(payload, "researched_at", maximum=40),
         entries=tuple(entries),
+        matched_voice_scope=matched_voice_scope,
     )

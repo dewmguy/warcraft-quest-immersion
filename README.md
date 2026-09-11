@@ -85,9 +85,12 @@ records without changing manually edited character context:
 ```
 
 Matches appear in the Character Context area of the NPC and unique-voice
-profiles. NPC search also includes the reference title and summary. New unique
-voice profiles receive the researched context, while existing versioned voice
-prompts are not silently rewritten.
+profiles. NPC search also includes the reference title and summary. A catalog
+can set `matched_voice_scope` to `unique` to activate a unique profile for every
+matched database record. New unique voice profiles receive the researched
+context, while existing versioned voice prompts are not silently rewritten.
+NPC profiles also list any other records in the same expansion and entity type
+that use the exact same name, including their dialogue counts and voice status.
 
 ## Pronunciation dictionary
 

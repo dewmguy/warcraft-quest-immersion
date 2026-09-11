@@ -3757,6 +3757,25 @@ class AlphaStore:
                 "ORDER BY CASE confidence WHEN 'high' THEN 0 ELSE 1 END, reference_title",
                 (speaker_id,),
             ).fetchall()
+            alternate_ids = connection.execute(
+                "SELECT alternate.*, v.name AS voice_name, v.scope AS voice_scope, "
+                "vv.provider_voice_id, vv.status AS stored_voice_status, "
+                "(SELECT COUNT(*) FROM dialogue_entries d WHERE d.speaker_id=alternate.speaker_id "
+                "AND d.active=1 AND d.source<>'gossip') AS quest_count, "
+                "(SELECT COUNT(*) FROM dialogue_entries d WHERE d.speaker_id=alternate.speaker_id "
+                "AND d.active=1 AND d.source='gossip') AS gossip_count "
+                "FROM speakers alternate LEFT JOIN voices v ON v.voice_id=alternate.voice_id "
+                "LEFT JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1 "
+                "WHERE alternate.speaker_id<>? AND alternate.expansion=? "
+                "AND alternate.entity_type=? AND alternate.name=? COLLATE NOCASE "
+                "ORDER BY alternate.entity_id",
+                (
+                    speaker_id,
+                    speaker["expansion"],
+                    speaker["entity_type"],
+                    speaker["name"],
+                ),
+            ).fetchall()
         speaker_payload = dict(speaker)
         speaker_payload["importance_score"] = IMPORTANCE_SCORES.get(
             speaker_payload["importance"], 0
@@ -3782,6 +3801,7 @@ class AlphaStore:
             "unique_voice": unique_payload,
             "manual_override_fields": sorted(manual_override_fields),
             "references": [dict(row) for row in references],
+            "alternate_ids": [dict(row) for row in alternate_ids],
         }
         return record
 
@@ -3791,8 +3811,9 @@ class AlphaStore:
         """Match reviewed reference research to NPCs without altering manual context."""
         with self.connect() as connection:
             speakers = connection.execute(
-                "SELECT speaker_id, entity_id, name FROM speakers WHERE expansion=? "
-                "AND entity_type='creature'",
+                "SELECT s.speaker_id, s.entity_id, s.name, v.scope AS voice_scope "
+                "FROM speakers s LEFT JOIN voices v ON v.voice_id=s.voice_id "
+                "WHERE s.expansion=? AND s.entity_type='creature'",
                 (catalog.expansion,),
             ).fetchall()
             existing_count = int(
@@ -3820,6 +3841,16 @@ class AlphaStore:
                 continue
             matches.extend((entry, speaker) for speaker in entry_matches.values())
 
+        matched_speakers = {str(speaker["speaker_id"]): speaker for _, speaker in matches}
+        unique_profile_activations = (
+            sorted(
+                speaker_id
+                for speaker_id, speaker in matched_speakers.items()
+                if speaker.get("voice_scope") != "unique"
+            )
+            if catalog.matched_voice_scope == "unique"
+            else []
+        )
         report = {
             "valid": True,
             "dry_run": dry_run,
@@ -3831,6 +3862,8 @@ class AlphaStore:
             "matched_npcs": len({speaker["speaker_id"] for _, speaker in matches}),
             "reference_records": len(matches),
             "previous_active_records": existing_count,
+            "matched_voice_scope": catalog.matched_voice_scope,
+            "unique_profile_activations": len(unique_profile_activations),
             "unmatched_entries": unmatched,
         }
         if dry_run:
@@ -3877,9 +3910,12 @@ class AlphaStore:
                         now,
                     ),
                 )
+        for speaker_id in unique_profile_activations:
+            self.create_unique_voice(speaker_id)
         report["dry_run"] = False
         report["applied"] = True
         report["backup"] = backup
+        report["unique_profiles_activated"] = len(unique_profile_activations)
         return report
 
     def get_speaker_by_entity(

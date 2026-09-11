@@ -1609,6 +1609,29 @@ def test_npc_profile_uses_star_toggle_and_normalized_form_layout(monkeypatch):
     assert ".npc-form-grid select, .npc-form-grid input { min-height: 42px;" in stylesheet
 
 
+def test_npc_profile_renders_alternate_database_ids(monkeypatch):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        with web.alpha_store.connect() as connection:
+            connection.execute(
+                "INSERT INTO speakers(speaker_id, expansion, entity_type, entity_id, name, race_id, "
+                "gender_id, race_name, gender_name, voice_id, role, faction, zone, "
+                "zone_location_key, context_summary, importance, uniqueness, source_snapshot_id, "
+                "created_at, updated_at) SELECT 'creature-90004', expansion, entity_type, 90004, "
+                "name, race_id, gender_id, race_name, gender_name, voice_id, role, faction, zone, "
+                "zone_location_key, context_summary, importance, uniqueness, source_snapshot_id, "
+                "created_at, updated_at FROM speakers WHERE speaker_id='creature-90001'"
+            )
+        page = client.get("/alpha/npcs/creature/90001")
+
+    assert page.status_code == 200
+    assert "Alternate NPC IDs" in page.text
+    assert 'href="/alpha/npcs/creature/90004"' in page.text
+    assert "NPC 90004" in page.text
+    assert "Quest Lines" in page.text
+    assert "Gossip Lines" in page.text
+
+
 def test_npc_race_and_sex_can_be_manually_corrected(monkeypatch):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:

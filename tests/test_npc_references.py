@@ -9,7 +9,9 @@ from tts_cli.npc_references import (
 from tts_cli.paths import ASSETS_DIR, SAMPLE_DATA_PATH
 
 
-def _catalog(*entries: NPCReferenceEntry) -> NPCReferenceCatalog:
+def _catalog(
+    *entries: NPCReferenceEntry, matched_voice_scope: str = "unchanged"
+) -> NPCReferenceCatalog:
     return NPCReferenceCatalog(
         catalog_id="test-cultural-references",
         catalog_version=1,
@@ -17,6 +19,7 @@ def _catalog(*entries: NPCReferenceEntry) -> NPCReferenceCatalog:
         locale="enUS",
         researched_at="2026-09-10",
         entries=entries,
+        matched_voice_scope=matched_voice_scope,
     )
 
 
@@ -38,7 +41,8 @@ def _entry(name: str = "Marshal Rowan") -> NPCReferenceEntry:
 def test_bundled_reference_catalog_is_valid_and_contains_requested_example():
     catalog = load_npc_reference_catalog(ASSETS_DIR / "npc-references" / "3.3.5-enUS.json")
 
-    assert catalog.catalog_version == 1
+    assert catalog.catalog_version == 2
+    assert catalog.matched_voice_scope == "unique"
     assert len(catalog.entries) >= 60
     stonefield = next(entry for entry in catalog.entries if entry.key == "stonefield-maclure-feud")
     assert stonefield.npc_names == ("Tommy Joe Stonefield", "Maybell Maclure")
@@ -95,3 +99,23 @@ def test_reimport_updates_catalog_record_without_creating_a_duplicate(tmp_path: 
         rows = connection.execute("SELECT * FROM speaker_references").fetchall()
     assert len(rows) == 1
     assert rows[0]["summary"] == "Revised, more precise reference research."
+
+
+def test_reference_catalog_can_activate_every_matched_npc_as_unique(tmp_path: Path):
+    store = AlphaStore(tmp_path / "alpha.sqlite3", tmp_path / "storage")
+    store.initialize()
+    store.import_csv(SAMPLE_DATA_PATH)
+    npc = store.list_npcs(page_size=1)["rows"][0]
+    catalog = _catalog(_entry(npc["name"]), matched_voice_scope="unique")
+
+    dry_run = store.import_npc_reference_catalog(catalog, dry_run=True)
+    assert dry_run["unique_profile_activations"] == 1
+
+    applied = store.import_npc_reference_catalog(catalog)
+    profile = store.get_speaker(npc["speaker_id"])
+    assert applied["unique_profiles_activated"] == 1
+    assert profile["npc"]["voice_scope"] == "unique"
+    assert profile["npc"]["voice_id"] == f"unique--{npc['speaker_id']}"
+    assert (
+        store.import_npc_reference_catalog(catalog, dry_run=True)["unique_profile_activations"] == 0
+    )
