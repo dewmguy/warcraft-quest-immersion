@@ -1098,6 +1098,7 @@ class AzerothCoreCorpusExtractor:
 
         reached_pages: set[int] = set()
         for entity_type, entity_id, root_page_id, root_field in sorted(page_roots):
+            entity(entity_type, entity_id)
             page_id = root_page_id
             page_number = 1
             path: list[int] = []

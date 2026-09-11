@@ -77,6 +77,7 @@ def azerothcore_tables() -> dict[str, list[dict]]:
                 "data19": 10,
             },
             {"entry": 21, "name": "Watcher's Journal", "type": 9, "data0": 702},
+            {"entry": 22, "name": "Damaged Plaque", "type": 9, "data0": 123456},
         ],
         "gameobject_queststarter": [{"id": 20, "quest": 100}],
         "gameobject_questender": [{"id": 20, "quest": 100}],
