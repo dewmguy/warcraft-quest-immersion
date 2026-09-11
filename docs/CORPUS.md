@@ -95,6 +95,11 @@ Unrooted, empty, missing, and cyclic readable-page chains are retained in the
 quarantine report. Reachable book, plaque, scroll, and item pages appear in the
 portal's Object Audio queue.
 
+Readable objects and items use the Narrator Male baseline by default. Reviewers
+can assign any race/gender baseline or existing unique NPC voice as the reader;
+the assignment applies to every active page or dialogue line on that entity and
+is stored as a manual override that survives later corpus snapshots.
+
 ## Validate, dry-run, and import
 
 ```bash

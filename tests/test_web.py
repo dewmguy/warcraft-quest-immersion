@@ -201,6 +201,8 @@ def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bun
     assert "Object Audio Work Queue" in objects.text
     assert "The first page warns of danger." in objects.text
     assert "Warden&#39;s Notice" in objects.text
+    assert "Change Reader &rarr;" in objects.text
+    assert "#voice-assignment" in objects.text
     assert (
         web.alpha_store.dashboard()["counts"]["dialogue"]
         == imported.json()["report"]["counts"]["active_bindings"]
@@ -213,6 +215,60 @@ def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bun
     assert restarted.status_code == 200
     assert web.alpha_store.dashboard()["counts"]["dialogue"] == corpus_count
     assert "A Call to Adventure" not in restarted.text
+
+
+def test_readable_object_can_use_a_baseline_or_unique_npc_reader_voice(
+    monkeypatch, corpus_bundle_path
+):
+    monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
+    with TestClient(web.app) as client:
+        with corpus_bundle_path.open("rb") as bundle_file:
+            imported = client.post(
+                "/api/alpha/corpus/import",
+                headers={"X-WQI-Action": "confirmed"},
+                files={"file": (corpus_bundle_path.name, bundle_file, "application/zip")},
+            )
+        assert imported.status_code == 200
+
+        npc = web.alpha_store.list_npcs(page_size=1)["rows"][0]
+        unique_voice = web.alpha_store.create_unique_voice(npc["speaker_id"])
+        object_rows = [
+            row
+            for row in web.alpha_store.list_dialogue(source="object", page_size=50)["rows"]
+            if row["source"] == "object"
+        ]
+        object_row = object_rows[0]
+        page = client.get(f"/alpha/dialogue/{object_row['dialogue_id']}")
+        assigned = client.patch(
+            f"/api/alpha/objects/{object_row['speaker_id']}/voice",
+            headers={"X-WQI-Action": "confirmed"},
+            json={"voice_id": unique_voice["voice_id"]},
+        )
+        refreshed_page = client.get(f"/alpha/dialogue/{object_row['dialogue_id']}")
+        updated_rows = [
+            row
+            for row in web.alpha_store.list_dialogue(source="object", page_size=50)["rows"]
+            if row["speaker_id"] == object_row["speaker_id"]
+        ]
+        rejected = client.patch(
+            f"/api/alpha/objects/{npc['speaker_id']}/voice",
+            headers={"X-WQI-Action": "confirmed"},
+            json={"voice_id": "baseline--narrator-male"},
+        )
+
+    assert page.status_code == 200
+    assert "Reader Voice" in page.text
+    assert "Race / Gender Baselines" in page.text
+    assert "Unique NPC Voices" in page.text
+    assert unique_voice["name"] in page.text
+    assert "Narrator · Male remains the default" in page.text
+    assert assigned.status_code == 200
+    assert assigned.json()["object"]["speaker"]["voice_id"] == unique_voice["voice_id"]
+    assert "is currently read with the unique NPC voice" in refreshed_page.text
+    assert updated_rows
+    assert all(row["voice_id"] == unique_voice["voice_id"] for row in updated_rows)
+    assert rejected.status_code == 422
+    assert "only be assigned to objects and items" in rejected.json()["detail"]
 
 
 def test_quest_gossip_and_npc_filters_apply_immediately_and_show_contextual_clear_button(

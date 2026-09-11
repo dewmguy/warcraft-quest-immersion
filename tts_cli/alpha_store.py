@@ -3084,6 +3084,10 @@ class AlphaStore:
                 "vv.version_number FROM voices v JOIN voice_versions vv ON vv.voice_id=v.voice_id "
                 "AND vv.is_current=1 ORDER BY v.scope, v.name"
             ).fetchall()
+            speaker_dialogue_count = connection.execute(
+                "SELECT COUNT(*) FROM dialogue_entries WHERE speaker_id=? AND active=1",
+                (row["speaker_id"],),
+            ).fetchone()[0]
         payload = dict(row)
         payload["metadata"] = _loads(payload.get("metadata_json"), {})
         payload["changes"] = _loads(payload.get("changes_json"), [])
@@ -3218,6 +3222,7 @@ class AlphaStore:
             generation["subscription"] = _loads(generation.get("subscription_json"), {})
             payload["generations"].append(generation)
         payload["voices"] = [dict(item) for item in voices]
+        payload["speaker_dialogue_count"] = int(speaker_dialogue_count)
         payload["generation_text"] = self.generation_text(payload)
         return payload
 
@@ -3568,6 +3573,38 @@ class AlphaStore:
             )
             if not cursor.rowcount:
                 raise AlphaError("Dialogue record was not found.")
+
+    def assign_object_voice(self, speaker_id: str, voice_id: str) -> dict[str, Any]:
+        voice_id = voice_id.strip()
+        if not voice_id:
+            raise AlphaError("Select a reader voice.")
+        with self.connect() as connection:
+            speaker = connection.execute(
+                "SELECT entity_type, name FROM speakers WHERE speaker_id=?", (speaker_id,)
+            ).fetchone()
+            if not speaker:
+                raise AlphaError("Object was not found.")
+            if speaker["entity_type"] not in {"gameobject", "item"}:
+                raise AlphaError("Reader voices can only be assigned to objects and items.")
+            voice = connection.execute(
+                "SELECT v.voice_id FROM voices v JOIN voice_versions vv "
+                "ON vv.voice_id=v.voice_id AND vv.is_current=1 WHERE v.voice_id=?",
+                (voice_id,),
+            ).fetchone()
+            if not voice:
+                raise AlphaError("Selected reader voice was not found.")
+            now = utc_now()
+            connection.execute(
+                "UPDATE speakers SET voice_id=?, updated_at=? WHERE speaker_id=?",
+                (voice_id, now, speaker_id),
+            )
+            connection.execute(
+                "INSERT INTO speaker_manual_overrides(speaker_id, field_name, value_json, "
+                "updated_at) VALUES (?, 'voice_id', ?, ?) ON CONFLICT(speaker_id, field_name) "
+                "DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+                (speaker_id, _json(voice_id), now),
+            )
+        return self.get_speaker(speaker_id)
 
     def update_speaker(self, speaker_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         with self.connect() as connection:

@@ -363,6 +363,9 @@ dialog .actions { justify-content: flex-end; }
 .npc-reference-voice { display: grid; grid-template-columns: auto 1fr; gap: 8px; border-left: 2px solid #6f985f; padding-left: 10px; color: #bfcdb8 !important; }
 .npc-reference-voice i { margin-top: .25em; color: #8db77d; }
 .compact-form { grid-template-columns: 1fr auto; align-items: end; }
+.object-reader-assignment { margin: 18px 0; border-top: 1px solid #37323a; border-bottom: 1px solid #37323a; padding: 16px 0; }
+.object-reader-assignment label { min-width: 0; }
+.object-reader-assignment small { display: block; margin-top: 6px; color: #9f98a4; line-height: 1.45; }
 .inline-warning { display: block; border: 1px solid #765c32; border-radius: 6px; padding: 12px 14px; background: #251f17; color: #d9ba78; font-size: .86rem; }
 .inline-warning ul { margin-bottom: 0; }
 .generation-blocker { display: grid; gap: 10px; margin: 18px 0 0; border: 2px solid #b98d38; border-radius: 8px; padding: 17px 18px; background: #251f15; box-shadow: inset 0 0 0 1px rgba(236, 194, 104, .08); }

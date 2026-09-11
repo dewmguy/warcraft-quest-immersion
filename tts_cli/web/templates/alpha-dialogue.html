@@ -78,8 +78,27 @@
   <div class="record-grid{% if not dialogue.can_generate_audio %} record-grid-single{% endif %}">
     <section class="alpha-panel" id="voice-assignment">
       <div class="panel-heading"><div><span class="panel-step">{{ entity_label }}</span><h2>Voice and Delivery</h2></div>{% if not dialogue.can_generate_audio %}<span class="work-status status-needs_voice">Audio Unavailable</span>{% endif %}</div>
-      {% if dialogue.voice_scope == 'unique' %}
-        <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> delivers this line through a <strong>unique {{ 'NPC' if entity_label == 'NPC' else 'object' }} voice profile</strong>.</p>
+      {% if is_object_audio %}
+        {% if dialogue.voice_scope == 'unique' %}
+          <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> is currently read with the unique NPC voice <strong>{{ dialogue.voice_name }}</strong>.</p>
+        {% elif dialogue.voice_scope == 'baseline' %}
+          <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> is currently read with the <strong>{{ dialogue.voice_name }}</strong> baseline.</p>
+        {% else %}
+          <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> does not have a reader voice assigned.</p>
+        {% endif %}
+        <form data-json-form data-url="/api/alpha/objects/{{ dialogue.speaker_id }}/voice" data-method="PATCH" class="compact-form object-reader-assignment">
+          <label><span>Reader Voice</span><select name="voice_id" required>
+            <optgroup label="Race / Gender Baselines">
+              {% for voice in dialogue.voices if voice.scope == 'baseline' %}<option value="{{ voice.voice_id }}" {% if voice.voice_id == dialogue.voice_id %}selected{% endif %}>{{ voice.name }}{% if not voice.provider_voice_id %} · Voice ID needed{% endif %}</option>{% endfor %}
+            </optgroup>
+            <optgroup label="Unique NPC Voices">
+              {% for voice in dialogue.voices if voice.scope == 'unique' %}<option value="{{ voice.voice_id }}" {% if voice.voice_id == dialogue.voice_id %}selected{% endif %}>{{ voice.name }}{% if not voice.provider_voice_id %} · Voice ID needed{% endif %}</option>{% endfor %}
+            </optgroup>
+          </select><small>This choice applies to all {{ dialogue.speaker_dialogue_count }} page{{ '' if dialogue.speaker_dialogue_count == 1 else 's' }} or dialogue line{{ '' if dialogue.speaker_dialogue_count == 1 else 's' }} attached to this {{ 'item' if dialogue.entity_type == 'item' else 'object' }}. Narrator · Male remains the default when no identifiable author is known.</small></label>
+          <button type="submit"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>Save</span></button>
+        </form>
+      {% elif dialogue.voice_scope == 'unique' %}
+        <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> delivers this line through a <strong>unique NPC voice profile</strong>.</p>
       {% elif dialogue.voice_scope == 'baseline' %}
         <p><a href="{{ npc_profile_path(dialogue.entity_type, dialogue.entity_id, dialogue.expansion) }}">{{ dialogue.speaker_name }}</a> delivers this line through the <strong>{{ dialogue.voice_name }} baseline voice</strong>.</p>
       {% else %}

@@ -44,7 +44,7 @@
           <tr>
             <td><a class="record-link" href="/alpha/dialogue/{{ row.dialogue_id }}"><strong>{{ row.original_text[:90] }}{% if row.original_text|length > 90 %}…{% endif %}</strong><span>{{ 'Readable Page' if row.source == 'object' else 'Object Gossip' }} · {{ row.source_record_id or row.dialogue_id }}</span></a></td>
             <td><a href="{{ npc_profile_path(row.entity_type, row.entity_id, row.expansion) }}">{{ row.speaker_name }}</a><span class="cell-detail">{{ 'Item' if row.entity_type == 'item' else 'Game Object' }} · ID {{ row.entity_id }}</span></td>
-            <td>{{ voice_cell(row) }}</td>
+            <td>{{ voice_cell(row) }}<a class="cell-detail cell-action" href="/alpha/dialogue/{{ row.dialogue_id }}#voice-assignment">Change Reader &rarr;</a></td>
             <td>{{ dialogue_status(row) }}</td>
           </tr>
           {% else %}<tr><td colspan="4" class="empty-cell">No object audio lines match these filters.</td></tr>{% endfor %}

@@ -989,6 +989,23 @@ def api_set_delivery(
         raise _alpha_error(error) from error
 
 
+@app.patch("/api/alpha/objects/{speaker_id}/voice")
+def api_assign_object_voice(
+    speaker_id: str,
+    payload: Annotated[dict, Body()],
+    _: Annotated[str, Depends(require_auth)],
+    __: Annotated[None, Depends(require_action_header)],
+) -> dict:
+    try:
+        record = alpha_store.assign_object_voice(speaker_id, str(payload.get("voice_id", "")))
+        return {
+            "message": f"Reader voice for {record['speaker']['name']} was saved.",
+            "object": record,
+        }
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
 @app.patch("/api/alpha/npcs/{speaker_id}")
 @app.patch("/api/alpha/speakers/{speaker_id}", include_in_schema=False)
 def api_update_npc(

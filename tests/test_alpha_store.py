@@ -490,6 +490,33 @@ def test_speaker_context_is_inferred_but_remains_editable(store: AlphaStore):
     assert updated["speaker"]["importance_score"] == 55
 
 
+def test_object_reader_voice_is_an_import_safe_entity_override(store: AlphaStore):
+    object_line = next(
+        row
+        for row in store.list_dialogue(page_size=10)["rows"]
+        if row["entity_type"] == "gameobject"
+    )
+
+    record = store.assign_object_voice(object_line["speaker_id"], "baseline--human-female")
+    refreshed = store.get_dialogue(object_line["dialogue_id"])
+
+    assert record["speaker"]["voice_id"] == "baseline--human-female"
+    assert refreshed["voice_id"] == "baseline--human-female"
+    with store.connect() as connection:
+        override = connection.execute(
+            "SELECT value_json FROM speaker_manual_overrides "
+            "WHERE speaker_id=? AND field_name='voice_id'",
+            (object_line["speaker_id"],),
+        ).fetchone()
+    assert override["value_json"] == '"baseline--human-female"'
+
+    creature = next(
+        row for row in store.list_dialogue(page_size=10)["rows"] if row["entity_type"] == "creature"
+    )
+    with pytest.raises(AlphaError, match="only be assigned to objects and items"):
+        store.assign_object_voice(creature["speaker_id"], "baseline--human-female")
+
+
 def test_npc_profile_lists_other_database_records_with_the_exact_name(store: AlphaStore):
     with store.connect() as connection:
         connection.execute(

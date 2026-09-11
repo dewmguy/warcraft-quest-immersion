@@ -118,7 +118,7 @@ generated CSV and manifest artifacts with:
 
 The web application now opens at `/alpha`. Its persistent production database
 provides separate filterable queues for quests, NPC gossip, and readable object
-pages, plus NPC context, baseline-or-unique voice assignment, deterministically prepared quest
+pages, plus NPC context, baseline-or-unique voice assignment for NPCs and objects, deterministically prepared quest
 spoken-text revisions,
 versioned voices and reference clips, guarded ElevenLabs actions, delivery
 presets, audio review, and production approval.
@@ -188,8 +188,11 @@ The Alpha portal is the working production surface:
 3. Review the automatically prepared quest and readable-object spoken text and
    edit it only when needed. Prepare gossip spoken text explicitly.
 4. Review the inferred NPC role, affiliation, zone, story reach, and concise
-   context; assign a baseline or versioned unique voice. Returning an NPC to
-   baseline retires its unused unique profile without deleting its history.
+   context; assign a baseline or versioned unique voice. Readable objects default
+   to Narrator Male, but their Reader Voice can use any baseline or existing unique
+   NPC voice. The object-level manual override applies to all of its pages and is
+   preserved during corpus imports. Returning an NPC to baseline retires its unused
+   unique profile without deleting its history.
 5. Create the reusable provider voice with description-only Voice Design,
    reference-guided Voice Design, or Instant Voice Cloning.
    Reference uploads accept batches of MP3, WAV, M4A, OGG, or FLAC files. The
