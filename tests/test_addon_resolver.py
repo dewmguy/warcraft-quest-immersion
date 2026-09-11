@@ -18,6 +18,8 @@ def test_addon_resolver_is_additive_and_progress_event_is_enabled():
         "QuestAudioLookupByNPCID",
         "QuestAudioLookupByObjectID",
         "QuestAudioLookupByItemID",
+        "ObjectTextLookupByObjectID",
+        "ObjectTextLookupByName",
     ):
         assert lookup in data_modules
     assert 'return format("%d-%s", soundData.questID, stage)' in data_modules
@@ -26,6 +28,12 @@ def test_addon_resolver_is_additive_and_progress_event_is_enabled():
     assert 'self:RegisterEvent("QUEST_PROGRESS")' in voice_over
     assert "function Addon:QUEST_PROGRESS()" in voice_over
     assert "GetProgressText()" in voice_over
+    assert 'self:RegisterEvent("ITEM_TEXT_BEGIN")' in voice_over
+    assert 'self:RegisterEvent("ITEM_TEXT_READY")' in voice_over
+    assert 'self:RegisterEvent("ITEM_TEXT_CLOSED")' in voice_over
+    assert "function Addon:ITEM_TEXT_READY()" in voice_over
+    assert "ItemTextGetText()" in voice_over
+    assert "ItemTextGetPage()" in voice_over
     assert "old_QUEST_PROGRESS(self)" in compatibility
     for toc in (
         "AI_VoiceOver_1.12.toc",
@@ -80,6 +88,61 @@ def test_lookup_writer_emits_per_npc_stage_filenames(tmp_path, monkeypatch):
     relation_assignment, audio_assignment = output.split("QuestAudioLookupByNPCID", 1)
     assert "[100]" not in relation_assignment
     assert "[100]" in audio_assignment
+
+
+def test_lookup_writer_emits_readable_object_and_item_tables(tmp_path, monkeypatch):
+    monkeypatch.setattr(tts_utils, "OUTPUT_FOLDER", str(tmp_path))
+    processor = TTSProcessor(fetch_voices=False, settings=Settings())
+    dataframe = pd.DataFrame(
+        [
+            {
+                "source": "object",
+                "type": "gameobject",
+                "quest": "",
+                "id": 20,
+                "name": "Warden's Notice",
+                "text": "The first page warns of danger.",
+                "addon_file_key": "page-700-g20",
+                "templateText_race_gender_hash": "fallback-object",
+                "per_entity_audio_ready": 1,
+            },
+            {
+                "source": "object",
+                "type": "item",
+                "quest": "",
+                "id": 30,
+                "name": "Sealed Warning",
+                "text": "The sealed warning can be read.",
+                "addon_file_key": "page-703-i30",
+                "templateText_race_gender_hash": "fallback-item",
+                "per_entity_audio_ready": 1,
+            },
+        ]
+    )
+
+    processor.write_gossip_file_lookups_table(
+        dataframe,
+        "AI_VoiceOverData_Vanilla",
+        "gameobject",
+        "ObjectTextLookupByObjectID",
+        "object_text_file_lookups",
+        source="object",
+    )
+    processor.write_object_text_name_lookup(
+        dataframe,
+        "AI_VoiceOverData_Vanilla",
+        "ObjectTextLookupByName",
+        "object_text_name_lookups",
+    )
+
+    by_id = (tmp_path / "object_text_file_lookups.lua").read_text(encoding="utf-8")
+    by_name = (tmp_path / "object_text_name_lookups.lua").read_text(encoding="utf-8")
+    assert "ObjectTextLookupByObjectID" in by_id
+    assert "page-700-g20" in by_id
+    assert "ObjectTextLookupByName" in by_name
+    assert "Warden's Notice" in by_name
+    assert "Sealed Warning" in by_name
+    assert "page-703-i30" in by_name
 
 
 @pytest.mark.parametrize(

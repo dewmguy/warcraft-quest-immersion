@@ -4,7 +4,9 @@ AI_VoiceOverData_Vanilla = {}
 
 function AI_VoiceOverData_Vanilla:GetSoundPath(fileName, event)
     setfenv(1, VoiceOver)
-    if Enums.SoundEvent:IsQuestEvent(event) then
+    if event == Enums.SoundEvent.ObjectText then
+        return format([[generated\sounds\objects\%s.mp3]], fileName)
+    elseif Enums.SoundEvent:IsQuestEvent(event) then
         return format([[generated\sounds\quests\%s.mp3]], fileName)
     elseif Enums.SoundEvent:IsGossipEvent(event) then
         return format([[generated\sounds\gossip\%s.mp3]], fileName)

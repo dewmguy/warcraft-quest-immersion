@@ -465,6 +465,8 @@ def alpha_dashboard(
     try:
         if source == "gossip":
             return RedirectResponse("/alpha/gossip", status_code=307)
+        if source == "object":
+            return RedirectResponse("/alpha/objects", status_code=307)
         quest_source = source if source in {"accept", "progress", "complete"} else "quest"
         return templates.TemplateResponse(
             request=request,
@@ -526,6 +528,39 @@ def alpha_gossip(
                     "expansion": expansion,
                     "race_id": race_id,
                     "gender_id": gender_id,
+                },
+            ),
+        )
+    except AlphaError as error:
+        raise _alpha_error(error) from error
+
+
+@app.get("/alpha/objects", response_class=HTMLResponse)
+def alpha_objects(
+    request: Request,
+    _: Annotated[str, Depends(require_auth)],
+    q: str = "",
+    production_state: str = "",
+    expansion: str = "",
+    page: int = 1,
+):
+    try:
+        return templates.TemplateResponse(
+            request=request,
+            name="alpha-objects.html",
+            context=_alpha_context(
+                dashboard=alpha_store.dashboard(),
+                listing=alpha_store.list_dialogue(
+                    query=q,
+                    state=production_state,
+                    source="object",
+                    expansion=expansion,
+                    page=max(page, 1),
+                ),
+                filters={
+                    "q": q,
+                    "production_state": production_state,
+                    "expansion": expansion,
                 },
             ),
         )

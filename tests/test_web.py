@@ -119,7 +119,9 @@ def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatc
     assert "Alpha production database" in response.text
     assert "Work queue" in response.text
     assert "3 matching records" in response.text
-    assert all(label in response.text for label in ("Quests", "Gossip", "NPCs", "Races"))
+    assert all(
+        label in response.text for label in ("Quests", "Gossip", "Object Audio", "NPCs", "Races")
+    )
     assert ">Dialogue<" not in response.text
     assert ">Voices<" not in response.text
 
@@ -183,6 +185,7 @@ def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bun
                 data={"expansion": "3.3.5", "locale": "enUS"},
                 files={"file": ("dialogue.csv", csv_file, "text/csv")},
             )
+        objects = client.get("/alpha/objects")
 
     assert page.status_code == 200
     assert "Authoritative Import" in page.text
@@ -194,6 +197,10 @@ def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bun
     assert imported.json()["report"]["applied"] is True
     assert legacy_import.status_code == 409
     assert "corpus is authoritative" in legacy_import.json()["detail"]
+    assert objects.status_code == 200
+    assert "Object Audio Work Queue" in objects.text
+    assert "The first page warns of danger." in objects.text
+    assert "Warden&#39;s Notice" in objects.text
     assert (
         web.alpha_store.dashboard()["counts"]["dialogue"]
         == imported.json()["report"]["counts"]["active_bindings"]
@@ -213,10 +220,18 @@ def test_quest_gossip_and_npc_filters_apply_immediately_and_show_contextual_clea
 ):
     monkeypatch.delenv("WQI_ADMIN_PASSWORD", raising=False)
     with TestClient(web.app) as client:
-        pages = [client.get(path) for path in ("/alpha", "/alpha/gossip", "/alpha/npcs")]
+        pages = [
+            client.get(path)
+            for path in ("/alpha", "/alpha/gossip", "/alpha/objects", "/alpha/npcs")
+        ]
         filtered_pages = [
             client.get(path)
-            for path in ("/alpha?q=Marshal", "/alpha/gossip?q=Marshal", "/alpha/npcs?q=Marshal")
+            for path in (
+                "/alpha?q=Marshal",
+                "/alpha/gossip?q=Marshal",
+                "/alpha/objects?q=Notice",
+                "/alpha/npcs?q=Marshal",
+            )
         ]
 
     for page in pages:
@@ -233,8 +248,8 @@ def test_quest_gossip_and_npc_filters_apply_immediately_and_show_contextual_clea
         assert "fa-filter-circle-xmark" in page.text
         assert page.text.index("data-filter-clear") < page.text.index("data-instant-filters")
 
-    assert "<th>Status</th>" in pages[2].text
-    assert "<th>Readiness</th>" not in pages[2].text
+    assert "<th>Status</th>" in pages[3].text
+    assert "<th>Readiness</th>" not in pages[3].text
 
     script = (web.WEB_DIR / "static" / "alpha.js").read_text(encoding="utf-8")
     assert 'document.querySelectorAll("[data-instant-filters]")' in script

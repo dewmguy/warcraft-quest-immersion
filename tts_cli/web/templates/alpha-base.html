@@ -16,6 +16,7 @@
       <nav aria-label="Alpha workspaces">
         <a href="/alpha" {% if active_nav == 'quests' %}aria-current="page"{% endif %}>Quests</a>
         <a href="/alpha/gossip" {% if active_nav == 'gossip' %}aria-current="page"{% endif %}>Gossip</a>
+        <a href="/alpha/objects" {% if active_nav == 'objects' %}aria-current="page"{% endif %}>Object Audio</a>
         <a href="/alpha/npcs" {% if active_nav == 'npcs' %}aria-current="page"{% endif %}>NPCs</a>
         <a href="/alpha/races" {% if active_nav == 'races' %}aria-current="page"{% endif %}>Races</a>
         <a href="/alpha/import-export" {% if active_nav == 'import_export' %}aria-current="page"{% endif %}>Import / Export</a>
@@ -35,7 +36,7 @@
     </header>
     <main class="alpha-main">
       <section class="corpus-progress" aria-label="Production progress">
-        {% for item in [progress.voices, progress.unique_npcs, progress.quests, progress.gossip] %}
+        {% for item in [progress.voices, progress.unique_npcs, progress.quests, progress.gossip, progress.objects] %}
         <a class="progress-link" href="{{ item.href }}" aria-label="Open {{ item.label }} work queue">
           <article>
             <div><strong>{{ item.label }}</strong><span>{{ item.complete }} / {{ item.total }} · {{ item.percent }}%</span></div>

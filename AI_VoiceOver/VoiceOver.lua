@@ -52,6 +52,9 @@ local lastGossipOptions
 local selectedGossipOption
 local currentQuestSoundData
 local currentGossipSoundData
+local currentObjectTextSoundData
+local currentObjectTextName
+local currentObjectTextGUID
 
 function Addon:OnInitialize()
     self.db = LibStub("AceDB-3.0"):New("VoiceOverDB", defaults)
@@ -78,6 +81,9 @@ function Addon:OnInitialize()
     self:RegisterEvent("QUEST_FINISHED")
     self:RegisterEvent("GOSSIP_SHOW")
     self:RegisterEvent("GOSSIP_CLOSED")
+    self:RegisterEvent("ITEM_TEXT_BEGIN")
+    self:RegisterEvent("ITEM_TEXT_READY")
+    self:RegisterEvent("ITEM_TEXT_CLOSED")
 
     if select(5, GetAddOnInfo("VoiceOver")) ~= "MISSING" then
         DisableAddOn("VoiceOver")
@@ -214,6 +220,10 @@ local function ResolveQuestGiver(questID, guid, targetName)
     guid = id and Enums.GUID:CanHaveID(type) and Utils:MakeGUID(type, id) or guid
     targetName = id and DataModules:GetObjectName(type, id) or targetName or "Unknown Name"
     return guid, targetName
+end
+
+local function ObjectTextSoundDataAdded(soundData)
+    currentObjectTextSoundData = soundData
 end
 
 function Addon:QUEST_DETAIL()
@@ -430,4 +440,44 @@ function Addon:GOSSIP_CLOSED()
     currentGossipSoundData = nil
 
     selectedGossipOption = nil
+end
+
+function Addon:ITEM_TEXT_BEGIN()
+    currentObjectTextName = ItemTextGetItem()
+    currentObjectTextGUID = Utils:GetNPCGUID()
+end
+
+function Addon:ITEM_TEXT_READY()
+    local text = ItemTextGetText()
+    local name = ItemTextGetItem() or currentObjectTextName
+    if not text or text == "" or not name then
+        return
+    end
+
+    if currentObjectTextSoundData then
+        SoundQueue:RemoveSoundFromQueue(currentObjectTextSoundData)
+        currentObjectTextSoundData = nil
+    end
+
+    local page = ItemTextGetPage()
+    ---@type SoundData
+    local soundData = {
+        event = Enums.SoundEvent.ObjectText,
+        name = name,
+        title = page and format("Page %d", page),
+        text = text,
+        unitGUID = currentObjectTextGUID or Utils:GetNPCGUID(),
+        unitIsObjectOrItem = true,
+        addedCallback = ObjectTextSoundDataAdded,
+    }
+    SoundQueue:AddSoundToQueue(soundData)
+end
+
+function Addon:ITEM_TEXT_CLOSED()
+    if Addon.db.profile.Audio.StopAudioOnDisengage and currentObjectTextSoundData then
+        SoundQueue:RemoveSoundFromQueue(currentObjectTextSoundData)
+    end
+    currentObjectTextSoundData = nil
+    currentObjectTextName = nil
+    currentObjectTextGUID = nil
 end

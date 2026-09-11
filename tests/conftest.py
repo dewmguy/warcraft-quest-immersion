@@ -68,10 +68,21 @@ def azerothcore_tables() -> dict[str, list[dict]]:
             {"id": 1, "quest": 200},
         ],
         "creature_questender": [{"id": 1, "quest": 100}, {"id": 2, "quest": 100}],
-        "gameobject_template": [{"entry": 20, "name": "Warden's Notice", "type": 10, "data19": 10}],
+        "gameobject_template": [
+            {
+                "entry": 20,
+                "name": "Warden's Notice",
+                "type": 10,
+                "data7": 700,
+                "data19": 10,
+            },
+            {"entry": 21, "name": "Watcher's Journal", "type": 9, "data0": 702},
+        ],
         "gameobject_queststarter": [{"id": 20, "quest": 100}],
         "gameobject_questender": [{"id": 20, "quest": 100}],
-        "item_template": [{"entry": 30, "name": "Sealed Warning", "StartQuest": 100}],
+        "item_template": [
+            {"entry": 30, "name": "Sealed Warning", "StartQuest": 100, "PageText": 703}
+        ],
         "disables": [{"sourceType": 1, "entry": 200, "flags": 0}],
         "quest_greeting": [{"ID": 1, "Type": 0, "Greeting": "The pass needs you."}],
         "gossip_menu": [
@@ -98,6 +109,15 @@ def azerothcore_tables() -> dict[str, list[dict]]:
             {"ID": 501, "text0_0": "The lower path is safer.", "text0_1": ""},
             {"ID": 502, "text0_0": "The lower path is safer.", "text0_1": ""},
             {"ID": 999, "text0_0": "Unrooted but retained.", "text0_1": ""},
+        ],
+        "page_text": [
+            {"ID": 700, "Text": "The first page warns of danger.", "NextPageID": 701},
+            {"ID": 701, "Text": "The second page names the pass.", "NextPageID": 0},
+            {"ID": 702, "Text": "The journal begins here.", "NextPageID": 704},
+            {"ID": 703, "Text": "The sealed warning can be read.", "NextPageID": 0},
+            {"ID": 704, "Text": "The journal loops back.", "NextPageID": 702},
+            {"ID": 999, "Text": "Unrooted readable text.", "NextPageID": 0},
+            {"ID": 1000, "Text": "", "NextPageID": 0},
         ],
         "broadcast_text": [
             {

@@ -2052,11 +2052,7 @@ class AlphaStore:
                 )
                 speaker_id, existed = self._corpus_speaker_id(connection, entity)
                 speaker_by_entity[entity_key] = speaker_id
-                baseline_voice_id = (
-                    f"baseline--{entity['race_name']}-{entity['gender_name']}"
-                    if entity_type == "creature"
-                    else None
-                )
+                baseline_voice_id = f"baseline--{entity['race_name']}-{entity['gender_name']}"
                 if (
                     baseline_voice_id
                     and not connection.execute(
@@ -2333,7 +2329,13 @@ class AlphaStore:
                         now,
                     ),
                 )
-                asset_folder = "quests" if source_type != "gossip" else "gossip"
+                asset_folder = (
+                    "objects"
+                    if source_type == "object"
+                    else "gossip"
+                    if source_type == "gossip"
+                    else "quests"
+                )
                 connection.execute(
                     "UPDATE production_assets SET addon_filename=? WHERE dialogue_id=?",
                     (
@@ -2917,6 +2919,9 @@ class AlphaStore:
                 "npcs": connection.execute(
                     "SELECT COUNT(*) FROM speakers WHERE entity_type='creature'"
                 ).fetchone()[0],
+                "objects": connection.execute(
+                    "SELECT COUNT(*) FROM speakers WHERE entity_type IN ('gameobject', 'item')"
+                ).fetchone()[0],
                 "baseline_voices": connection.execute(
                     "SELECT COUNT(*) FROM voices WHERE scope='baseline'"
                 ).fetchone()[0],
@@ -2978,7 +2983,13 @@ class AlphaStore:
             parameters.append(state)
         if source:
             if source == "quest":
-                conditions.append("source <> 'gossip'")
+                conditions.append("source NOT IN ('gossip', 'object')")
+            elif source == "gossip":
+                conditions.append("source = 'gossip' AND entity_type <> 'gameobject'")
+            elif source == "object":
+                conditions.append(
+                    "(source = 'object' OR (source = 'gossip' AND entity_type = 'gameobject'))"
+                )
             elif source in VALID_SOURCES:
                 conditions.append("source = ?")
                 parameters.append(source)
@@ -3165,7 +3176,13 @@ class AlphaStore:
         if payload.get("selected_candidate_origin") == "preproduced":
             selected = next((item for item in candidates if item["is_selected"]), None)
             if selected:
-                folder = "gossip" if payload["source"] == "gossip" else "quests"
+                folder = (
+                    "objects"
+                    if payload["source"] == "object"
+                    else "gossip"
+                    if payload["source"] == "gossip"
+                    else "quests"
+                )
                 for asset in selected["assets"]:
                     prefix = (
                         f"{asset['player_gender_variant']}-"
@@ -4152,8 +4169,17 @@ class AlphaStore:
             ).fetchone()
             dialogue = {}
             for key, condition in (
-                ("quests", "d.source<>'gossip'"),
-                ("gossip", "d.source='gossip'"),
+                ("quests", "d.source NOT IN ('gossip', 'object')"),
+                (
+                    "gossip",
+                    "d.source='gossip' AND EXISTS (SELECT 1 FROM speakers ps "
+                    "WHERE ps.speaker_id=d.speaker_id AND ps.entity_type<>'gameobject')",
+                ),
+                (
+                    "objects",
+                    "(d.source='object' OR (d.source='gossip' AND EXISTS (SELECT 1 FROM speakers ps "
+                    "WHERE ps.speaker_id=d.speaker_id AND ps.entity_type='gameobject')))",
+                ),
             ):
                 dialogue[key] = connection.execute(
                     "SELECT COUNT(*) AS total, SUM(CASE WHEN das.dialogue_id IS NOT NULL THEN 1 "
@@ -4186,6 +4212,7 @@ class AlphaStore:
             ),
             "quests": item("Quest audio", dialogue["quests"], "/alpha"),
             "gossip": item("Gossip audio", dialogue["gossip"], "/alpha/gossip"),
+            "objects": item("Object audio", dialogue["objects"], "/alpha/objects"),
         }
 
     def update_delivery_preset(
@@ -5477,7 +5504,13 @@ class AlphaStore:
                     "WHERE candidate_id=?",
                     (now, candidate_id),
                 )
-                folder = "quests" if row["source"] != "gossip" else "gossip"
+                folder = (
+                    "objects"
+                    if row["source"] == "object"
+                    else "gossip"
+                    if row["source"] == "gossip"
+                    else "quests"
+                )
                 addon_filename = f"generated/sounds/{folder}/{row['addon_file_key']}.mp3"
                 connection.execute(
                     "INSERT INTO production_assets(dialogue_id, candidate_id, addon_filename, "
@@ -5545,7 +5578,13 @@ class AlphaStore:
             assets: list[dict[str, Any]] = []
             for selection_row in selections:
                 selection = dict(selection_row)
-                folder = "gossip" if selection["source"] == "gossip" else "quests"
+                folder = (
+                    "objects"
+                    if selection["source"] == "object"
+                    else "gossip"
+                    if selection["source"] == "gossip"
+                    else "quests"
+                )
                 if selection["candidate_origin"] == "elevenlabs":
                     rows = connection.execute(
                         "SELECT candidate_id, candidate_id AS source_asset_id, storage_path, "

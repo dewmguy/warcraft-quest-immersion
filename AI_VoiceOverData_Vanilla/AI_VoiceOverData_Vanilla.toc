@@ -17,6 +17,9 @@ generated\npc_name_gossip_file_lookups.lua
 generated\npc_name_lookups.lua
 generated\object_gossip_file_lookups.lua
 generated\object_name_gossip_file_lookups.lua
+generated\object_text_file_lookups.lua
+generated\item_text_file_lookups.lua
+generated\object_text_name_lookups.lua
 generated\object_name_lookups.lua
 generated\quest_id_lookups.lua
 generated\questlog_item_lookups.lua

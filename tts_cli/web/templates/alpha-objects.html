@@ -1,0 +1,62 @@
+{% extends "alpha-base.html" %}
+{% from "alpha-status.html" import dialogue_status %}
+{% from "alpha-voice-cell.html" import voice_cell %}
+{% set active_nav = "objects" %}
+{% block title %}Object Audio{% endblock %}
+{% block content %}
+  <section class="alpha-page-heading">
+    <div>
+      <span class="alpha-kicker">Production work</span>
+      <h1>Object Audio</h1>
+      <p>Review readable books, plaques, scrolls, and game-object dialogue as individual audio lines.</p>
+    </div>
+  </section>
+
+  <section class="alpha-metrics" aria-label="Object audio summary">
+    <article><strong>{{ "{:,}".format(listing.total) }}</strong><span>Object lines</span></article>
+    <article><strong>{{ "{:,}".format(dashboard.counts.objects) }}</strong><span>Objects and items</span></article>
+    <article><strong>{{ dashboard.counts.baseline_voices }}</strong><span>Race / gender profiles</span></article>
+    <article><strong>{{ progress.objects.complete }}</strong><span>Approved object audio</span></article>
+  </section>
+
+  <section class="alpha-panel">
+    {% set has_filters = filters.q or filters.production_state or filters.expansion %}
+    <div class="panel-heading">
+      <div><h2>Object Audio Work Queue</h2><p>{{ "{:,}".format(listing.total) }} matching lines</p></div>
+      {% if has_filters %}<button type="button" class="secondary filter-clear-button" data-filter-clear data-filter-form="object-filters"><i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Clear</span></button>{% endif %}
+    </div>
+    <form id="object-filters" class="filter-bar content-filter-bar" method="get" action="/alpha/objects" data-instant-filters>
+      <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ filters.q }}" placeholder="Object, text, page ID, or database ID"></label>
+      <label><span>Audio status</span><select name="production_state">
+        <option value="">All</option>
+        {% for value, label in [('preproduced_selected','Pre-Produced selected'),('preproduced_available','Pre-Produced available'),('needs_voice','Needs voice'),('audio_to_review','Audio to review'),('approved','Approved')] %}
+        <option value="{{ value }}" {% if filters.production_state == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select></label>
+      <label><span>Expansion</span><select name="expansion"><option value="">All</option>{% for value in ['1.12.1','2.4.3','3.3.5','classic'] %}<option value="{{ value }}" {% if filters.expansion == value %}selected{% endif %}>{{ 'Current Classic' if value == 'classic' else value }}</option>{% endfor %}</select></label>
+    </form>
+
+    <div class="alpha-table-wrap">
+      <table class="alpha-table dialogue-table">
+        <thead><tr><th>Text</th><th>Object</th><th>Voice</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for row in listing.rows %}
+          <tr>
+            <td><a class="record-link" href="/alpha/dialogue/{{ row.dialogue_id }}"><strong>{{ row.original_text[:90] }}{% if row.original_text|length > 90 %}…{% endif %}</strong><span>{{ 'Readable Page' if row.source == 'object' else 'Object Gossip' }} · {{ row.source_record_id or row.dialogue_id }}</span></a></td>
+            <td><a href="{{ npc_profile_path(row.entity_type, row.entity_id, row.expansion) }}">{{ row.speaker_name }}</a><span class="cell-detail">{{ 'Item' if row.entity_type == 'item' else 'Game Object' }} · ID {{ row.entity_id }}</span></td>
+            <td>{{ voice_cell(row) }}</td>
+            <td>{{ dialogue_status(row) }}</td>
+          </tr>
+          {% else %}<tr><td colspan="4" class="empty-cell">No object audio lines match these filters.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if listing.page_count > 1 %}
+    <nav class="pagination" aria-label="Object audio pages">
+      {% if listing.page > 1 %}<a href="?q={{ filters.q }}&production_state={{ filters.production_state }}&expansion={{ filters.expansion }}&page={{ listing.page - 1 }}">Previous</a>{% endif %}
+      <span>Page {{ listing.page }} of {{ listing.page_count }}</span>
+      {% if listing.page < listing.page_count %}<a href="?q={{ filters.q }}&production_state={{ filters.production_state }}&expansion={{ filters.expansion }}&page={{ listing.page + 1 }}">Next</a>{% endif %}
+    </nav>
+    {% endif %}
+  </section>
+{% endblock %}

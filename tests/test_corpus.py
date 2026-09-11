@@ -51,9 +51,27 @@ def test_extractor_reconciles_shared_quest_givers_and_nested_gossip(azerothcore_
     }
     assert {row["reason"] for row in bundle.quarantine} >= {
         "cyclic_gossip_menu",
+        "cyclic_page_text",
         "disabled_quest",
+        "empty_page_text",
+        "unrooted_page_text",
         "unrooted_gossip",
     }
+    readable_bindings = [row for row in bundle.bindings if row["stage"] == "object"]
+    assert {row["addon_file_key"] for row in readable_bindings} == {
+        "page-700-g20",
+        "page-701-g20",
+        "page-702-g21",
+        "page-703-i30",
+        "page-704-g21",
+    }
+    assert all(row["active"] for row in readable_bindings)
+    second_page = next(
+        row
+        for row in bundle.triggers
+        if row["trigger_type"] == "item_text_ready" and row["menu_path"] == "700>701"
+    )
+    assert json.loads(second_page["context_json"])["page_number"] == 2
     rowan = next(row for row in bundle.entities if row["entity_key"] == "3.3.5:creature:1")
     assert rowan["race_name"] == "human"
     assert rowan["gender_name"] == "male"
@@ -299,6 +317,18 @@ def test_atomic_import_preserves_overrides_and_shares_spoken_text(
     assert store.list_npcs(zone_location_key="3.3.5:zone:12")["total"] == 1
     with pytest.raises(AlphaError, match="Unknown NPC zone filter"):
         store.list_npcs(zone_location_key="3.3.5:zone:999999")
+    object_audio = store.list_dialogue(source="object", page_size=50)["rows"]
+    readable_pages = [row for row in object_audio if row["source"] == "object"]
+    assert len(readable_pages) == 5
+    assert {row["voice_id"] for row in readable_pages} == {"baseline--narrator-male"}
+    assert all(
+        row["entity_type"] != "gameobject"
+        for row in store.list_dialogue(source="gossip", page_size=50)["rows"]
+    )
+    assert all(
+        row["source"] not in {"gossip", "object"}
+        for row in store.list_dialogue(source="quest", page_size=50)["rows"]
+    )
     repeated_gossip = [
         row
         for row in store.list_dialogue(source="gossip", page_size=50)["rows"]

@@ -228,13 +228,16 @@ class TTSProcessor:
         if row["player_gender"] is not None:
             file_name = row["player_gender"] + "-" + file_name
         file_name = file_name + ".mp3"
-        subfolder = "quests" if row["quest"] else "gossip"
+        subfolder = (
+            "quests" if row["quest"] else "objects" if row["source"] == "object" else "gossip"
+        )
         self.tts(tts_text, voice_name, file_name, subfolder)
 
     def create_output_dirs(self):
         create_output_subdirs("")
         create_output_subdirs("quests")
         create_output_subdirs("gossip")
+        create_output_subdirs("objects")
 
     def process_rows_in_parallel(
         self, df, row_proccesing_fn, selected_voice_names: list[str], max_workers=5
@@ -264,11 +267,13 @@ class TTSProcessor:
                 pbar.set_postfix_str(custom_message)
                 pbar.update(1)
 
-    def write_gossip_file_lookups_table(self, df, module_name, type, table, filename):
+    def write_gossip_file_lookups_table(
+        self, df, module_name, type, table, filename, source="gossip"
+    ):
         output_file = OUTPUT_FOLDER + f"/{filename}.lua"
         gossip_table = {}
 
-        accept_df = df[(df["quest"] == "") & (df["type"] == type)]
+        accept_df = df[(df["quest"] == "") & (df["type"] == type) & (df["source"] == source)]
 
         for _i, row in tqdm(accept_df.iterrows()):
             if row["id"] not in gossip_table:
@@ -399,11 +404,13 @@ class TTSProcessor:
             f.write(lua.encode(pruned_quest_id_table))
             f.write("\n")
 
-    def write_npc_name_gossip_file_lookups_table(self, df, module_name, type, table, filename):
+    def write_npc_name_gossip_file_lookups_table(
+        self, df, module_name, type, table, filename, source="gossip"
+    ):
         output_file = OUTPUT_FOLDER + f"/{filename}.lua"
         gossip_table = {}
 
-        accept_df = df[(df["quest"] == "") & (df["type"] == type)]
+        accept_df = df[(df["quest"] == "") & (df["type"] == type) & (df["source"] == source)]
 
         for _i, row in tqdm(accept_df.iterrows()):
             npc_name = row["name"]
@@ -431,6 +438,35 @@ class TTSProcessor:
 
         print(f"Finished writing {filename}.lua")
 
+    def write_object_text_name_lookup(self, df, module_name, table, filename):
+        output_file = OUTPUT_FOLDER + f"/{filename}.lua"
+        readable_table = {}
+        readable_df = df[
+            (df["quest"] == "")
+            & (df["source"] == "object")
+            & (df["type"].isin(("gameobject", "item")))
+        ]
+
+        for _i, row in tqdm(readable_df.iterrows()):
+            object_name = row["name"].replace('"', "'").replace("\r", " ").replace("\n", " ")
+            escaped_text = row["text"].replace('"', "'").replace("\r", " ").replace("\n", " ")
+            addon_file_key = row.get("addon_file_key", "")
+            if pd.isna(addon_file_key):
+                addon_file_key = ""
+            readable_table.setdefault(object_name, {})[escaped_text] = (
+                str(addon_file_key).strip()
+                if _per_entity_audio_ready(row) and str(addon_file_key).strip()
+                else row["templateText_race_gender_hash"]
+            )
+
+        with open(output_file, "w", encoding="UTF-8") as f:
+            f.write(DATAMODULE_TABLE_GUARD_CLAUSE + "\n")
+            f.write(f"{module_name}.{table} = ")
+            f.write(lua.encode(readable_table))
+            f.write("\n")
+
+        print(f"Finished writing {filename}.lua")
+
     def tts_dataframe(self, df, selected_voices):
         self.create_output_dirs()
         self.process_rows_in_parallel(df, self.process_row, selected_voices, max_workers=5)
@@ -443,6 +479,22 @@ class TTSProcessor:
         )
         self.write_gossip_file_lookups_table(
             df, MODULE_NAME, "gameobject", "GossipLookupByObjectID", "object_gossip_file_lookups"
+        )
+        self.write_gossip_file_lookups_table(
+            df,
+            MODULE_NAME,
+            "gameobject",
+            "ObjectTextLookupByObjectID",
+            "object_text_file_lookups",
+            source="object",
+        )
+        self.write_gossip_file_lookups_table(
+            df,
+            MODULE_NAME,
+            "item",
+            "ObjectTextLookupByItemID",
+            "item_text_file_lookups",
+            source="object",
         )
 
         self.write_quest_id_lookup(df, MODULE_NAME)
@@ -457,6 +509,12 @@ class TTSProcessor:
             "gameobject",
             "GossipLookupByObjectName",
             "object_name_gossip_file_lookups",
+        )
+        self.write_object_text_name_lookup(
+            df,
+            MODULE_NAME,
+            "ObjectTextLookupByName",
+            "object_text_name_lookups",
         )
 
         self.write_questlog_npc_lookups_table(

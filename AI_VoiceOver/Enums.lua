@@ -10,6 +10,7 @@ Enums.SoundEvent =
     QuestComplete = 3,
     QuestGreeting = 4,
     Gossip = 5,
+    ObjectText = 6,
 }
 ---@param event SoundEvent
 ---@return boolean isQuestEvent Is event related to a quest (`SoundData.questID` must be present)
@@ -19,7 +20,7 @@ end
 ---@param event SoundEvent
 ---@return boolean isGossipEvent Is event related to a gossip (`SoundData.text` must be present)
 function Enums.SoundEvent:IsGossipEvent(event)
-    return event == self.Gossip or event == self.QuestGreeting
+    return event == self.Gossip or event == self.QuestGreeting or event == self.ObjectText
 end
 
 ---@enum GossipFrequency

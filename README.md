@@ -117,8 +117,8 @@ generated CSV and manifest artifacts with:
 ```
 
 The web application now opens at `/alpha`. Its persistent production database
-provides a filterable queue for every imported quest and gossip record, NPC
-context, baseline-or-unique voice assignment, deterministically prepared quest
+provides separate filterable queues for quests, NPC gossip, and readable object
+pages, plus NPC context, baseline-or-unique voice assignment, deterministically prepared quest
 spoken-text revisions,
 versioned voices and reference clips, guarded ElevenLabs actions, delivery
 presets, audio review, and production approval.
@@ -129,7 +129,8 @@ validated exports through Alpha to populate the full corpus. Sources for
 replacing one expansion/locale does not deactivate the others. Joined source
 fields are retained as record metadata. Importing creates missing deterministic
 spoken-text revisions for quests without overwriting reviewed revisions or
-contacting ElevenLabs. Gossip spoken text remains explicitly prepared. The
+contacting ElevenLabs. Gossip spoken text remains explicitly prepared; readable
+object text is prepared when its profile is first opened. The
 uploaded sources, SQLite database, reference clips,
 voice previews, and generated audio remain outside Git under `data/`.
 
@@ -184,8 +185,8 @@ The Alpha portal is the working production surface:
    through **Import / Export**.
 2. Filter the complete queue by expansion, status, content type, race, gender,
    NPC, quest, or text.
-3. Review the automatically prepared quest spoken text and edit it only when
-   needed. Prepare gossip spoken text explicitly.
+3. Review the automatically prepared quest and readable-object spoken text and
+   edit it only when needed. Prepare gossip spoken text explicitly.
 4. Review the inferred NPC role, affiliation, zone, story reach, and concise
    context; assign a baseline or versioned unique voice. Returning an NPC to
    baseline retires its unused unique profile without deleting its history.

@@ -228,6 +228,13 @@ def test_import_prepares_quest_spoken_text_but_leaves_gossip_for_review(store: A
             "percent": 0.0,
             "href": "/alpha/gossip",
         },
+        "objects": {
+            "label": "Object audio",
+            "complete": 0,
+            "total": 0,
+            "percent": 0.0,
+            "href": "/alpha/objects",
+        },
     }
 
 

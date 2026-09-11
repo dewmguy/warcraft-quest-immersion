@@ -19,7 +19,7 @@ from tts_cli.consts import GENDER_DICT, RACE_DICT
 from tts_cli.npc_identity import infer_creature_identity
 
 CORPUS_SCHEMA_VERSION = 2
-EXTRACTOR_VERSION = "1.1"
+EXTRACTOR_VERSION = "1.2"
 CORPUS_FILES = (
     "locations.csv",
     "entities.csv",
@@ -384,6 +384,7 @@ class AzerothCoreCorpusExtractor:
         "gossip_menu",
         "gossip_menu_option",
         "npc_text",
+        "page_text",
         "instance_template",
     }
     REQUIRED_TABLE_VARIANTS = {
@@ -467,6 +468,11 @@ class AzerothCoreCorpusExtractor:
                 ("OptionID", "OptionIndex", "option_id", "option_index"),
             ),
             "npc_text": (("ID",),),
+            "page_text": (
+                ("ID", "entry"),
+                ("Text", "text"),
+                ("NextPageID", "next_page", "next_page_id"),
+            ),
             "instance_template": (("map", "Map"), ("script", "ScriptName")),
         }
         for table, groups in base_columns.items():
@@ -909,6 +915,8 @@ class AzerothCoreCorpusExtractor:
             prefix = {"creature": "c", "gameobject": "g", "item": "i"}[entity_type]
             if content["quest_id"]:
                 addon_key = f"{content['quest_id']}-{content['stage']}-{prefix}{entity_id}"
+            elif content["kind"] == "object" and content["source_table"] == "page_text":
+                addon_key = f"page-{content['source_record_id']}-{prefix}{entity_id}"
             else:
                 addon_key = hashlib.md5(  # noqa: S324 - inherited addon filename contract
                     f"{content['content_id']}|{prefix}{entity_id}".encode()
@@ -1072,6 +1080,125 @@ class AzerothCoreCorpusExtractor:
                     source_table="quest_greeting",
                     source_record_id=f"{raw_type}:{entity_id}",
                 )
+
+        page_rows = {
+            _integer(_row_value(row, "ID", "entry")): row for row in self._rows("page_text")
+        }
+        page_roots: list[tuple[str, int, int, str]] = []
+        for object_id, row in object_templates.items():
+            object_type = _integer(_row_value(row, "type"))
+            page_field = {9: "data0", 10: "data7"}.get(object_type)
+            page_id = _integer(_row_value(row, page_field)) if page_field else 0
+            if page_id:
+                page_roots.append(("gameobject", object_id, page_id, page_field or ""))
+        for item_id, row in item_templates.items():
+            page_id = _integer(_row_value(row, "PageText", "page_text", "pageText"))
+            if page_id:
+                page_roots.append(("item", item_id, page_id, "PageText"))
+
+        reached_pages: set[int] = set()
+        for entity_type, entity_id, root_page_id, root_field in sorted(page_roots):
+            page_id = root_page_id
+            page_number = 1
+            path: list[int] = []
+            while page_id:
+                entity_key = f"{self.expansion}:{entity_type}:{entity_id}"
+                if page_id in path:
+                    add_finding(
+                        "cyclic_page_text",
+                        f"Readable text path {'>'.join(map(str, (*path, page_id)))} is cyclic.",
+                        entity_key=entity_key,
+                    )
+                    break
+                page = page_rows.get(page_id)
+                if not page:
+                    add_finding(
+                        "missing_page_text",
+                        f"{entity_type} {entity_id} references missing page_text {page_id}.",
+                        entity_key=entity_key,
+                    )
+                    break
+                path.append(page_id)
+                reached_pages.add(page_id)
+                text = _clean_text(_row_value(page, "Text", "text"))
+                next_page_id = _integer(_row_value(page, "NextPageID", "next_page", "next_page_id"))
+                if not text:
+                    add_finding(
+                        "empty_page_text",
+                        f"page_text {page_id} is reachable but contains no voiceable text.",
+                        entity_key=entity_key,
+                    )
+                else:
+                    content = add_text(
+                        identity=("page-text", page_id),
+                        kind="object",
+                        original_text=text,
+                        source_table="page_text",
+                        source_record_id=str(page_id),
+                        stage="object",
+                        context={
+                            "page_id": page_id,
+                            "page_number": page_number,
+                            "root_page_id": root_page_id,
+                            "next_page_id": next_page_id,
+                            "verified_build": _integer(
+                                _row_value(page, "VerifiedBuild", "verified_build")
+                            ),
+                        },
+                    )
+                    add_binding(
+                        content,
+                        entity_type,
+                        entity_id,
+                        "object-page",
+                        trigger_type="item_text_ready",
+                        source_table=(
+                            "gameobject_template"
+                            if entity_type == "gameobject"
+                            else "item_template"
+                        ),
+                        source_record_id=f"{entity_id}:{root_field}:{root_page_id}",
+                        menu_path=">".join(map(str, path)),
+                        context={
+                            "root_field": root_field,
+                            "root_page_id": root_page_id,
+                            "page_id": page_id,
+                            "page_number": page_number,
+                        },
+                    )
+                page_id = next_page_id
+                page_number += 1
+
+        for page_id, page in sorted(page_rows.items()):
+            if page_id in reached_pages:
+                continue
+            text = _clean_text(_row_value(page, "Text", "text"))
+            if not text:
+                add_finding(
+                    "empty_page_text",
+                    f"Unrooted page_text {page_id} contains no voiceable text.",
+                )
+                continue
+            content = add_text(
+                identity=("page-text", page_id),
+                kind="object",
+                original_text=text,
+                source_table="page_text",
+                source_record_id=str(page_id),
+                stage="object",
+                context={
+                    "page_id": page_id,
+                    "next_page_id": _integer(
+                        _row_value(page, "NextPageID", "next_page", "next_page_id")
+                    ),
+                    "verified_build": _integer(_row_value(page, "VerifiedBuild", "verified_build")),
+                },
+            )
+            add_finding(
+                "unrooted_page_text",
+                f"page_text {page_id} is not reachable from a supported game object or item.",
+                content_id=content["content_id"],
+            )
 
         reached_npc_slots: set[str] = set()
         npc_rows = {_integer(_row_value(row, "ID")): row for row in self._rows("npc_text")}

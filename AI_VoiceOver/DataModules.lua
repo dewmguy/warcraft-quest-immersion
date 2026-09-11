@@ -20,6 +20,9 @@ local LOAD_ALL_MODULES = true
 ---@field GossipLookupByNPCName table<string, table<string, string>> Maps Creature name and fuzzy-searchable gossip text to gossip text hash
 ---@field GossipLookupByObjectID table<number, table<string, string>> Maps GameObject ID and fuzzy-searchable gossip text to gossip text hash
 ---@field GossipLookupByObjectName table<string, table<string, string>> Maps GameObject name and fuzzy-searchable gossip text to gossip text hash
+---@field ObjectTextLookupByObjectID? table<number, table<string, string>> Maps GameObject ID and readable page text to an audio filename
+---@field ObjectTextLookupByItemID? table<number, table<string, string>> Maps Item ID and readable page text to an audio filename
+---@field ObjectTextLookupByName? table<string, table<string, string>> Maps readable GameObject or Item names and page text to an audio filename
 ---@field QuestIDLookup table<QuestIDLookupSource, table<string, number|table<string, number|table<string, number>>>> Maps quest title to quest ID or (if there is ambiguity) maps quest title and quest giver name to quest ID or (if there is ambiguity) maps quest title and quest giver name and fuzzy-searchable quest text to quest ID
 ---@field NPCIDLookupByQuestID table<number, number> Maps Quest ID to quest giver Creature ID
 ---@field ObjectIDLookupByQuestID table<number, number> Maps Quest ID to quest giver GameObject ID
@@ -457,6 +460,39 @@ function DataModules:GetQuestAudioFileName(soundData, stage)
     return format("%d-%s", soundData.questID, stage)
 end
 
+---@param soundData SoundData
+---@return string|nil fileName
+function DataModules:GetObjectTextFileName(soundData)
+    local lookupTable, object
+    if soundData.unitGUID then
+        local type = Utils:GetGUIDType(soundData.unitGUID)
+        if type == Enums.GUID.GameObject then
+            lookupTable = "ObjectTextLookupByObjectID"
+        end
+        if lookupTable then
+            object = Utils:GetIDFromGUID(soundData.unitGUID)
+        end
+    end
+    if not lookupTable then
+        lookupTable = "ObjectTextLookupByName"
+        object = replaceDoubleQuotes(soundData.name)
+    end
+
+    local textEntries = {}
+    for _, module in self:GetModules() do
+        local data = module[lookupTable]
+        local objectText = data and data[object]
+        if objectText then
+            for text, fileName in pairs(objectText) do
+                textEntries[text] = textEntries[text] or fileName
+            end
+        end
+    end
+
+    local bestResult = FuzzySearchBestKeys(soundData.text, textEntries)
+    return bestResult and bestResult.value
+end
+
 local getFileNameForEvent =
 {
     [Enums.SoundEvent.QuestAccept]   = function(soundData) return DataModules:GetQuestAudioFileName(soundData, "accept") end,
@@ -464,6 +500,7 @@ local getFileNameForEvent =
     [Enums.SoundEvent.QuestComplete] = function(soundData) return DataModules:GetQuestAudioFileName(soundData, "complete") end,
     [Enums.SoundEvent.QuestGreeting] = function(soundData) return DataModules:GetNPCGossipTextHash(soundData) end,
     [Enums.SoundEvent.Gossip]        = function(soundData) return DataModules:GetNPCGossipTextHash(soundData) end,
+    [Enums.SoundEvent.ObjectText]    = function(soundData) return DataModules:GetObjectTextFileName(soundData) end,
 }
 setmetatable(getFileNameForEvent,
     {

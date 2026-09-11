@@ -16,7 +16,7 @@ REQUIRED_COLUMNS = (
     "id",
     "original_text",
 )
-VALID_SOURCES = {"accept", "progress", "complete", "gossip"}
+VALID_SOURCES = {"accept", "progress", "complete", "gossip", "object"}
 VALID_TYPES = {"creature", "gameobject", "item"}
 
 

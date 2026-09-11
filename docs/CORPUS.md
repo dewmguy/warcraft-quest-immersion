@@ -18,6 +18,9 @@ extractor and provenance-matched 3.3.5 data from CreatureDisplayInfo,
 CreatureDisplayInfoExtra, CreatureModelData, FactionTemplate, Faction,
 AreaTable, Map, and WorldMapArea. The AzerothCore `creature_model_info` table
 supplies model gender. Missing or unrecognized variants stop extraction.
+Readable object content is sourced from `page_text`. Game-object type 9 uses
+`data0`, type 10 uses `data7`, and readable items use `item_template.PageText`.
+Every linked page is extracted separately so page turns map to distinct audio.
 
 For a clean Windows 3.3.5a build 12340 client, extract the eight raw files with
 Ladik's MPQ Editor. The script opens `locale-enUS.MPQ` and applies
@@ -78,7 +81,8 @@ The ZIP contract is:
   parent-zone display labels such as `Westfall - Deadmines`;
 - `entities.csv`: expansion-scoped creature, game-object, and item identities,
   inferred context, and inference evidence;
-- `texts.csv`: stable logical quest/gossip identities and immutable source text;
+- `texts.csv`: stable logical quest, gossip, and readable-page identities and
+  immutable source text;
 - `bindings.csv`: one production unit per text and delivery endpoint;
 - `triggers.csv`: quest relations and every reachable gossip-menu path;
 - `quarantine.csv`: retained unresolved records and their explicit reasons.
@@ -86,6 +90,10 @@ The ZIP contract is:
 Quest-log objectives and gossip option text are retained only in context. They
 are never classified as NPC speech. Scripted `creature_text`, combat speech,
 yells, whispers, and emote-only rows are outside this milestone.
+
+Unrooted, empty, missing, and cyclic readable-page chains are retained in the
+quarantine report. Reachable book, plaque, scroll, and item pages appear in the
+portal's Object Audio queue.
 
 ## Validate, dry-run, and import
 
@@ -124,6 +132,8 @@ New data modules may add these version-1-compatible tables:
 QuestAudioLookupByNPCID[questID][stage][npcID]
 QuestAudioLookupByObjectID[questID][stage][objectID]
 QuestAudioLookupByItemID[questID][stage][itemID]
+ObjectTextLookupByObjectID[objectID][pageText]
+ObjectTextLookupByName[objectOrItemName][pageText]
 ```
 
 Quest filenames use the delivery endpoint, for example
@@ -131,6 +141,12 @@ Quest filenames use the delivery endpoint, for example
 to the unique quest-log relation for clients that cannot expose an ID, and then
 falls back to `123-accept.mp3` when the loaded data pack has no additive lookup.
 The quest-progress event path is enabled for all supported legacy clients.
+
+Readable text uses the client's native `ITEM_TEXT_BEGIN`, `ITEM_TEXT_READY`, and
+`ITEM_TEXT_CLOSED` sequence. The addon resolves the current page text when it is
+ready, plays the matching object-specific file, and replaces the prior page's
+audio when the player turns a page. Readable filenames use stable keys such as
+`page-700-g20.mp3` and are stored beneath `generated/sounds/objects/`.
 
 Phase 2 stops after the complete corpus is visible and reconciled and one
 per-NPC binding passes in-game playback. Corpus extraction and import never call
