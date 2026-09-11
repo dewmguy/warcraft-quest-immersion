@@ -44,7 +44,20 @@
           </select><small>{% if 'zone_location_key' in record.manual_override_fields or 'zone' in record.manual_override_fields %}Manual override; preserved on corpus import.{% else %}Primary source location; instance-only NPCs include the outdoor zone and dungeon.{% endif %}</small></label>
           <label><span>Story Reach</span><select name="importance">{% for value,score in importance_scores.items() %}<option value="{{ value }}" {% if npc.importance == value %}selected{% endif %}>{{ value | replace('_',' ') | title }} · {{ score }}</option>{% endfor %}</select><small>Qualitative reach mapped to an internal 10–100 score.</small></label>
         </div>
-        <label><span>Character Context</span><textarea name="context_summary" rows="6">{{ npc.context_summary }}</textarea><small>Useful characterization and story context for a unique voice direction.</small></label>
+        <label><span>Character Context</span><textarea name="context_summary" rows="6">{{ npc.context_summary }}</textarea><small>Your editable characterization and story context.</small></label>
+        {% if record.references %}
+        <div class="npc-reference-research">
+          <div class="npc-reference-heading"><span>Cultural Reference Research</span><small>{{ record.references|length }} strong match{{ '' if record.references|length == 1 else 'es' }}</small></div>
+          {% for reference in record.references %}
+          <article>
+            <div class="npc-reference-title"><strong>{{ reference.reference_title }}</strong><span>{{ reference.reference_type | replace('_', ' ') | title }} · {{ reference.confidence | title }} confidence</span></div>
+            <p>{{ reference.summary }}</p>
+            {% if reference.voice_direction %}<p class="npc-reference-voice"><i class="fa-solid fa-microphone-lines" aria-hidden="true"></i><span>{{ reference.voice_direction }}</span></p>{% endif %}
+            <a href="{{ reference.source_url }}" target="_blank" rel="noreferrer">{{ reference.source_title }} <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
+          </article>
+          {% endfor %}
+        </div>
+        {% endif %}
         <button type="submit"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i><span>Save</span></button>
       </form>
     </section>

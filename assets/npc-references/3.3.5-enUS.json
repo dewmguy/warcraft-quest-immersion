@@ -1,0 +1,709 @@
+{
+  "schema_version": 1,
+  "catalog_id": "wqi-3.3.5-enUS-cultural-references",
+  "catalog_version": 1,
+  "expansion": "3.3.5",
+  "locale": "enUS",
+  "researched_at": "2026-09-10",
+  "method": "Exact NPC-name matches were checked against the active quest and gossip corpus. Direct name, role, and dialogue parallels were retained; weak or incidental leads were omitted.",
+  "sources": {
+    "stonefield": {
+      "title": "Warcraft Wiki: Stonefield family",
+      "url": "https://warcraft.wiki.gg/wiki/Stonefield_family?oldid=6406449"
+    },
+    "wow": {
+      "title": "Warcraft Wiki: World of Warcraft references",
+      "url": "https://warcraft.wiki.gg/wiki/List_of_pop_culture_references_in_Warcraft/WoW?oldid=6793531"
+    },
+    "bc": {
+      "title": "Warcraft Wiki: Burning Crusade references",
+      "url": "https://warcraft.wiki.gg/wiki/List_of_pop_culture_references_in_Warcraft/BC?oldid=6218654"
+    },
+    "wotlk": {
+      "title": "Warcraft Wiki: Wrath of the Lich King references",
+      "url": "https://warcraft.wiki.gg/wiki/List_of_pop_culture_references_in_Warcraft/WotLK?oldid=6794472"
+    }
+  },
+  "entries": [
+    {
+      "key": "stonefield-maclure-feud",
+      "npc_names": ["Tommy Joe Stonefield", "Maybell Maclure"],
+      "reference_title": "The Hatfield-McCoy feud and star-crossed lovers",
+      "reference_type": "real_world",
+      "summary": "The Stonefield and Maclure family names echo the Hatfields and McCoys. Their Young Lovers quest casts Tommy Joe and Maybell as earnest young lovers separated by a bitter rural family feud; a Romeo-and-Juliet or romantic-drama reading fits, but The Notebook is a creative interpretation rather than a documented source.",
+      "voice_direction": "Young, sincere, rural sweethearts with unguarded emotion and a touch of melodrama; use the archetype rather than imitating a particular actor.",
+      "confidence": "high",
+      "source": "stonefield"
+    },
+    {
+      "key": "krusk-dungeons-dragons",
+      "npc_names": ["Krusk"],
+      "reference_title": "Krusk from Dungeons & Dragons",
+      "reference_type": "game",
+      "summary": "Krusk is named for the iconic half-orc barbarian used in third-edition Dungeons & Dragons material.",
+      "voice_direction": "Direct, physically confident, and uncomplicated; favor terse warrior energy over sophistication.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "hadoken-street-fighter",
+      "npc_names": ["Hadoken Swiftstrider"],
+      "reference_title": "Street Fighter",
+      "reference_type": "game",
+      "summary": "Hadoken Swiftstrider's name invokes the Hadoken attack, while Alpha Strike combines names from Street Fighter Alpha and Street Fighter III: 3rd Strike.",
+      "voice_direction": "Focused martial-arts confidence with crisp, energetic delivery.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "muigin-larion-super-mario",
+      "npc_names": ["Muigin", "Larion"],
+      "reference_title": "Mario and Luigi",
+      "reference_type": "game",
+      "summary": "Muigin and Larion rearrange Mario and Luigi; their Bloodpetal work also recalls the series' Piranha Plants.",
+      "voice_direction": "Playful adventure-comedy energy, with the pair sounding distinct but naturally related; avoid a direct character impression.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "linken-legend-of-zelda",
+      "npc_names": ["Linken"],
+      "reference_title": "Link from The Legend of Zelda",
+      "reference_type": "game",
+      "summary": "Linken is a Link analogue whose amnesia, raft, sword, and quests such as It's a Secret to Everybody and It's Dangerous to Go Alone build an extended Zelda homage.",
+      "voice_direction": "An earnest young adventurer: initially puzzled and amiable, then quietly heroic as his memory and purpose return.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "miblon-zelda-moblin",
+      "npc_names": ["Miblon Snarltooth"],
+      "reference_title": "Moblin from The Legend of Zelda",
+      "reference_type": "game",
+      "summary": "Miblon's name and the ham-gated passage reproduce the Moblin food exchange from the original Legend of Zelda.",
+      "voice_direction": "A surly, transactional gatekeeper with broad fantasy-villain humor.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "sayge-ultima",
+      "npc_names": ["Sayge"],
+      "reference_title": "Ultima's virtue questions",
+      "reference_type": "game",
+      "summary": "Sayge's Darkmoon Faire morality questions closely resemble the virtue questions used to define a player character in Ultima IV, V, and VI.",
+      "voice_direction": "Measured, mystical, and gently probing, like a fortune-teller who already knows more than the visitor.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "hemet-hemingway-south-park",
+      "npc_names": ["Hemet Nesingwary"],
+      "reference_title": "Ernest Hemingway and the great-white-hunter archetype",
+      "reference_type": "literature",
+      "summary": "Hemet Nesingwary is an anagram of Ernest Hemingway and embodies the boastful big-game hunter found around Hemingway's safari writing. His Nagrand hunting gag also quotes South Park's rationalization, 'It's coming right for us.'",
+      "voice_direction": "Weathered, self-assured hunting raconteur with outsized bravado and dry comic timing; do not imitate Hemingway or a television character literally.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "deathguard-samsa-metamorphosis",
+      "npc_names": ["Deathguard Samsa"],
+      "reference_title": "Gregor Samsa from The Metamorphosis",
+      "reference_type": "literature",
+      "summary": "Samsa shares the surname of Franz Kafka's transformed protagonist, sharpened by the Forsaken character's grim setting and work with human remains.",
+      "voice_direction": "Detached, weary, and matter-of-factly macabre rather than theatrically evil.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "finkle-einhorn-ace-ventura",
+      "npc_names": ["Finkle Einhorn"],
+      "reference_title": "Ray Finkle and Lois Einhorn from Ace Ventura",
+      "reference_type": "film_and_tv",
+      "summary": "The combined name directly joins the two identities attached to Ace Ventura: Pet Detective's antagonist.",
+      "voice_direction": "A compact comic cameo; keep the delivery controlled and sly rather than forcing a caricature.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "oglethorpe-aqua-teen",
+      "npc_names": ["Oglethorpe Obnoticus"],
+      "reference_title": "Oglethorpe and the Orbnauticus from Aqua Teen Hunger Force",
+      "reference_type": "film_and_tv",
+      "summary": "The NPC name combines the blustering Plutonian Oglethorpe with his supposed supercomputer, the Orbnauticus.",
+      "voice_direction": "Bombastic, overconfident comic-intellectual energy whose certainty exceeds his competence; avoid a direct impression.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "andorov-commando",
+      "npc_names": ["Lieutenant General Andorov"],
+      "reference_title": "Commando",
+      "reference_type": "film_and_tv",
+      "summary": "Andorov repeats the film's cold reversal, 'Remember when I said I'd kill you last? I lied,' during the Ruins of Ahn'Qiraj encounter.",
+      "voice_direction": "Clipped special-forces authority and deadpan menace, letting the one-liner land without exaggeration.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "saru-steelfury-conan",
+      "npc_names": ["Saru Steelfury"],
+      "reference_title": "Conan the Barbarian",
+      "reference_type": "film_and_tv",
+      "summary": "Saru's declaration that steel alone can be trusted closely follows Conan's father's lesson about the riddle of steel.",
+      "voice_direction": "Grave, deliberate, almost ritual reverence for the craft and strength of steel.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "father-lankester-exorcist",
+      "npc_names": ["Father Lankester"],
+      "reference_title": "Father Lankester Merrin from The Exorcist",
+      "reference_type": "film_and_tv",
+      "summary": "The priest's name is taken from the veteran exorcist Lankester Merrin.",
+      "voice_direction": "Calm, solemn clerical authority with experience confronting frightening things.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "gubber-blump-forrest-gump",
+      "npc_names": ["Gubber Blump"],
+      "reference_title": "Bubba from Forrest Gump",
+      "reference_type": "film_and_tv",
+      "summary": "Gubber's name parodies Bubba, and Fruit of the Sea gives him a long catalogue of ways to prepare crab in the manner of Bubba's shrimp speech.",
+      "voice_direction": "Friendly, guileless enthusiasm with a rhythmic, lovingly repetitive list delivery; evoke the joke without copying the actor.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "ghede-full-metal-jacket",
+      "npc_names": ["Ghede"],
+      "reference_title": "Full Metal Jacket's drill instructor",
+      "reference_type": "film_and_tv",
+      "summary": "Ghede's Un'Goro Soil dialogue recasts Sergeant Hartman's severe briefing and 'non-hacker' language for Cenarion Circle work.",
+      "voice_direction": "Hard-edged drill-instructor cadence, fast and exacting, while avoiding imitation of a specific performance.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "egan-ghostbusters",
+      "npc_names": ["Egan"],
+      "reference_title": "Egon Spengler from Ghostbusters",
+      "reference_type": "film_and_tv",
+      "summary": "Egan and Egan's Blaster echo Egon Spengler and ghost-catching equipment, here used to release spirits in Stratholme.",
+      "voice_direction": "Intellectual, restrained, and practical when discussing supernatural machinery.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "tirion-godfather-scarface",
+      "npc_names": ["Tirion Fordring"],
+      "reference_title": "The Godfather and Scarface dialogue nods",
+      "reference_type": "film_and_tv",
+      "summary": "Tirion's original In Dreams scene echoed Don Corleone's grief over his son, while another Eastern Plaguelands encounter used Scarface's 'little friend' setup.",
+      "voice_direction": "Do not turn Tirion into a film impression; the useful clue is the contrast between intimate paternal grief and sudden veteran-warrior force.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "remy-two-times-goodfellas",
+      "npc_names": ["Remy \"Two Times\""],
+      "reference_title": "Jimmy Two Times from Goodfellas",
+      "reference_type": "film_and_tv",
+      "summary": "Remy's nickname and habit of immediately repeating himself mirror Jimmy Two Times.",
+      "voice_direction": "Streetwise merchant patter with an effortless repeated phrase, repeated phrase.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "brikk-goodfellas",
+      "npc_names": ["Brikk Keencraft"],
+      "reference_title": "Goodfellas' 'funny how?' scene",
+      "reference_type": "film_and_tv",
+      "summary": "Brikk's clown-and-amusement challenge closely paraphrases the film's famous volatile exchange.",
+      "voice_direction": "Conversational friendliness that can turn abruptly confrontational, with dangerous intensity under the humor.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "dorius-temple-of-doom",
+      "npc_names": ["Dorius Stonetender"],
+      "reference_title": "Indiana Jones and the Temple of Doom",
+      "reference_type": "film_and_tv",
+      "summary": "Dorius's Suntara Stones quest mirrors the Sankara Stones sought in Temple of Doom.",
+      "voice_direction": "Breathless archaeologist-adventurer urgency, grounded in peril rather than a direct Indiana Jones imitation.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "razuvious-karate-kid",
+      "npc_names": ["Instructor Razuvious"],
+      "reference_title": "The Karate Kid",
+      "reference_type": "film_and_tv",
+      "summary": "Razuvious orders his students to 'sweep the leg,' quoting the ruthless tournament instruction from The Karate Kid.",
+      "voice_direction": "A merciless combat instructor: sharp commands, contempt for weakness, and no wasted warmth.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "land-of-lost-marshals",
+      "npc_names": ["Williden Marshal", "Hol'anyee Marshal"],
+      "reference_title": "Will, Holly, and Marshall from Land of the Lost",
+      "reference_type": "film_and_tv",
+      "summary": "The two Un'Goro explorers combine the names Will, Holly, and Marshall in a dinosaur-filled lost world.",
+      "voice_direction": "Capable but slightly overwhelmed expedition partners, played as sincere adventure rather than broad parody.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "gaxim-mission-impossible",
+      "npc_names": ["Gaxim Rustfizzle"],
+      "reference_title": "Mission: Impossible briefing",
+      "reference_type": "film_and_tv",
+      "summary": "Gaxim's Covert Ops plans parody the television mission briefing by ordering the pages destroyed and proposing future self-destruction.",
+      "voice_direction": "Conspiratorial intelligence-handler seriousness applied to improvised gnomish spycraft.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "inigo-montoy-princess-bride",
+      "npc_names": ["Father Inigo Montoy"],
+      "reference_title": "Inigo Montoya from The Princess Bride",
+      "reference_type": "film_and_tv",
+      "summary": "The priest's name is a direct alteration of swordsman Inigo Montoya's name.",
+      "voice_direction": "A composed, memorable supporting presence; do not assume the film character's exact accent without dialogue support.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "undead-innkeepers-psycho",
+      "npc_names": ["Innkeeper Norman", "Innkeeper Bates"],
+      "reference_title": "Norman Bates from Psycho",
+      "reference_type": "film_and_tv",
+      "summary": "The paired undead innkeeper names split motel proprietor Norman Bates into two characters.",
+      "voice_direction": "Polite hospitality with a faintly unsettling stillness; keep the menace understated.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "droffers-sanford-and-son",
+      "npc_names": ["Dran Droffers", "Malton Droffers"],
+      "reference_title": "Fred Sanford and Lamont from Sanford and Son",
+      "reference_type": "film_and_tv",
+      "summary": "The father-and-son salvage dealers' names are anagrams and rearrangements of Fred Sanford and Lamont.",
+      "voice_direction": "Bickering but familiar family-business chemistry, with the elder more theatrical and the younger more grounded.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "swamp-eye-jarl-sling-blade",
+      "npc_names": ["\"Swamp Eye\" Jarl"],
+      "reference_title": "Karl from Sling Blade",
+      "reference_type": "film_and_tv",
+      "summary": "Jarl Needs a Blade transforms the film's 'some folks call it a sling blade' line into a moonsteel broadsword and 'swing blade.'",
+      "voice_direction": "Slow, plainspoken rural delivery with literal focus; evoke the cadence lightly rather than reproducing the performance.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "gnomish-transport-star-trek",
+      "npc_names": ["Scooty", "Sprok", "Jhordy Lapforge", "Nogg"],
+      "reference_title": "Star Trek engineers and transporter crew",
+      "reference_type": "film_and_tv",
+      "summary": "Scooty, Sprok, Jhordy Lapforge, and Nogg adapt Scotty, Spock, Geordi La Forge, and Nog into gnomish engineers associated with transporters and machine shops.",
+      "voice_direction": "Precise, brisk technical competence with dry science-fiction humor; distinguish each engineer rather than using one franchise-wide impression.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "alterac-wing-commanders-top-gun",
+      "npc_names": ["Wing Commander Ichman", "Wing Commander Slidore", "Wing Commander Vipore", "Wing Commander Guse", "Wing Commander Jeztor", "Wing Commander Mulverick"],
+      "reference_title": "Top Gun pilots",
+      "reference_type": "film_and_tv",
+      "summary": "The wing commander surnames map to Iceman, Slider, Viper, Goose, Jester, and Maverick.",
+      "voice_direction": "Fast, confident military-aviator banter with individual temperaments; avoid direct actor impressions.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "under-siege-cooks",
+      "npc_names": ["Stephen Ryback", "Erika Tate"],
+      "reference_title": "Casey Ryback and Jordan Tate from Under Siege",
+      "reference_type": "film_and_tv",
+      "summary": "Stephen Ryback combines Steven Seagal with protagonist Casey Ryback, while Erika Tate combines actor Erika Eleniak and character Jordan Tate; the chef role completes the joke.",
+      "voice_direction": "Ryback should sound quietly capable and understated; Tate can sound alert and practical. Do not imitate the actors.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "the-rokk-wrestling",
+      "npc_names": ["The Rokk"],
+      "reference_title": "Dwayne 'The Rock' Johnson",
+      "reference_type": "real_person",
+      "summary": "The Shattrath cooking master turns The Rock's name and 'what the Rock is cooking' catchphrase into a literal profession.",
+      "voice_direction": "Large, charismatic showman energy suited to a master cook; use broad traits, not a vocal likeness.",
+      "confidence": "high",
+      "source": "wow"
+    },
+    {
+      "key": "harrison-jones-indiana",
+      "npc_names": ["Harrison Jones"],
+      "reference_title": "Indiana Jones and Harrison Ford",
+      "reference_type": "film_and_tv",
+      "summary": "Harrison Jones combines Harrison Ford's name with Indiana Jones. His archaeology, museum fixation, escapes, and Dun-da-Dun-tah! quest dialogue extend the homage across Burning Crusade and Wrath.",
+      "voice_direction": "Dry, capable pulp-adventure archaeologist: confident under pressure, impatient with treasure hunters, and wryly amused; do not copy Harrison Ford's voice.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "mack-diver-macgyver",
+      "npc_names": ["Mack Diver"],
+      "reference_title": "MacGyver",
+      "reference_type": "film_and_tv",
+      "summary": "Mack Diver's name is a direct phonetic play on resourceful television problem-solver MacGyver.",
+      "voice_direction": "Unflappable, inventive problem-solver energy; practical confidence rather than action-hero bombast.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "masters-of-universe-trio",
+      "npc_names": ["Adam Eternum", "Oric Coe", "Keldor the Lost"],
+      "reference_title": "He-Man, Orko, and Skeletor from Masters of the Universe",
+      "reference_type": "film_and_tv",
+      "summary": "Adam Eternum points to Prince Adam/He-Man, Oric Coe to Orko, and undead Keldor to the identity Skeletor held before his transformation.",
+      "voice_direction": "Heightened sword-and-sorcery clarity: Adam noble and heroic, Oric lighter and eccentric, Keldor theatrical and ominous—without copying cartoon performances.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "boots-star-trek-doctor",
+      "npc_names": ["Boots"],
+      "reference_title": "Star Trek's 'I'm a doctor' refrain",
+      "reference_type": "film_and_tv",
+      "summary": "Boots's resuscitation scene ends with a goblin medic adapting Doctor McCoy's recurring 'I'm a doctor, not a...' complaint.",
+      "voice_direction": "Play the surrounding scene as frantic black comedy, with Boots himself exhausted and vulnerable rather than franchise-styled.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "obrien-smiles",
+      "npc_names": ["Smiles O'Byron"],
+      "reference_title": "Miles O'Brien from Star Trek",
+      "reference_type": "film_and_tv",
+      "summary": "Smiles O'Byron reshapes Miles O'Brien's name and his alternate-universe nickname, Smiley.",
+      "voice_direction": "Approachable working engineer: competent, good-humored, and less polished than a command officer.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "treelos-four-lights",
+      "npc_names": ["Warden Treelos"],
+      "reference_title": "Star Trek: The Next Generation's 'four lights' scene",
+      "reference_type": "film_and_tv",
+      "summary": "Treelos's insistence that there are four lights directly invokes Captain Picard's resistance under interrogation.",
+      "voice_direction": "Defiant, strained certainty under pressure; the reference is in the line's resolve, not an invitation to copy Patrick Stewart.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "chief-engineer-trep",
+      "npc_names": ["Chief Engineer Trep"],
+      "reference_title": "Charles 'Trip' Tucker from Star Trek: Enterprise",
+      "reference_type": "film_and_tv",
+      "summary": "The chief engineer's name and rank parallel Enterprise's Chief Engineer Trip Tucker.",
+      "voice_direction": "Hands-on, personable engineering authority; practical and less formal than bridge command.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "laando-star-wars",
+      "npc_names": ["Laando"],
+      "reference_title": "Lando Calrissian from Star Wars",
+      "reference_type": "film_and_tv",
+      "summary": "Laando's name is a direct play on Lando Calrissian amid a cluster of Star Wars references on Bloodmyst Isle.",
+      "voice_direction": "Smooth, sociable confidence suitable for a well-traveled flight master; do not reproduce an actor's voice.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "starship-troopers-toshley",
+      "npc_names": ["Razak Ironsides", "Dizzy Dina"],
+      "reference_title": "Rasczak and Dizzy from Starship Troopers",
+      "reference_type": "film_and_tv",
+      "summary": "Razak Ironsides combines Lieutenant Rasczak with actor Michael Ironside, and Dizzy Dina combines Dizzy Flores with actor Dina Meyer; their ravager defense reinforces the insect-war reference.",
+      "voice_direction": "Battle-hardened outpost soldiers: Razak commanding and severe, Dizzy courageous and direct. Avoid actor likenesses.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "admiral-odesyus-a-team-odyssey",
+      "npc_names": ["Admiral Odesyus"],
+      "reference_title": "Odysseus and The A-Team",
+      "reference_type": "literature",
+      "summary": "Odesyus and his island landing echo Odysseus, while his satisfied 'plan comes together' line invokes Hannibal Smith from The A-Team.",
+      "voice_direction": "Seasoned expedition commander with theatrical confidence in his schemes and a seafarer's patience.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "hellfire-lebowski-engineers",
+      "npc_names": ["Zebig", "Lebowski"],
+      "reference_title": "The Big Lebowski",
+      "reference_type": "film_and_tv",
+      "summary": "The paired Horde and Alliance engineering trainers turn 'the Big Lebowski' into the names Zebig and Lebowski.",
+      "voice_direction": "Loose, dry comic timing can acknowledge the wordplay, but their actual trainer roles should remain primary.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "assistant-klatu-klaatu",
+      "npc_names": ["Assistant Klatu"],
+      "reference_title": "Klaatu barada nikto",
+      "reference_type": "film_and_tv",
+      "summary": "Klatu and nearby Barada split the famous phrase associated with The Day the Earth Stood Still and later parodied in Army of Darkness.",
+      "voice_direction": "Straight-faced ritual or technical delivery makes the hidden phrase work better than overt parody.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "colonel-jules-exorcist",
+      "npc_names": ["Colonel Jules", "Anchorite Barada"],
+      "reference_title": "The Exorcist",
+      "reference_type": "film_and_tv",
+      "summary": "The Exorcism of Colonel Jules stages levitation, taunts, green vomit, and an interruption-prone ritual as an overt Exorcist homage, with Barada guiding the rite.",
+      "voice_direction": "Jules alternates between military identity and invasive demonic taunts; Barada remains focused, urgent, and spiritually grounded.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "groundskeeper-wyllithen-simpsons",
+      "npc_names": ["Groundskeeper Wyllithen"],
+      "reference_title": "Groundskeeper Willie from The Simpsons",
+      "reference_type": "film_and_tv",
+      "summary": "The character's name and occupation directly echo Groundskeeper Willie.",
+      "voice_direction": "Gruff, territorial groundskeeper energy; use Warcraft's established accent context rather than copying the cartoon voice.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "vargoth-hotel-california",
+      "npc_names": ["Archmage Vargoth"],
+      "reference_title": "Hotel California by the Eagles",
+      "reference_type": "music",
+      "summary": "Repeated conversations with Vargoth yield paraphrases and lines from Hotel California, fitting a mage trapped in a place he cannot simply leave.",
+      "voice_direction": "Cultured, enigmatic resignation with the faint weariness of a host who has repeated the same warning many times.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "ophera-oprah",
+      "npc_names": ["Caregiver Ophera Windfury"],
+      "reference_title": "Oprah Winfrey",
+      "reference_type": "real_person",
+      "summary": "Ophera Windfury is a direct fantasy-name play on Oprah Winfrey.",
+      "voice_direction": "Warm, assured host or caregiver presence; do not imitate Oprah Winfrey's voice.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "acteon-greek-myth",
+      "npc_names": ["Acteon"],
+      "reference_title": "Actaeon from Greek mythology",
+      "reference_type": "mythology",
+      "summary": "Acteon is a hunter who assigns stag hunts; mythological Actaeon was a hunter transformed into a stag and killed by his own hounds.",
+      "voice_direction": "Competent, serious hunter with an undercurrent of dramatic irony rather than supernatural foreknowledge.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "foreman-razelcraz-pep-boys",
+      "npc_names": ["Foreman Razelcraz"],
+      "reference_title": "The Pep Boys",
+      "reference_type": "real_world",
+      "summary": "How to Serve Goblins sends the player after Manni, Moh, and Jakk, recreating auto-parts mascots Manny, Moe, and Jack under a goblin foreman.",
+      "voice_direction": "Fast, practical shop-foreman delivery with commercial confidence and impatience for delays.",
+      "confidence": "high",
+      "source": "bc"
+    },
+    {
+      "key": "cavalier-durkon-order-stick",
+      "npc_names": ["Cavalier Durkon"],
+      "reference_title": "Durkon from The Order of the Stick",
+      "reference_type": "literature",
+      "summary": "Cavalier Durkon belongs to a trio of Argent Tournament names based on characters from the fantasy webcomic The Order of the Stick.",
+      "voice_direction": "Steady, honorable dwarven-cavalier delivery; the comic reference is a personality clue, not a demand for a character impression.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "mootoo-mewtwo",
+      "npc_names": ["Mootoo the Younger"],
+      "reference_title": "Mewtwo from Pokémon",
+      "reference_type": "game",
+      "summary": "Mootoo's name, unusual eyes, and psychic remarks during Escaping the Mist form a clear Mewtwo reference.",
+      "voice_direction": "Young but eerily self-possessed, with quiet psychic intensity rather than a direct animated-character voice.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "zafod-hitchhiker",
+      "npc_names": ["Zafod Boombox"],
+      "reference_title": "Zaphod Beeblebrox from The Hitchhiker's Guide to the Galaxy",
+      "reference_type": "literature",
+      "summary": "Zafod's name is a direct play on the flamboyant, reckless galactic celebrity Zaphod Beeblebrox.",
+      "voice_direction": "Flashy, self-satisfied, distractible confidence with comic momentum; avoid copying a screen adaptation.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "sinclari-aliens",
+      "npc_names": ["Lieutenant Sinclari"],
+      "reference_title": "Aliens evacuation command",
+      "reference_type": "film_and_tv",
+      "summary": "Sinclari's 'Prison guards, we are leaving!' command at Violet Hold reworks Corporal Hicks's urgent 'Marines, we are leaving!' line.",
+      "voice_direction": "Crisp command voice under immediate pressure; urgent without becoming panicked.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "kara-thricestar-battlestar",
+      "npc_names": ["Kara Thricestar"],
+      "reference_title": "Kara 'Starbuck' Thrace from Battlestar Galactica",
+      "reference_type": "film_and_tv",
+      "summary": "Kara Thricestar's name directly transforms Kara Thrace and her Starbuck callsign.",
+      "voice_direction": "Bold, irreverent ace-pilot confidence with a guarded emotional core; do not imitate the actor.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "chromie-doctor-who",
+      "npc_names": ["Chromie"],
+      "reference_title": "The Doctor from Doctor Who",
+      "reference_type": "film_and_tv",
+      "summary": "Chromie's time-travel dialogue in the Culling of Stratholme plays with the Doctor's habit of meeting people out of sequence and denying a familiar first meeting.",
+      "voice_direction": "Bright, quick, ancient intelligence wrapped in friendly curiosity, with time-travel oddities treated as ordinary.",
+      "confidence": "strong",
+      "source": "wotlk"
+    },
+    {
+      "key": "initiate-mehrtens-firefly",
+      "npc_names": ["Initiate Mehrtens"],
+      "reference_title": "Firefly's War Stories",
+      "reference_type": "film_and_tv",
+      "summary": "During a torture-related interaction, Mehrtens uses 'Are you trying to meet the real me?', echoing Mal's defiance in War Stories.",
+      "voice_direction": "Controlled, unsettling composure; treat the quoted defiance as dark character texture, not a vocal impression.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "mcgoyver-macgyver",
+      "npc_names": ["McGoyver"],
+      "reference_title": "MacGyver",
+      "reference_type": "film_and_tv",
+      "summary": "McGoyver's name and airplane-building activity directly reference the resourceful television inventor.",
+      "voice_direction": "Calm improviser who sounds most comfortable solving an impossible mechanical problem.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "jepetto-pinocchio",
+      "npc_names": ["Jepetto Joybuzz"],
+      "reference_title": "Geppetto from Pinocchio",
+      "reference_type": "literature",
+      "summary": "The Dalaran toymaker's name and Wonderworks shop evoke Geppetto, the craftsman who created Pinocchio.",
+      "voice_direction": "Warm, whimsical master-craftsman energy with genuine affection for toys and small wonders.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "jelinek-sweeney-todd",
+      "npc_names": ["Jelinek Sharpshear"],
+      "reference_title": "Sweeney Todd",
+      "reference_type": "film_and_tv",
+      "summary": "This barber was named Sween Neetod during beta, and the skeletons beneath his shop floor preserve the Sweeney Todd murder-barber reference.",
+      "voice_direction": "Impeccably courteous barber with a darkly controlled undertone; menace should remain beneath the service voice.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "donny-walt-big-lebowski",
+      "npc_names": ["Donny", "Walt"],
+      "reference_title": "Donny and Walter from The Big Lebowski",
+      "reference_type": "film_and_tv",
+      "summary": "Donny's Out of My Element? quest and Walt's repeated concern over a ruined rug recreate running dialogue and incidents from The Big Lebowski.",
+      "voice_direction": "Donny is mild and bewildered; Walt is forceful, aggrieved, and certain of his own framing. Avoid direct actor impressions.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "finklestein-nightmare-before-christmas",
+      "npc_names": ["Alchemist Finklestein"],
+      "reference_title": "Doctor Finkelstein from The Nightmare Before Christmas",
+      "reference_type": "film_and_tv",
+      "summary": "The alchemist's name, laboratory role, and Lab Work quest reference Halloween Town's eccentric scientist Doctor Finkelstein.",
+      "voice_direction": "Fussy, exacting mad-scientist energy, impatient with mistakes but delighted by a successful formula.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "macalroy-they-live",
+      "npc_names": ["Macalroy"],
+      "reference_title": "They Live",
+      "reference_type": "film_and_tv",
+      "summary": "Macalroy sends the player onward as 'all out of bubble gum,' adapting the film's famous pre-fight declaration.",
+      "voice_direction": "Hard-bitten, laconic action confidence; land the paraphrase plainly instead of announcing the joke.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "top-chef-dalaran",
+      "npc_names": ["Katherine Lee", "Thomas Kolichio"],
+      "reference_title": "Katie Lee and Tom Colicchio from Top Chef",
+      "reference_type": "real_person",
+      "summary": "The Dalaran cooking figures' names adapt Top Chef host Katie Lee and judge Tom Colicchio.",
+      "voice_direction": "Polished culinary authority and concise evaluative confidence; do not imitate either real person's voice.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "mimiron-voltron",
+      "npc_names": ["Mimiron"],
+      "reference_title": "Voltron",
+      "reference_type": "film_and_tv",
+      "summary": "Mimiron's combined-machine phase is labeled V-07-TR-0N, and the related achievement And I'll Form the Head! completes the Voltron reference.",
+      "voice_direction": "Manic inventor delight with escalating theatrical pride as separate machines combine into the final creation.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "skully-molder-x-files",
+      "npc_names": ["Agent Skully", "Deathguard Molder"],
+      "reference_title": "Dana Scully and Fox Mulder from The X-Files",
+      "reference_type": "film_and_tv",
+      "summary": "The paired Forsaken agents' names directly recast The X-Files investigators Scully and Mulder.",
+      "voice_direction": "Investigative partners with contrasting instincts: Skully skeptical and precise, Molder intuitive and intense; avoid actor likenesses.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "siouxsie-banshees",
+      "npc_names": ["Siouxsie the Banshee"],
+      "reference_title": "Siouxsie and the Banshees",
+      "reference_type": "music",
+      "summary": "The death knight NPC's name converts the post-punk band name into a literal banshee title.",
+      "voice_direction": "Cool, commanding, darkly stylish presence; do not imitate singer Siouxsie Sioux.",
+      "confidence": "high",
+      "source": "wotlk"
+    },
+    {
+      "key": "ulduar-watchers-mythology",
+      "npc_names": ["Thorim", "Freya", "Hodir"],
+      "reference_title": "Norse mythology",
+      "reference_type": "mythology",
+      "summary": "The titan watchers adapt Thor, Freyja, and Höðr, and their Warcraft roles retain broad thematic links to those mythological figures.",
+      "voice_direction": "Ancient mythic authority with distinct domains: Thorim stormy and martial, Freya vital and maternal, Hodir austere and wintry.",
+      "confidence": "high",
+      "source": "wotlk"
+    }
+  ]
+}

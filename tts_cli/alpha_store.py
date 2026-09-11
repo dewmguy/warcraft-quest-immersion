@@ -16,6 +16,7 @@ from mutagen import File as MutagenFile
 from tts_cli.consts import GENDER_DICT, RACE_DICT
 from tts_cli.corpus import CorpusBundle, CorpusError, corpus_bundle_summary, load_corpus_bundle
 from tts_cli.data_sources import REQUIRED_COLUMNS, VALID_SOURCES, load_dialogue_csv
+from tts_cli.npc_references import NPCReferenceCatalog
 from tts_cli.voice_profiles import load_phase2_review
 
 if TYPE_CHECKING:
@@ -537,6 +538,27 @@ class AlphaStore:
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY(speaker_id, field_name)
                 );
+                CREATE TABLE IF NOT EXISTS speaker_references (
+                    reference_id TEXT PRIMARY KEY,
+                    speaker_id TEXT NOT NULL REFERENCES speakers(speaker_id) ON DELETE CASCADE,
+                    catalog_id TEXT NOT NULL,
+                    catalog_version INTEGER NOT NULL,
+                    catalog_key TEXT NOT NULL,
+                    reference_title TEXT NOT NULL,
+                    reference_type TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    voice_direction TEXT NOT NULL DEFAULT '',
+                    confidence TEXT NOT NULL,
+                    source_title TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    researched_at TEXT NOT NULL,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(speaker_id, catalog_id, catalog_key)
+                );
+                CREATE INDEX IF NOT EXISTS speaker_references_speaker_idx
+                    ON speaker_references(speaker_id, active);
                 CREATE TABLE IF NOT EXISTS dialogue_entries (
                     dialogue_id TEXT PRIMARY KEY,
                     source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
@@ -3203,10 +3225,11 @@ class AlphaStore:
         if query.strip():
             conditions.append(
                 "(name LIKE ? OR role LIKE ? OR faction LIKE ? OR zone LIKE ? "
-                "OR context_summary LIKE ? OR CAST(entity_id AS TEXT) = ?)"
+                "OR context_summary LIKE ? OR CAST(entity_id AS TEXT) = ? "
+                "OR reference_search LIKE ?)"
             )
             term = f"%{query.strip()}%"
-            parameters.extend([term, term, term, term, term, query.strip()])
+            parameters.extend([term, term, term, term, term, query.strip(), term])
         if zone_location_key:
             if zone_location_key.startswith("legacy:"):
                 conditions.append("zone = ?")
@@ -3271,7 +3294,10 @@ class AlphaStore:
                 (SELECT uvv.status FROM voices uv
                     JOIN voice_versions uvv ON uvv.voice_id=uv.voice_id AND uvv.is_current=1
                     WHERE uv.scope='unique' AND uv.npc_speaker_id=s.speaker_id LIMIT 1)
-                    AS unique_voice_status
+                    AS unique_voice_status,
+                (SELECT GROUP_CONCAT(sr.reference_title || ' ' || sr.summary, ' ')
+                    FROM speaker_references sr
+                    WHERE sr.speaker_id=s.speaker_id AND sr.active=1) AS reference_search
             FROM speakers s
             LEFT JOIN voices v ON v.voice_id=s.voice_id
             LEFT JOIN voice_versions vv ON vv.voice_id=v.voice_id AND vv.is_current=1
@@ -3726,6 +3752,11 @@ class AlphaStore:
                     (speaker_id,),
                 )
             }
+            references = connection.execute(
+                "SELECT * FROM speaker_references WHERE speaker_id=? AND active=1 "
+                "ORDER BY CASE confidence WHEN 'high' THEN 0 ELSE 1 END, reference_title",
+                (speaker_id,),
+            ).fetchall()
         speaker_payload = dict(speaker)
         speaker_payload["importance_score"] = IMPORTANCE_SCORES.get(
             speaker_payload["importance"], 0
@@ -3750,8 +3781,106 @@ class AlphaStore:
             "baseline_voice": dict(baseline_voice) if baseline_voice else None,
             "unique_voice": unique_payload,
             "manual_override_fields": sorted(manual_override_fields),
+            "references": [dict(row) for row in references],
         }
         return record
+
+    def import_npc_reference_catalog(
+        self, catalog: NPCReferenceCatalog, *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        """Match reviewed reference research to NPCs without altering manual context."""
+        with self.connect() as connection:
+            speakers = connection.execute(
+                "SELECT speaker_id, entity_id, name FROM speakers WHERE expansion=? "
+                "AND entity_type='creature'",
+                (catalog.expansion,),
+            ).fetchall()
+            existing_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM speaker_references WHERE catalog_id=? AND active=1",
+                    (catalog.catalog_id,),
+                ).fetchone()[0]
+            )
+
+        speakers_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in speakers:
+            speakers_by_name[str(row["name"]).casefold()].append(dict(row))
+
+        matches: list[tuple[Any, dict[str, Any]]] = []
+        unmatched: list[dict[str, Any]] = []
+        for entry in catalog.entries:
+            entry_matches: dict[str, dict[str, Any]] = {}
+            for name in entry.npc_names:
+                for speaker in speakers_by_name.get(name.casefold(), []):
+                    if entry.entity_ids and int(speaker["entity_id"]) not in entry.entity_ids:
+                        continue
+                    entry_matches[str(speaker["speaker_id"])] = speaker
+            if not entry_matches:
+                unmatched.append({"key": entry.key, "npc_names": list(entry.npc_names)})
+                continue
+            matches.extend((entry, speaker) for speaker in entry_matches.values())
+
+        report = {
+            "valid": True,
+            "dry_run": dry_run,
+            "catalog_id": catalog.catalog_id,
+            "catalog_version": catalog.catalog_version,
+            "expansion": catalog.expansion,
+            "locale": catalog.locale,
+            "catalog_entries": len(catalog.entries),
+            "matched_npcs": len({speaker["speaker_id"] for _, speaker in matches}),
+            "reference_records": len(matches),
+            "previous_active_records": existing_count,
+            "unmatched_entries": unmatched,
+        }
+        if dry_run:
+            return report
+
+        backup = self.backup_and_integrity_check()
+        now = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE speaker_references SET active=0, updated_at=? WHERE catalog_id=?",
+                (now, catalog.catalog_id),
+            )
+            for entry, speaker in matches:
+                reference_id = _stable_local_id(
+                    "npc-reference", speaker["speaker_id"], catalog.catalog_id, entry.key
+                )
+                connection.execute(
+                    "INSERT INTO speaker_references(reference_id, speaker_id, catalog_id, "
+                    "catalog_version, catalog_key, reference_title, reference_type, summary, "
+                    "voice_direction, confidence, source_title, source_url, researched_at, active, "
+                    "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?) "
+                    "ON CONFLICT(speaker_id, catalog_id, catalog_key) DO UPDATE SET "
+                    "catalog_version=excluded.catalog_version, "
+                    "reference_title=excluded.reference_title, "
+                    "reference_type=excluded.reference_type, summary=excluded.summary, "
+                    "voice_direction=excluded.voice_direction, confidence=excluded.confidence, "
+                    "source_title=excluded.source_title, source_url=excluded.source_url, "
+                    "researched_at=excluded.researched_at, active=1, updated_at=excluded.updated_at",
+                    (
+                        reference_id,
+                        speaker["speaker_id"],
+                        catalog.catalog_id,
+                        catalog.catalog_version,
+                        entry.key,
+                        entry.reference_title,
+                        entry.reference_type,
+                        entry.summary,
+                        entry.voice_direction,
+                        entry.confidence,
+                        entry.source_title,
+                        entry.source_url,
+                        catalog.researched_at,
+                        now,
+                        now,
+                    ),
+                )
+        report["dry_run"] = False
+        report["applied"] = True
+        report["backup"] = backup
+        return report
 
     def get_speaker_by_entity(
         self, expansion: str, entity_type: str, entity_id: int
@@ -3793,13 +3922,28 @@ class AlphaStore:
                     "WHERE voice_id=? AND is_current=1",
                     (parent_voice_id,),
                 ).fetchone()
+                references = connection.execute(
+                    "SELECT summary, voice_direction FROM speaker_references "
+                    "WHERE speaker_id=? AND active=1 ORDER BY reference_title",
+                    (speaker_id,),
+                ).fetchall()
+                reference_context = " ".join(
+                    "Cultural reference: "
+                    f"{row['summary']}"
+                    + (
+                        f" Performance clue: {row['voice_direction']}"
+                        if row["voice_direction"]
+                        else ""
+                    )
+                    for row in references
+                )
                 npc_context = (
                     f"{speaker['race_name']} {speaker['gender_name']}; "
                     f"role: {str(speaker['role']).replace('_', ' ')}; "
                     f"faction: {str(speaker['faction']).replace('_', ' ')}; "
                     f"zone: {speaker['zone'] or 'unspecified'}; "
                     f"story reach: {str(speaker['importance']).replace('_', ' ')}. "
-                    f"{speaker['context_summary']}"
+                    f"{speaker['context_summary']} {reference_context}"
                 ).strip()
                 description = (
                     f"Unique voice for {speaker['name']}. NPC context: {npc_context} "
@@ -4368,12 +4512,18 @@ class AlphaStore:
             ).fetchall()
             npc = None
             baseline_voice = None
+            npc_references = []
             if voice["npc_speaker_id"]:
                 npc = connection.execute(
                     "SELECT * FROM speakers WHERE speaker_id=?",
                     (voice["npc_speaker_id"],),
                 ).fetchone()
                 if npc:
+                    npc_references = connection.execute(
+                        "SELECT * FROM speaker_references WHERE speaker_id=? AND active=1 "
+                        "ORDER BY CASE confidence WHEN 'high' THEN 0 ELSE 1 END, reference_title",
+                        (voice["npc_speaker_id"],),
+                    ).fetchall()
                     baseline_voice = connection.execute(
                         "SELECT v.voice_id, v.name FROM voices v WHERE v.scope='baseline' "
                         "AND v.race_id=? AND v.gender_id=?",
@@ -4430,6 +4580,7 @@ class AlphaStore:
                 payload["npc"]["importance"], 0
             )
             payload["npc"]["is_unique_voice_active"] = payload["npc"].get("voice_id") == voice_id
+            payload["npc"]["references"] = [dict(row) for row in npc_references]
         payload["baseline_voice"] = dict(baseline_voice) if baseline_voice else None
         preview_payloads = [dict(row) for row in delivery_previews]
         for preview in preview_payloads:

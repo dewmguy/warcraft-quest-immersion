@@ -351,6 +351,17 @@ dialog .actions { justify-content: flex-end; }
 .npc-context-summary { margin-top: 18px; border-top: 1px solid #37323a; padding-top: 16px; }
 .npc-context-summary > span { color: #8f8894; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .npc-context-summary p { margin: 7px 0 0; color: #d8d0c5; line-height: 1.6; }
+.npc-reference-research { display: grid; gap: 9px; border-top: 1px solid #4b4230; padding-top: 15px; }
+.npc-reference-research.is-voice-context { margin-top: 18px; }
+.npc-reference-heading, .npc-reference-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.npc-reference-heading > span { color: #d8bd73; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.npc-reference-heading > small, .npc-reference-title > span { color: #8f8894; font-size: .72rem; }
+.npc-reference-research article { display: grid; gap: 8px; border: 1px solid #4a4030; border-radius: 8px; padding: 14px 16px; background: #1c1812; }
+.npc-reference-title strong { color: #f0d889; }
+.npc-reference-research p { margin: 0; color: #d8d0c5; line-height: 1.55; }
+.npc-reference-research a { justify-self: start; color: #c8ad68; font-size: .78rem; }
+.npc-reference-voice { display: grid; grid-template-columns: auto 1fr; gap: 8px; border-left: 2px solid #6f985f; padding-left: 10px; color: #bfcdb8 !important; }
+.npc-reference-voice i { margin-top: .25em; color: #8db77d; }
 .compact-form { grid-template-columns: 1fr auto; align-items: end; }
 .inline-warning { display: block; border: 1px solid #765c32; border-radius: 6px; padding: 12px 14px; background: #251f17; color: #d9ba78; font-size: .86rem; }
 .inline-warning ul { margin-bottom: 0; }

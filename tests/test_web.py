@@ -10,6 +10,7 @@ from tts_cli import alpha_store as alpha_module
 from tts_cli import web
 from tts_cli.alpha_store import AlphaStore
 from tts_cli.datapacks import inspect_datapack_archive
+from tts_cli.npc_references import NPCReferenceCatalog, NPCReferenceEntry
 
 
 class UnconfiguredElevenLabs:
@@ -121,6 +122,43 @@ def test_root_opens_full_scope_alpha_when_authentication_is_delegated(monkeypatc
     assert all(label in response.text for label in ("Quests", "Gossip", "NPCs", "Races"))
     assert ">Dialogue<" not in response.text
     assert ">Voices<" not in response.text
+
+
+def test_npc_reference_research_appears_on_npc_and_unique_voice_profiles():
+    with TestClient(web.app) as client:
+        npc = web.alpha_store.list_npcs(page_size=1)["rows"][0]
+        catalog = NPCReferenceCatalog(
+            catalog_id="web-reference-test",
+            catalog_version=1,
+            expansion="3.3.5",
+            locale="enUS",
+            researched_at="2026-09-10",
+            entries=(
+                NPCReferenceEntry(
+                    key="marshal-reference",
+                    npc_names=(npc["name"],),
+                    entity_ids=(),
+                    reference_title="Reference Character",
+                    reference_type="film_and_tv",
+                    summary="The NPC directly references a fictional marshal.",
+                    voice_direction="Calm frontier authority.",
+                    confidence="high",
+                    source_title="Reference source",
+                    source_url="https://example.test/reference",
+                ),
+            ),
+        )
+        web.alpha_store.import_npc_reference_catalog(catalog)
+        npc_page = client.get(f"/alpha/npcs/{npc['entity_type']}/{npc['entity_id']}")
+        voice = web.alpha_store.create_unique_voice(npc["speaker_id"])
+        voice_page = client.get(f"/alpha/voices/{voice['voice_id']}")
+
+    for page in (npc_page, voice_page):
+        assert page.status_code == 200
+        assert "Cultural Reference Research" in page.text
+        assert "Reference Character" in page.text
+        assert "Calm frontier authority." in page.text
+        assert 'href="https://example.test/reference"' in page.text
 
 
 def test_corpus_bundle_validates_then_imports_atomically(monkeypatch, corpus_bundle_path):

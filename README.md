@@ -71,6 +71,24 @@ The default local import target is
 `data/imported/mrthinger-vanilla-v1.0.0`, which is available inside the
 application container through the existing `/app/data` volume.
 
+## NPC cultural-reference research
+
+Reviewed 3.3.5 reference findings live in
+`assets/npc-references/3.3.5-enUS.json`. The catalog uses exact NPC names,
+versioned source links, concise paraphrases, and optional performance clues.
+Weak or incidental matches are omitted. Importing it creates additive reference
+records without changing manually edited character context:
+
+```powershell
+.\.venv\Scripts\python.exe -m tts_cli references import --dry-run
+.\.venv\Scripts\python.exe -m tts_cli references import --yes
+```
+
+Matches appear in the Character Context area of the NPC and unique-voice
+profiles. NPC search also includes the reference title and summary. New unique
+voice profiles receive the researched context, while existing versioned voice
+prompts are not silently rewritten.
+
 ## Pronunciation dictionary
 
 The owner-reviewed source is `pronunciation/warcraft-en-US.csv`. Build the

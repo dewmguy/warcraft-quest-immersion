@@ -24,7 +24,8 @@ from tts_cli.data_sources import DataSourceError, load_dialogue_csv, write_dialo
 from tts_cli.datapacks import DatapackError, inspect_datapack_directory
 from tts_cli.dbc import convert_dbc_directory_to_sql
 from tts_cli.init_db import download_and_extract_latest_db_dump, import_sql_files_to_database
-from tts_cli.paths import PROJECT_ROOT, SAMPLE_DATA_PATH
+from tts_cli.npc_references import NPCReferenceCatalogError, load_npc_reference_catalog
+from tts_cli.paths import ASSETS_DIR, PROJECT_ROOT, SAMPLE_DATA_PATH
 from tts_cli.sql_queries import (
     make_connection,
     query_dataframe_for_all_quests_and_gossip,
@@ -146,6 +147,23 @@ def build_parser() -> argparse.ArgumentParser:
     datapack_import.add_argument(
         "--yes", action="store_true", help="confirm the pre-produced audio import"
     )
+    references_parser = subparsers.add_parser(
+        "references", help="Validate and import reviewed NPC cultural-reference research"
+    )
+    reference_commands = references_parser.add_subparsers(dest="references_command", required=True)
+    reference_import = reference_commands.add_parser(
+        "import", help="Match a reviewed reference catalog to the active NPC corpus"
+    )
+    reference_import.add_argument(
+        "catalog",
+        type=Path,
+        nargs="?",
+        default=ASSETS_DIR / "npc-references" / "3.3.5-enUS.json",
+    )
+    reference_import.add_argument("--dry-run", action="store_true")
+    reference_import.add_argument(
+        "--yes", action="store_true", help="confirm the NPC reference import"
+    )
     return parser
 
 
@@ -258,6 +276,28 @@ def datapacks_command(args: argparse.Namespace) -> int:
         locale=args.locale,
     )
     applied["ignored_archives"] = ignored
+    print(json.dumps(applied, indent=2))
+    return 0
+
+
+def references_command(args: argparse.Namespace) -> int:
+    if args.references_command != "import":
+        raise AlphaError("Unknown references command.")
+    try:
+        catalog = load_npc_reference_catalog(args.catalog.expanduser().resolve())
+    except NPCReferenceCatalogError as error:
+        raise AlphaError(str(error)) from error
+    store = _alpha_store()
+    report = store.import_npc_reference_catalog(catalog, dry_run=True)
+    print(json.dumps(report, indent=2))
+    if args.dry_run:
+        return 0
+    if not args.yes:
+        confirmation = input("Type IMPORT to apply the reviewed NPC reference catalog: ")
+        if confirmation.strip() != "IMPORT":
+            print("Import cancelled.")
+            return 2
+    applied = store.import_npc_reference_catalog(catalog)
     print(json.dumps(applied, indent=2))
     return 0
 
@@ -439,6 +479,8 @@ def main(argv: list[str] | None = None) -> int:
             return corpus_command(args)
         elif args.command == "datapacks":
             return datapacks_command(args)
+        elif args.command == "references":
+            return references_command(args)
     except (
         AlphaError,
         ConfigurationError,

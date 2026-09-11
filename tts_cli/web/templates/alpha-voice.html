@@ -56,6 +56,19 @@
       {% if voice.baseline_voice %}<div><dt>Race / Gender Baseline</dt><dd><a href="/alpha/races/{{ voice.baseline_voice.voice_id }}">{{ voice.baseline_voice.name }}</a></dd></div>{% endif %}
     </dl>
     <div class="npc-context-summary"><span>Character Context</span><p>{{ voice.npc.context_summary or 'No reviewed character context yet.' }}</p></div>
+    {% if voice.npc.references %}
+    <div class="npc-reference-research is-voice-context">
+      <div class="npc-reference-heading"><span>Cultural Reference Research</span><small>{{ voice.npc.references|length }} strong match{{ '' if voice.npc.references|length == 1 else 'es' }}</small></div>
+      {% for reference in voice.npc.references %}
+      <article>
+        <div class="npc-reference-title"><strong>{{ reference.reference_title }}</strong><span>{{ reference.reference_type | replace('_', ' ') | title }} · {{ reference.confidence | title }} confidence</span></div>
+        <p>{{ reference.summary }}</p>
+        {% if reference.voice_direction %}<p class="npc-reference-voice"><i class="fa-solid fa-microphone-lines" aria-hidden="true"></i><span>{{ reference.voice_direction }}</span></p>{% endif %}
+        <a href="{{ reference.source_url }}" target="_blank" rel="noreferrer">{{ reference.source_title }} <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
   </section>
   {% endif %}
 
