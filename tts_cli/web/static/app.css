@@ -351,7 +351,7 @@ dialog .actions { justify-content: flex-end; }
 .npc-context-summary { margin-top: 18px; border-top: 1px solid #37323a; padding-top: 16px; }
 .npc-context-summary > span { color: #8f8894; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .npc-context-summary p { margin: 7px 0 0; color: #d8d0c5; line-height: 1.6; }
-.npc-reference-research { display: grid; gap: 9px; border-top: 1px solid #4b4230; padding-top: 15px; }
+.npc-reference-research { display: grid; gap: 9px; border: 1px dashed #4b4550; border-radius: 8px; padding: 14px 16px; background: #131116; }
 .npc-reference-research.is-voice-context { margin-top: 18px; }
 .npc-reference-heading, .npc-reference-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .npc-reference-heading > span { color: #d8bd73; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
