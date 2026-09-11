@@ -43,6 +43,17 @@ def test_addon_resolver_is_additive_and_progress_event_is_enabled():
         assert "addon.xml" in (root / "AI_VoiceOver" / toc).read_text(encoding="utf-8")
 
 
+def test_acceptance_fixture_includes_readable_object_trigger():
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "scripts" / "build_335a_acceptance_fixture.py").read_text(encoding="utf-8")
+
+    assert "GnomeFemale_err_chestinuse02.mp3" in source
+    assert "page-627-g21581" in source
+    assert "ObjectTextLookupByObjectID" in source
+    assert "ObjectTextLookupByName" in source
+    assert "ITEM_TEXT_READY trigger" in source
+
+
 def test_lookup_writer_emits_per_npc_stage_filenames(tmp_path, monkeypatch):
     monkeypatch.setattr(tts_utils, "OUTPUT_FOLDER", str(tmp_path))
     processor = TTSProcessor(fetch_voices=False, settings=Settings())

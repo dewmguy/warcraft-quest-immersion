@@ -69,8 +69,7 @@ def test_extractor_reconciles_shared_quest_givers_and_nested_gossip(azerothcore_
     assert all(row["active"] for row in readable_bindings)
     assert any(row["entity_key"] == "3.3.5:gameobject:22" for row in bundle.entities)
     assert any(
-        row["reason"] == "missing_page_text"
-        and row["entity_key"] == "3.3.5:gameobject:22"
+        row["reason"] == "missing_page_text" and row["entity_key"] == "3.3.5:gameobject:22"
         for row in bundle.quarantine
     )
     second_page = next(

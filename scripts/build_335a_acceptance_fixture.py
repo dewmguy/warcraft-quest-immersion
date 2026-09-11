@@ -14,7 +14,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_MODULE = "AI_VoiceOverData_WQI_Acceptance"
-CORPUS_SNAPSHOT_ID = "04fc042b76e8d195012fac39"
+CORPUS_SNAPSHOT_ID = "b5d860ce87d04f0637bf84de"
 DEFAULT_SOUND_DIRECTORY = Path(
     "S:/Personal/Audio/Sound Rips/Wow Sounds/Character/Gnome/GnomeFemaleErrorMessages"
 )
@@ -26,7 +26,17 @@ TEST_SOUNDS = {
     "quests/7-progress-c197.mp3": "GnomeFemale_err_outofrange02.mp3",
     "quests/7-complete-c197.mp3": "GnomeFemale_err_abilitycooldown01.mp3",
     "quests/33-accept.mp3": "GnomeFemale_err_cantloot01.mp3",
+    "objects/page-627-g21581.mp3": "GnomeFemale_err_chestinuse02.mp3",
 }
+
+OBJECT_PAGE_TEXT = (
+    "The devastating Second War against the orcish horde left the Alliance of Lordaeron "
+    "in a state of shock and disarray. The bloodthirsty orcs, led by the mighty warchief, "
+    "Orgrim Doomhammer, not only smashed their way through the dwarf-held lands of Khaz "
+    "Modan, but had razed many of Lordaeron's central provinces as well. The unrelenting "
+    "orcs even succeeded in ravaging the$Belves' remote kingdom of Quel'Thalas before "
+    "their rampage was finally stopped."
+)
 
 
 def _write(path: Path, content: str) -> None:
@@ -64,7 +74,7 @@ def _write_data_module(destination: Path, lengths: dict[str, float]) -> None:
         module / f"{DATA_MODULE}.toc",
         f"""## Interface: 30300
 ## Title: VoiceOver Data - WQI Phase 2 Acceptance
-## Notes: Disposable Northshire fixture for the certified 3.3.5 per-deliverer playback gate.
+## Notes: Disposable quest and readable-object fixture for the certified 3.3.5 playback gate.
 ## Version: {CORPUS_SNAPSHOT_ID}
 ## LoadOnDemand: 1
 ## RequiredDeps: AI_VoiceOver
@@ -77,6 +87,7 @@ def _write_data_module(destination: Path, lengths: dict[str, float]) -> None:
 Module.lua
 generated\\quest_id_lookups.lua
 generated\\questlog_npc_lookups.lua
+generated\\object_text_lookups.lua
 generated\\sound_length_table.lua
 """,
     )
@@ -88,7 +99,9 @@ generated\\sound_length_table.lua
 
 function {DATA_MODULE}:GetSoundPath(fileName, event)
     setfenv(1, VoiceOver)
-    if Enums.SoundEvent:IsQuestEvent(event) then
+    if event == Enums.SoundEvent.ObjectText then
+        return format([[generated\\sounds\\objects\\%s.mp3]], fileName)
+    elseif Enums.SoundEvent:IsQuestEvent(event) then
         return format([[generated\\sounds\\quests\\%s.mp3]], fileName)
     elseif Enums.SoundEvent:IsGossipEvent(event) then
         return format([[generated\\sounds\\gossip\\%s.mp3]], fileName)
@@ -136,6 +149,17 @@ VoiceOver.DataModules:Register("{DATA_MODULE}", {DATA_MODULE})
     }}
 }}
 """,
+    )
+    _write(
+        generated / "object_text_lookups.lua",
+        f'''if not VoiceOver or not VoiceOver.DataModules then return end
+{DATA_MODULE}.ObjectTextLookupByObjectID = {{
+    [21581] = {{ ["{OBJECT_PAGE_TEXT}"] = "page-627-g21581" }}
+}}
+{DATA_MODULE}.ObjectTextLookupByName = {{
+    ["Aftermath of the Second War"] = {{ ["{OBJECT_PAGE_TEXT}"] = "page-627-g21581" }}
+}}
+''',
     )
     entries = "\n".join(
         f'    ["{name.removesuffix(".mp3").split("/", 1)[1]}"] = {duration:.3f},'
@@ -189,6 +213,15 @@ Use a new or low-level Human character in Northshire.
      Source: GnomeFemale_err_cantloot01.mp3
    This fixture deliberately supplies only quests/33-accept.mp3, with no per-NPC
    audio lookup, so successful playback proves compatibility with legacy data packs.
+
+4. Readable object, Aftermath of the Second War (object 21581, page 627):
+   - In Stormwind Keep's library, open the book named Aftermath of the Second War.
+   - Its first page should play the chest-in-use Gnome clip.
+     Source: GnomeFemale_err_chestinuse02.mp3
+   - Turn to the second page. The first-page sound should stop; the second page has
+     no test sound and should remain silent.
+   This proves the ITEM_TEXT_READY trigger, object-name fallback, per-page lookup,
+   object-audio folder, and replacement of page audio while turning pages.
 
 Record the client build, addon load status, NPC/quest tested, heard result, and any
 Lua error. Remove AI_VoiceOverData_WQI_Acceptance after the gate; these clips are not
